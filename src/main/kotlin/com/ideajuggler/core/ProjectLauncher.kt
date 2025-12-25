@@ -63,7 +63,7 @@ class ProjectLauncher(
             val projectDirs = directoryManager.ensureProjectDirectories(project.id)
             VMOptionsGenerator.generate(
                 baseVmOptionsPath,
-                VMOptionsGenerator.ProjectDirectories(
+                ProjectDirectories(
                     root = projectDirs.root,
                     config = projectDirs.config,
                     system = projectDirs.system,

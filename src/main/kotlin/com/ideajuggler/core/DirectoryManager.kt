@@ -7,14 +7,6 @@ import kotlin.io.path.deleteRecursively
 
 class DirectoryManager(private val baseDir: Path) {
 
-    data class ProjectDirectories(
-        val root: Path,
-        val config: Path,
-        val system: Path,
-        val logs: Path,
-        val plugins: Path
-    )
-
     fun ensureProjectDirectories(projectId: String): ProjectDirectories {
         val root = getProjectRoot(projectId)
 

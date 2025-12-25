@@ -19,16 +19,7 @@ class IntelliJLauncher(
         val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
 
         // 3. Generate or update VM options file
-        val vmOptionsFile = VMOptionsGenerator.generate(
-            baseVmOptionsPath,
-            VMOptionsGenerator.ProjectDirectories(
-                root = projectDirs.root,
-                config = projectDirs.config,
-                system = projectDirs.system,
-                logs = projectDirs.logs,
-                plugins = projectDirs.plugins
-            )
-        )
+        val vmOptionsFile = VMOptionsGenerator.generate(baseVmOptionsPath, projectDirs)
 
         // 4. Find IntelliJ executable
         val intellijPath = getIntelliJPath()

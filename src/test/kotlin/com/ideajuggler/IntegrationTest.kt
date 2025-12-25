@@ -51,7 +51,7 @@ class IntegrationTest : StringSpec({
             val projectDirs = directoryManager.ensureProjectDirectories(projectId)
             VMOptionsGenerator.generate(
                 baseVMOptionsTracker.getBaseVmOptionsPath(),
-                VMOptionsGenerator.ProjectDirectories(
+                ProjectDirectories(
                     root = projectDirs.root,
                     config = projectDirs.config,
                     system = projectDirs.system,
@@ -132,12 +132,12 @@ class IntegrationTest : StringSpec({
             val dirs2 = directoryManager.ensureProjectDirectories(projectId2)
 
             VMOptionsGenerator.generate(
-                baseVmOptions, VMOptionsGenerator.ProjectDirectories(
+                baseVmOptions, ProjectDirectories(
                     dirs1.root, dirs1.config, dirs1.system, dirs1.logs, dirs1.plugins
                 )
             )
             VMOptionsGenerator.generate(
-                baseVmOptions, VMOptionsGenerator.ProjectDirectories(
+                baseVmOptions, ProjectDirectories(
                     dirs2.root, dirs2.config, dirs2.system, dirs2.logs, dirs2.plugins
                 )
             )
@@ -160,7 +160,7 @@ class IntegrationTest : StringSpec({
                 val projectDirs = directoryManager.ensureProjectDirectories(project.id)
                 VMOptionsGenerator.generate(
                     baseVmOptions,
-                    VMOptionsGenerator.ProjectDirectories(
+                    ProjectDirectories(
                         projectDirs.root,
                         projectDirs.config,
                         projectDirs.system,

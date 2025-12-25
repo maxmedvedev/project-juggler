@@ -15,7 +15,7 @@ class VMOptionsGeneratorTest : StringSpec({
     "should generate VM options file without base file" {
         val tempDir = createTempDirectory("test-project")
         try {
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),
@@ -48,7 +48,7 @@ class VMOptionsGeneratorTest : StringSpec({
                 -XX:ReservedCodeCacheSize=512m
             """.trimIndent())
 
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),
@@ -89,7 +89,7 @@ class VMOptionsGeneratorTest : StringSpec({
                 -Didea.plugins.path=/old/plugins
             """.trimIndent())
 
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),
@@ -124,7 +124,7 @@ class VMOptionsGeneratorTest : StringSpec({
     "should create VM options file in project root" {
         val tempDir = createTempDirectory("test-project")
         try {
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),
@@ -144,7 +144,7 @@ class VMOptionsGeneratorTest : StringSpec({
     "should overwrite existing VM options file" {
         val tempDir = createTempDirectory("test-project")
         try {
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),
@@ -157,7 +157,7 @@ class VMOptionsGeneratorTest : StringSpec({
             val content1 = vmOptionsFile1.readText()
 
             // Generate second time with different paths
-            val newProjectDirs = VMOptionsGenerator.ProjectDirectories(
+            val newProjectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("new-config"),
                 system = tempDir.resolve("new-system"),
@@ -189,7 +189,7 @@ class VMOptionsGeneratorTest : StringSpec({
             // Empty file
             baseVmOptions.writeText("")
 
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),
@@ -224,7 +224,7 @@ class VMOptionsGeneratorTest : StringSpec({
                 -Xmx2048m
             """.trimIndent())
 
-            val projectDirs = VMOptionsGenerator.ProjectDirectories(
+            val projectDirs = ProjectDirectories(
                 root = tempDir,
                 config = tempDir.resolve("config"),
                 system = tempDir.resolve("system"),

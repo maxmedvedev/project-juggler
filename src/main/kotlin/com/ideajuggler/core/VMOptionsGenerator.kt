@@ -6,15 +6,6 @@ import kotlin.io.path.readLines
 import kotlin.io.path.writeText
 
 object VMOptionsGenerator {
-
-    data class ProjectDirectories(
-        val root: Path,
-        val config: Path,
-        val system: Path,
-        val logs: Path,
-        val plugins: Path
-    )
-
     fun generate(baseVmOptionsPath: Path?, projectDirectories: ProjectDirectories): Path {
         val vmOptionsFile = projectDirectories.root.resolve("idea.vmoptions")
 
