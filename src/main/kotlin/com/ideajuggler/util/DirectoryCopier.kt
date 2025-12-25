@@ -5,18 +5,18 @@ import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-object PluginCopier {
+object DirectoryCopier {
 
     /**
-     * Copy plugins from source to destination directory.
+     * Copy directory contents from source to destination.
      * Only copies if destination is empty (first open detection).
      * Silently skips if source doesn't exist or isn't readable.
      *
-     * @param source Source plugins directory
-     * @param destination Destination plugins directory
-     * @return true if plugins were copied, false if skipped
+     * @param source Source directory
+     * @param destination Destination directory
+     * @return true if directory was copied, false if skipped
      */
-    fun copyPluginsIfFirstOpen(source: Path, destination: Path): Boolean {
+    fun copyIfFirstOpen(source: Path, destination: Path): Boolean {
         // Check if source exists and is readable
         if (!source.exists() || !source.isDirectory()) {
             return false // Silently skip
@@ -24,7 +24,7 @@ object PluginCopier {
 
         // Check if destination is empty (first open detection)
         if (!isEmptyDirectory(destination)) {
-            return false // Already has plugins, skip copying
+            return false // Already has content, skip copying
         }
 
         try {

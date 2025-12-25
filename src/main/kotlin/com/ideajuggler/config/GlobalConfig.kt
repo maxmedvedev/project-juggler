@@ -8,7 +8,8 @@ data class GlobalConfig(
     val baseVmOptionsPath: String? = null,
     val baseVmOptionsHash: String? = null,
     val maxRecentProjects: Int = 10,
-    val basePluginsPath: String? = null
+    val basePluginsPath: String? = null,
+    val baseConfigPath: String? = null,
 ) {
     companion object {
         fun default() = GlobalConfig()

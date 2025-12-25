@@ -6,6 +6,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.path
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.core.BaseVMOptionsTracker
+import com.ideajuggler.platform.ConfigLocator
 import com.ideajuggler.platform.PluginLocator
 import java.nio.file.Paths
 import kotlin.io.path.exists
@@ -20,6 +21,8 @@ class ConfigCommand : CliktCommand(
         .path(mustExist = true, mustBeReadable = true, canBeDir = false)
     private val basePluginsPath by option("--base-plugins", help = "Path to base IntelliJ plugins directory")
         .path(mustExist = true, mustBeReadable = true, canBeDir = true)
+    private val baseConfigPath by option("--base-config", help = "Path to base IntelliJ config directory")
+        .path(mustExist = true, mustBeReadable = true, canBeDir = true)
     private val show by option("--show", help = "Show current configuration").flag()
 
     override fun run() {
@@ -27,7 +30,7 @@ class ConfigCommand : CliktCommand(
 
         when {
             show -> showConfig(configRepository)
-            intellijPath != null || baseVmOptionsPath != null || basePluginsPath != null -> updateConfig(configRepository)
+            intellijPath != null || baseVmOptionsPath != null || basePluginsPath != null || baseConfigPath != null -> updateConfig(configRepository)
             else -> showConfig(configRepository)
         }
     }
@@ -41,10 +44,17 @@ class ConfigCommand : CliktCommand(
             ?: detectedPluginsPath?.toString()
             ?: "(not set, will auto-detect)"
 
+        // Auto-detect base config path for display
+        val detectedConfigPath = ConfigLocator.findDefaultConfigDirectory()
+        val configPathDisplay = config.baseConfigPath
+            ?: detectedConfigPath?.toString()
+            ?: "(not set, will auto-detect)"
+
         echo("Current configuration:")
         echo()
         echo("  IntelliJ path:       ${config.intellijPath ?: "(not set, will auto-detect)"}")
         echo("  Base VM options:     ${config.baseVmOptionsPath ?: "(not set)"}")
+        echo("  Base config:         $configPathDisplay")
         echo("  Base plugins:        $pluginsPathDisplay")
         echo("  Max recent projects: ${config.maxRecentProjects}")
         echo()
@@ -74,6 +84,13 @@ class ConfigCommand : CliktCommand(
             }
         }
 
+        baseConfigPath?.let { path ->
+            if (!path.exists()) {
+                echo("Error: Base config path does not exist: $path", err = true)
+                return
+            }
+        }
+
         // Update configuration
         configRepository.update { config ->
             var updated = config
@@ -95,6 +112,11 @@ class ConfigCommand : CliktCommand(
             basePluginsPath?.let { path ->
                 updated = updated.copy(basePluginsPath = path.toString())
                 echo("Base plugins path updated: $path")
+            }
+
+            baseConfigPath?.let { path ->
+                updated = updated.copy(baseConfigPath = path.toString())
+                echo("Base config path updated: $path")
             }
 
             updated

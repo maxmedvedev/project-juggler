@@ -1,8 +1,9 @@
 package com.ideajuggler.core
 
 import com.ideajuggler.config.ConfigRepository
+import com.ideajuggler.platform.ConfigLocator
 import com.ideajuggler.platform.PluginLocator
-import com.ideajuggler.util.PluginCopier
+import com.ideajuggler.util.DirectoryCopier
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -28,7 +29,10 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
         Files.createDirectories(directories.logs)
         Files.createDirectories(directories.plugins)
 
-        // Copy base plugins on first open
+        // Copy base config on first open (BEFORE plugins)
+        copyBaseConfigIfNeeded(directories.config)
+
+        // Copy base plugins on first open (AFTER config, will overwrite plugins subdir)
         copyBasePluginsIfNeeded(directories.plugins)
 
         return directories
@@ -39,7 +43,7 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
      */
     private fun copyBasePluginsIfNeeded(pluginsDir: Path) {
         val basePluginsPath = getBasePluginsPath() ?: return
-        PluginCopier.copyPluginsIfFirstOpen(basePluginsPath, pluginsDir)
+        DirectoryCopier.copyIfFirstOpen(basePluginsPath, pluginsDir)
     }
 
     /**
@@ -55,6 +59,29 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
 
         // Otherwise, try to auto-detect
         return PluginLocator.findDefaultPluginsDirectory()
+    }
+
+    /**
+     * Copy config files from base location if configured and this is first open.
+     */
+    private fun copyBaseConfigIfNeeded(configDir: Path) {
+        val baseConfigPath = getBaseConfigPath() ?: return
+        DirectoryCopier.copyIfFirstOpen(baseConfigPath, configDir)
+    }
+
+    /**
+     * Get the base config directory from config or auto-detect.
+     */
+    private fun getBaseConfigPath(): Path? {
+        val config = configRepository.load()
+
+        // Use configured path if available
+        if (config.baseConfigPath != null) {
+            return Paths.get(config.baseConfigPath)
+        }
+
+        // Otherwise, try to auto-detect
+        return ConfigLocator.findDefaultConfigDirectory()
     }
 
     fun cleanProject(projectId: String) {
