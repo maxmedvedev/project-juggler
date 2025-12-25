@@ -10,7 +10,6 @@ class IntelliJLauncher(
     private val configRepository: ConfigRepository,
     private val directoryManager: DirectoryManager,
     private val baseVMOptionsTracker: BaseVMOptionsTracker,
-    private val intellijLocator: IntelliJLocator,
     private val processLauncher: ProcessLauncher
 ) {
 
@@ -56,6 +55,6 @@ class IntelliJLauncher(
         }
 
         // Otherwise, try to auto-detect
-        return intellijLocator.findIntelliJ()
+        return IntelliJLocator.findIntelliJ()
     }
 }

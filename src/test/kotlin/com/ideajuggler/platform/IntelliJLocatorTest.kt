@@ -8,21 +8,19 @@ import java.nio.file.Files
 class IntelliJLocatorTest : StringSpec({
 
     "should return null when no IntelliJ installation found" {
-        val locator = IntelliJLocator()
 
         // This test might find actual IntelliJ installations on the system
         // So we just verify the method doesn't throw
         // Result can be null or a valid path
         // We just verify it doesn't crash
-        locator.findIntelliJ()
+        IntelliJLocator.findIntelliJ()
     }
 
     "should detect IntelliJ on current platform" {
-        val locator = IntelliJLocator()
 
         // This test is platform-specific and may find real installations
         // We're just verifying the method works without crashing
-        val result = locator.findIntelliJ()
+        val result = IntelliJLocator.findIntelliJ()
 
         // If IntelliJ is installed, result should be a valid path
         if (result != null) {
@@ -33,8 +31,7 @@ class IntelliJLocatorTest : StringSpec({
     "should prioritize standard installation paths" {
         // This is more of a documentation test
         // The actual behavior depends on what's installed on the system
-        val locator = IntelliJLocator()
-        val result = locator.findIntelliJ()
+        val result = IntelliJLocator.findIntelliJ()
 
         // If found, should be an executable
         if (result != null) {
@@ -53,10 +50,8 @@ class IntelliJLocatorTest : StringSpec({
     }
 
     "should handle missing IntelliJ gracefully" {
-        val locator = IntelliJLocator()
-
         // Even if IntelliJ isn't installed, this should not throw
-        val result = locator.findIntelliJ()
+        val result = IntelliJLocator.findIntelliJ()
 
         // Result is either null or a valid path
         if (result != null) {

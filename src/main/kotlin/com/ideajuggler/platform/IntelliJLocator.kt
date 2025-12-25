@@ -4,7 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
-class IntelliJLocator {
+object IntelliJLocator {
 
     fun findIntelliJ(): Path? {
         val candidates = when (Platform.current()) {

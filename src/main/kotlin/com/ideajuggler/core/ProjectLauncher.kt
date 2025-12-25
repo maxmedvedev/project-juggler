@@ -14,13 +14,12 @@ class ProjectLauncher(
     private val projectManager = ProjectManager(configRepository)
     private val directoryManager = DirectoryManager(baseDir)
     private val baseVMOptionsTracker = BaseVMOptionsTracker(configRepository)
-    private val intellijLocator = IntelliJLocator()
+    private val intellijLocator = IntelliJLocator
     private val processLauncher = ProcessLauncher()
     private val intellijLauncher = IntelliJLauncher(
         configRepository,
         directoryManager,
         baseVMOptionsTracker,
-        intellijLocator,
         processLauncher
     )
     private val recentProjectsIndex = RecentProjectsIndex(baseDir)
