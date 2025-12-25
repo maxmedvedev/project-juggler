@@ -4,32 +4,46 @@ import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.core.MessageOutput
 import com.ideajuggler.core.ProjectIdGenerator
 import com.ideajuggler.core.ProjectLauncher
+import com.ideajuggler.plugin.IdeaJugglerBundle
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.project.Project
 import java.nio.file.Paths
-import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-class OpenWithIdeaJugglerAction : AnAction() {
+internal class OpenWithIdeaJugglerAction : AnAction() {
+    init {
+        templatePresentation.text = IdeaJugglerBundle.message("action.OpenWithIdeaJuggler.text")
+        templatePresentation.description = IdeaJugglerBundle.message("action.OpenWithIdeaJuggler.description")
+    }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: run {
-            showErrorNotification(null, "No project is currently open")
-            return
+        val project = e.project
+
+        // Show directory chooser dialog
+        val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor().apply {
+            title = IdeaJugglerBundle.message("file.chooser.title")
+            description = IdeaJugglerBundle.message("file.chooser.description")
         }
 
-        val projectBasePath = project.basePath ?: run {
-            showErrorNotification(project, "Could not determine project path")
-            return
-        }
+        val selectedFile = FileChooser.chooseFile(descriptor, project, null)
+            ?: return // User cancelled the dialog
 
-        val projectPath = Paths.get(projectBasePath)
-        if (!projectPath.exists() || !projectPath.isDirectory()) {
-            showErrorNotification(project, "Invalid project path: $projectBasePath")
+
+        val projectPath = Paths.get(selectedFile.path)
+        if (!projectPath.isDirectory()) {
+            showErrorNotification(
+                project,
+                IdeaJugglerBundle.message("notification.error.not.directory", selectedFile.path)
+            )
             return
         }
 
@@ -52,12 +66,12 @@ class OpenWithIdeaJugglerAction : AnAction() {
 
                 showInfoNotification(
                     project,
-                    "Launched new idea-juggler instance for: ${project.name}"
+                    IdeaJugglerBundle.message("notification.success.launched", selectedFile.name)
                 )
             } catch (ex: Exception) {
                 showErrorNotification(
                     project,
-                    "Failed to launch idea-juggler: ${ex.message}"
+                    IdeaJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error")
                 )
                 ex.printStackTrace()
             }
@@ -65,7 +79,8 @@ class OpenWithIdeaJugglerAction : AnAction() {
     }
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        // Always enable the action - don't require a project to be open
+        e.presentation.isEnabledAndVisible = true
     }
 
     private fun showInfoNotification(project: Project?, message: String) {
