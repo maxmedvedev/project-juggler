@@ -8,7 +8,6 @@ import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
-import kotlin.streams.toList
 
 class ConfigRepository(private val baseDir: Path) {
     private val configFile = baseDir.resolve("config.json")

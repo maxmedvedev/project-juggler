@@ -1,6 +1,7 @@
 package com.ideajuggler
 
 import com.ideajuggler.cli.createCLI
+import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     try {
@@ -8,6 +9,6 @@ fun main(args: Array<String>) {
         cli.main(args)
     } catch (e: Exception) {
         System.err.println("Error: ${e.message}")
-        System.exit(1)
+        exitProcess(1)
     }
 }

@@ -1,6 +1,7 @@
 package com.ideajuggler.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -43,7 +44,7 @@ class CleanCommand : CliktCommand(
             echo("  Path: ${project.path}")
             echo("  ID:   ${project.id}")
             echo()
-            val response = prompt("Are you sure you want to continue? (y/N)")
+            val response = terminal.prompt("Are you sure you want to continue? (y/N)")
             if (response?.lowercase() != "y") {
                 echo("Cancelled.")
                 return

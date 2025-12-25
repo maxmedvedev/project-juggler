@@ -21,7 +21,7 @@ class VMOptionsGenerator {
         val content = buildString {
             // Include base VM options if provided
             if (baseVmOptionsPath != null && Files.exists(baseVmOptionsPath)) {
-                appendLine("# Base VM options from: ${baseVmOptionsPath}")
+                appendLine("# Base VM options from: $baseVmOptionsPath")
                 val baseOptions = filterBaseOptions(baseVmOptionsPath.readLines())
                 baseOptions.forEach { line ->
                     appendLine(line)
