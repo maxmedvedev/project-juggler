@@ -1,5 +1,6 @@
 package com.ideajuggler.core
 
+import com.github.ajalt.clikt.core.CliktCommand
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.RecentProjectsIndex
 import java.nio.file.Path
@@ -14,32 +15,20 @@ class ProjectLauncher(
     private val recentProjectsIndex = RecentProjectsIndex.getInstance(configRepository)
 
     /**
-     * Launch a project by path, handling base VM options changes and project registration
+     * Launch a project by ID and path (for when ID is already known)
      */
-    fun launchByPath(projectPath: Path, onBaseVmOptionsChanged: () -> Unit = {}) {
-        val projectId = ProjectIdGenerator.generate(projectPath)
-
+    fun launch(
+        command: CliktCommand,
+        projectPath: Path,
+        projectId: String = ProjectIdGenerator.generate(projectPath)
+    ) {
         // Check if base VM options changed
         if (baseVMOptionsTracker.hasChanged()) {
-            onBaseVmOptionsChanged()
+            command.echo("Base VM options changed, regenerating configurations for all projects...")
             regenerateAllProjects()
             baseVMOptionsTracker.updateHash()
         }
 
-        // Register or update project metadata
-        projectManager.registerOrUpdate(projectId, projectPath)
-
-        // Record in recent projects
-        recentProjectsIndex.recordOpen(projectId)
-
-        // Launch IntelliJ
-        intellijLauncher.launch(projectId, projectPath)
-    }
-
-    /**
-     * Launch a project by ID and path (for when ID is already known)
-     */
-    fun launchById(projectId: String, projectPath: Path) {
         // Register or update project metadata
         projectManager.registerOrUpdate(projectId, projectPath)
 

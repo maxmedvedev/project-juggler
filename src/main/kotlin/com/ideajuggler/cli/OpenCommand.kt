@@ -16,8 +16,6 @@ class OpenCommand : CliktCommand(
     override fun run() {
         val configRepository = ConfigRepository.create()
         val launcher = ProjectLauncher.getInstance(configRepository)
-        launcher.launchByPath(projectPath) {
-            echo("Base VM options changed, regenerating configurations for all projects...")
-        }
+        launcher.launch(this, projectPath)
     }
 }
