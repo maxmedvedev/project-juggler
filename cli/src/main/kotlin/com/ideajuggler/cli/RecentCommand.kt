@@ -61,6 +61,6 @@ class RecentCommand : CliktCommand(
         echo("Opening ${selectedProject.name}...")
 
         val launcher = ProjectLauncher.getInstance(ConfigRepository.create())
-        launcher.launch(this, projectPath, selectedProject.id)
+        launcher.launch(CliktMessageOutput(this), projectPath, selectedProject.id)
     }
 }

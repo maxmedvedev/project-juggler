@@ -33,6 +33,6 @@ class OpenCommand : CliktCommand(
     override fun run() {
         val configRepository = ConfigRepository.create()
         val launcher = ProjectLauncher.getInstance(configRepository)
-        launcher.launch(this, projectPath)
+        launcher.launch(CliktMessageOutput(this), projectPath)
     }
 }

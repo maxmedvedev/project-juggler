@@ -1,0 +1,40 @@
+<idea-plugin>
+    <id>com.ideajuggler.plugin</id>
+    <name>idea-juggler</name>
+    <vendor>idea-juggler</vendor>
+
+    <description><![CDATA[
+        Open the current project in a new idea-juggler instance with isolated configuration.
+
+        <p>Features:</p>
+        <ul>
+            <li>Quick action to open current project in isolated IntelliJ instance</li>
+            <li>Keeps current window open while launching new instance</li>
+            <li>Each project gets dedicated config, system, and plugin directories</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="idea-juggler.notifications" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action id="com.ideajuggler.plugin.OpenWithIdeaJuggler"
+                class="com.ideajuggler.plugin.actions.OpenWithIdeaJugglerAction"
+                text="Open with idea-juggler"
+                description="Open this project in a new idea-juggler instance"
+                icon="AllIcons.Actions.Execute">
+            <add-to-group group-id="FileMenu" anchor="after" relative-to-action="OpenFile"/>
+        </action>
+
+        <action id="com.ideajuggler.plugin.OpenWithIdeaJuggler.Tools"
+                class="com.ideajuggler.plugin.actions.OpenWithIdeaJugglerAction"
+                text="Open with idea-juggler"
+                description="Open this project in a new idea-juggler instance"
+                icon="AllIcons.Actions.Execute">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

@@ -1,6 +1,5 @@
 package com.ideajuggler.core
 
-import com.github.ajalt.clikt.core.CliktCommand
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.RecentProjectsIndex
 import java.nio.file.Path
@@ -18,13 +17,13 @@ class ProjectLauncher(
      * Launch a project by ID and path (for when ID is already known)
      */
     fun launch(
-        command: CliktCommand,
+        messageOutput: MessageOutput,
         projectPath: Path,
         projectId: String = ProjectIdGenerator.generate(projectPath)
     ) {
         // Check if base VM options changed
         if (baseVMOptionsTracker.hasChanged()) {
-            command.echo("Base VM options changed, regenerating configurations for all projects...")
+            messageOutput.echo("Base VM options changed, regenerating configurations for all projects...")
             regenerateAllProjects()
             baseVMOptionsTracker.updateHash()
         }
