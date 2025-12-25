@@ -400,7 +400,8 @@ src/main/kotlin/com/ideajuggler/
 │   ├── IntelliJLocator.kt
 │   └── ProcessLauncher.kt
 └── util/                                # Utilities
-    └── HashUtils.kt
+    ├── HashUtils.kt
+    └── TimeUtils.kt
 ```
 
 ### Running Tests

@@ -9,9 +9,8 @@ import com.ideajuggler.config.RecentProjectsIndex
 import com.ideajuggler.core.*
 import com.ideajuggler.platform.IntelliJLocator
 import com.ideajuggler.platform.ProcessLauncher
+import com.ideajuggler.util.TimeUtils
 import java.nio.file.Paths
-import java.time.Duration
-import java.time.Instant
 
 class RecentCommand : CliktCommand(
     name = "recent",
@@ -38,7 +37,7 @@ class RecentCommand : CliktCommand(
         echo()
 
         recentProjects.forEachIndexed { index, project ->
-            val relativeTime = formatRelativeTime(project.lastOpened)
+            val relativeTime = TimeUtils.formatRelativeTime(project.lastOpened)
             echo("  ${index + 1}. ${project.name} ($relativeTime)")
             echo("     ${project.path}")
             echo()
@@ -91,24 +90,5 @@ class RecentCommand : CliktCommand(
 
         // Launch IntelliJ
         intellijLauncher.launch(projectId, projectPath)
-    }
-
-    private fun formatRelativeTime(timestampStr: String): String {
-        return try {
-            val timestamp = Instant.parse(timestampStr)
-            val now = Instant.now()
-            val duration = Duration.between(timestamp, now)
-
-            when {
-                duration.toMinutes() < 1 -> "just now"
-                duration.toMinutes() < 60 -> "${duration.toMinutes()} minute${if (duration.toMinutes() == 1L) "" else "s"} ago"
-                duration.toHours() < 24 -> "${duration.toHours()} hour${if (duration.toHours() == 1L) "" else "s"} ago"
-                duration.toDays() < 7 -> "${duration.toDays()} day${if (duration.toDays() == 1L) "" else "s"} ago"
-                duration.toDays() < 30 -> "${duration.toDays() / 7} week${if (duration.toDays() / 7 == 1L) "" else "s"} ago"
-                else -> "${duration.toDays() / 30} month${if (duration.toDays() / 30 == 1L) "" else "s"} ago"
-            }
-        } catch (e: Exception) {
-            timestampStr
-        }
     }
 }
