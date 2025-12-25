@@ -2,6 +2,8 @@ package com.ideajuggler.core
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.deleteRecursively
 
 class DirectoryManager(private val baseDir: Path) {
 
@@ -35,9 +37,10 @@ class DirectoryManager(private val baseDir: Path) {
 
     fun cleanProject(projectId: String) {
         val projectRoot = getProjectRoot(projectId)
-        if (Files.exists(projectRoot)) {
-            projectRoot.toFile().deleteRecursively()
-        }
+        if (!Files.exists(projectRoot)) return
+
+        @OptIn(ExperimentalPathApi::class)
+        projectRoot.deleteRecursively()
     }
 
     fun getProjectRoot(projectId: String): Path {
