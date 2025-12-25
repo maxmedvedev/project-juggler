@@ -181,4 +181,24 @@ class DirectoryManagerTest : StringSpec({
             }
         }
     }
+
+    "should handle plugin copying on directory creation" {
+        val tempDir = createTempDirectory("test-base")
+        try {
+            val configRepository = ConfigRepository(tempDir)
+            val manager = DirectoryManager.getInstance(configRepository)
+            val projectId = "test-project-123"
+
+            val dirs = manager.ensureProjectDirectories(projectId)
+
+            // Verify plugins directory exists (even if no plugins copied)
+            Files.exists(dirs.plugins) shouldBe true
+
+            // Second call should not fail
+            val dirs2 = manager.ensureProjectDirectories(projectId)
+            Files.exists(dirs2.plugins) shouldBe true
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
 })
