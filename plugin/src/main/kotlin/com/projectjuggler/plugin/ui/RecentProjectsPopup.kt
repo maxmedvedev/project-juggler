@@ -101,10 +101,7 @@ internal class RecentProjectsPopup(
             }
         } catch (ex: Exception) {
             ApplicationManager.getApplication().invokeLater {
-                showNotification(
-                    "Failed to load recent projects: ${ex.message}",
-                    NotificationType.ERROR
-                )
+                showNotification("Failed to load recent projects: ${ex.message}")
             }
             ex.printStackTrace()
         }
@@ -152,10 +149,7 @@ internal class RecentProjectsPopup(
 
         val projectPath = ProjectManager.getInstance(configRepository).resolvePath(selectedFile.path)
         if (!projectPath.path.isDirectory()) {
-            showNotification(
-                ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path),
-                NotificationType.ERROR
-            )
+            showNotification(ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path))
             return
         }
 
@@ -171,10 +165,10 @@ internal class RecentProjectsPopup(
         )
     }
 
-    private fun showNotification(message: String, type: NotificationType) {
+    private fun showNotification(message: String) {
         NotificationGroupManager.getInstance()
             .getNotificationGroup("project-juggler.notifications")
-            .createNotification(message, type)
+            .createNotification(message, NotificationType.ERROR)
             .notify(project)
     }
 }
