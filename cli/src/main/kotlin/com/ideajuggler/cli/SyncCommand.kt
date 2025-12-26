@@ -39,18 +39,48 @@ class SyncCommand : Command(
         help = "Sync all settings (vmoptions, config, plugins)"
     ).also { options.add(it) }
 
+    private val allProjectsFlag = FlagOption(
+        shortName = null,
+        longName = "all-projects",
+        help = "Sync all tracked projects"
+    ).also { options.add(it) }
+
     override fun run() {
         val projectPath = projectPath.getValueOrNull()
         val syncVmOptions = vmOptionsFlag.getValue()
         val syncConfig = configFlag.getValue()
         val syncPlugins = pluginsFlag.getValue()
         val syncAll = allFlag.getValue()
-
-        // Resolve project using helper method
-        val project = resolveProject(projectPath)
+        val syncAllProjects = allProjectsFlag.getValue()
 
         val configRepository = ConfigRepository.create()
-        val projectLauncher = ProjectLauncher.getInstance(configRepository)
+
+        // Validate mutually exclusive options
+        if (syncAllProjects && projectPath != null) {
+            echo("Error: Cannot specify both --all-projects and --path", err = true)
+            throw ExitException(1)
+        }
+
+        if (!syncAllProjects && projectPath == null) {
+            echo("Error: Either --all-projects or --path must be specified", err = true)
+            echo("Usage: $name --path <project-path> [options]", err = true)
+            echo("   or: $name --all-projects [options]", err = true)
+            throw ExitException(1)
+        }
+
+        // Get projects to sync
+        val projects = if (syncAllProjects) {
+            val allProjects = configRepository.loadAllProjects()
+            if (allProjects.isEmpty()) {
+                echo("No tracked projects found.", err = true)
+                throw ExitException(1)
+            }
+            echo("Synchronizing ${allProjects.size} project(s)...")
+            echo()
+            allProjects
+        } else {
+            listOf(resolveProject(projectPath))
+        }
 
         // Determine what to sync
         val noFlagsSpecified = !syncAll && !syncVmOptions && !syncConfig && !syncPlugins
@@ -76,55 +106,79 @@ class SyncCommand : Command(
             syncAll || syncPlugins
         }
 
-        echo("Synchronizing project: ${project.name}")
-        echo()
+        val projectLauncher = ProjectLauncher.getInstance(configRepository)
+        val directoryManager = com.ideajuggler.core.DirectoryManager.getInstance(configRepository)
+        val baseVMOptionsTracker = com.ideajuggler.core.BaseVMOptionsTracker.getInstance(configRepository)
 
-        try {
-            // Show what will be synced and from where
-            val directoryManager = com.ideajuggler.core.DirectoryManager.getInstance(configRepository)
-            val baseVMOptionsTracker = com.ideajuggler.core.BaseVMOptionsTracker.getInstance(configRepository)
+        // Sync each project
+        var successCount = 0
+        var failureCount = 0
 
-            if (shouldSyncVmOptions) {
-                val vmPath = baseVMOptionsTracker.getBaseVmOptionsPath()
-                if (vmPath != null) {
-                    echo("  Syncing VM options from: $vmPath")
-                } else {
-                    echo("  Syncing VM options from: (not configured)", err = true)
-                }
-            }
-            if (shouldSyncConfig) {
-                val configPath = directoryManager.getBaseConfigPath()
-                if (configPath != null) {
-                    echo("  Syncing config from: $configPath")
-                } else {
-                    echo("  Syncing config from: (not found)", err = true)
-                }
-            }
-            if (shouldSyncPlugins) {
-                val pluginsPath = directoryManager.getBasePluginsPath()
-                if (pluginsPath != null) {
-                    echo("  Syncing plugins from: $pluginsPath")
-                } else {
-                    echo("  Syncing plugins from: (not found)", err = true)
-                }
-            }
+        for (project in projects) {
+            echo("Synchronizing project: ${project.name}")
             echo()
 
-            projectLauncher.syncProject(
-                project,
-                shouldSyncVmOptions,
-                shouldSyncConfig,
-                shouldSyncPlugins
-            )
+            try {
+                // Show what will be synced and from where
+                if (shouldSyncVmOptions) {
+                    val vmPath = baseVMOptionsTracker.getBaseVmOptionsPath()
+                    if (vmPath != null) {
+                        echo("  Syncing VM options from: $vmPath")
+                    } else {
+                        echo("  Syncing VM options from: (not configured)", err = true)
+                    }
+                }
+                if (shouldSyncConfig) {
+                    val configPath = directoryManager.getBaseConfigPath()
+                    if (configPath != null) {
+                        echo("  Syncing config from: $configPath")
+                    } else {
+                        echo("  Syncing config from: (not found)", err = true)
+                    }
+                }
+                if (shouldSyncPlugins) {
+                    val pluginsPath = directoryManager.getBasePluginsPath()
+                    if (pluginsPath != null) {
+                        echo("  Syncing plugins from: $pluginsPath")
+                    } else {
+                        echo("  Syncing plugins from: (not found)", err = true)
+                    }
+                }
+                echo()
 
-            echo("Successfully synchronized project settings.")
-        } catch (e: IllegalStateException) {
+                projectLauncher.syncProject(
+                    project,
+                    shouldSyncVmOptions,
+                    shouldSyncConfig,
+                    shouldSyncPlugins
+                )
+
+                echo("Successfully synchronized project settings.")
+                successCount++
+            } catch (e: IllegalStateException) {
+                echo()
+                echo("Error: ${e.message}", err = true)
+                failureCount++
+            } catch (e: Exception) {
+                echo()
+                echo("Error syncing project: ${e.message}", err = true)
+                failureCount++
+            }
+
+            if (syncAllProjects && project != projects.last()) {
+                echo()
+                echo("---")
+                echo()
+            }
+        }
+
+        if (syncAllProjects) {
             echo()
-            echo("Error: ${e.message}", err = true)
-            throw ExitException(1)
-        } catch (e: Exception) {
-            echo()
-            echo("Error syncing project: ${e.message}", err = true)
+            echo("Summary: $successCount succeeded, $failureCount failed")
+            if (failureCount > 0) {
+                throw ExitException(1)
+            }
+        } else if (failureCount > 0) {
             throw ExitException(1)
         }
     }
