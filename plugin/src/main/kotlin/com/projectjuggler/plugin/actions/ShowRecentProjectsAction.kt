@@ -21,17 +21,7 @@ internal class ShowRecentProjectsAction : AnAction() {
         // Load recent projects in background thread
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val configRepository = ConfigRepository.create()
-                val recentIndex = RecentProjectsIndex.getInstance(configRepository)
-                val recentProjects = recentIndex.getRecent(20)
-
-                if (recentProjects.isEmpty()) {
-                    // Show notification if no recent projects
-                    showNotificationNoRecentProjets(project)
-                    return@executeOnPooledThread
-                }
-
-                RecentProjectsPopup(project, configRepository).show()
+                RecentProjectsPopup(project).show()
             } catch (ex: Exception) {
                 showErrorNotification(ex, project)
                 ex.printStackTrace()

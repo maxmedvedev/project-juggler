@@ -26,8 +26,9 @@ import kotlin.io.path.isDirectory
 
 internal class RecentProjectsPopup(
     private val project: Project?,
-    private val configRepository: ConfigRepository
 ) {
+    val configRepository = ConfigRepository.create()
+
     @RequiresBackgroundThread
     fun show() {
         computeDataOnBGT()
