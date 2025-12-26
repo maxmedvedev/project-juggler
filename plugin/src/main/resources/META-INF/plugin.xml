@@ -19,7 +19,8 @@
     <resource-bundle>messages.IdeaJugglerBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <notificationGroup id="idea-juggler.notifications" displayType="BALLOON"/>
+        <notificationGroup id="idea-juggler.notifications" displayType="BALLOON" bundle="messages.IdeaJugglerBundle"
+                           key="notification.group.idea-juggler.notifications"/>
     </extensions>
 
     <actions>
