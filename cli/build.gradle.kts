@@ -47,17 +47,28 @@ val homebrewDist by tasks.registering(Tar::class) {
     archiveExtension.set("tar.gz")
     compression = Compression.GZIP
 
+    dependsOn("jar")
+
     into("idea-juggler-${project.version}") {
+        // JARs in libexec/
         into("libexec") {
             from(tasks.named("jar"))
             from(configurations.runtimeClasspath)
+        }
+
+        // Shell script in bin/
+        into("bin") {
+            from("src/main/resources/idea-juggler.sh") {
+                rename { "idea-juggler" }
+                fileMode = 0b111101101  // 0755 (executable)
+            }
         }
     }
 
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
     dirMode = 0b111101101  // 0755
-    fileMode = 0b110100100  // 0644
+    fileMode = 0b110100100  // 0644 (except overridden for script)
 }
 
 // Checksum generation task

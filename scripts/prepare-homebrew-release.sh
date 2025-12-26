@@ -30,6 +30,40 @@ fi
 # Read checksum
 CHECKSUM=$(cut -d' ' -f1 "$CHECKSUM_FILE")
 
+# Test the distribution
+echo ""
+echo "Testing distribution..."
+TEMP_DIR=$(mktemp -d)
+tar -xzf "$DIST_FILE" -C "$TEMP_DIR"
+EXTRACTED_DIR="$TEMP_DIR/idea-juggler-$VERSION"
+
+# Check structure
+if [ ! -f "$EXTRACTED_DIR/bin/idea-juggler" ]; then
+    echo "Error: bin/idea-juggler not found in distribution!" >&2
+    exit 1
+fi
+
+if [ ! -x "$EXTRACTED_DIR/bin/idea-juggler" ]; then
+    echo "Error: bin/idea-juggler is not executable!" >&2
+    exit 1
+fi
+
+# Test script syntax
+if ! bash -n "$EXTRACTED_DIR/bin/idea-juggler"; then
+    echo "Error: Shell script has syntax errors!" >&2
+    exit 1
+fi
+
+# Test help command (if Java available)
+if command -v java >/dev/null 2>&1; then
+    if ! "$EXTRACTED_DIR/bin/idea-juggler" --help >/dev/null 2>&1; then
+        echo "Warning: Script execution test failed (Java may not be configured)" >&2
+    fi
+fi
+
+rm -rf "$TEMP_DIR"
+echo "Distribution structure validated ✓"
+
 echo ""
 echo "============================================"
 echo "Release artifacts ready!"
