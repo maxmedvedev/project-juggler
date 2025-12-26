@@ -11,10 +11,12 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.PopupChooserBuilder
+import com.intellij.ui.components.JBList
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.intellij.util.concurrency.annotations.RequiresEdt
 import java.nio.file.Files
+import javax.swing.DefaultListModel
 
 internal class RecentProjectsPopup(
     private val project: Project?,
@@ -27,8 +29,22 @@ internal class RecentProjectsPopup(
 
     @RequiresEdt
     private fun createAndShowItems(items: List<RecentProjectItem>) {
-        val step = RecentProjectsPopupStep(items, ::launchProject)
-        val popup = JBPopupFactory.getInstance().createListPopup(step)
+        // Create a JBList with custom renderer
+        val listModel = DefaultListModel<RecentProjectItem>()
+        items.forEach { listModel.addElement(it) }
+
+        val list = JBList(listModel)
+        list.cellRenderer = RecentProjectItemRenderer()
+
+        // Create popup using PopupChooserBuilder
+        val popup = PopupChooserBuilder(list)
+            .setTitle(IdeaJugglerBundle.message("popup.recent.projects.title"))
+            .setItemChosenCallback(Runnable {
+                list.selectedValue?.let { launchProject(it) }
+            })
+            .setFilterAlwaysVisible(true)
+            .createPopup()
+
         popup.showInFocusCenter()
     }
 
