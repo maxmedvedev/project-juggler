@@ -10,6 +10,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.Project
 
 internal class ShowRecentProjectsAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -26,31 +27,35 @@ internal class ShowRecentProjectsAction : AnAction() {
 
                 if (recentProjects.isEmpty()) {
                     // Show notification if no recent projects
-                    ApplicationManager.getApplication().invokeLater {
-                        NotificationGroupManager.getInstance()
-                            .getNotificationGroup("idea-juggler.notifications")
-                            .createNotification(
-                                IdeaJugglerBundle.message("notification.recent.projects.empty"),
-                                NotificationType.INFORMATION
-                            )
-                            .notify(project)
-                    }
+                    showNotificationNoRecentProjets(project)
                     return@executeOnPooledThread
                 }
 
                 RecentProjectsPopup(project, configRepository).show()
             } catch (ex: Exception) {
-                ApplicationManager.getApplication().invokeLater {
-                    NotificationGroupManager.getInstance()
-                        .getNotificationGroup("idea-juggler.notifications")
-                        .createNotification(
-                            "Failed to load recent projects: ${ex.message}",
-                            NotificationType.ERROR
-                        )
-                        .notify(project)
-                }
+                showErrorNotification(ex, project)
                 ex.printStackTrace()
             }
         }
+    }
+
+    private fun showErrorNotification(ex: Exception, project: Project?) {
+        NotificationGroupManager.getInstance()
+            .getNotificationGroup("idea-juggler.notifications")
+            .createNotification(
+                "Failed to load recent projects: ${ex.message}",
+                NotificationType.ERROR
+            )
+            .notify(project)
+    }
+
+    private fun showNotificationNoRecentProjets(project: Project?) {
+        NotificationGroupManager.getInstance()
+            .getNotificationGroup("idea-juggler.notifications")
+            .createNotification(
+                IdeaJugglerBundle.message("notification.recent.projects.empty"),
+                NotificationType.INFORMATION
+            )
+            .notify(project)
     }
 }
