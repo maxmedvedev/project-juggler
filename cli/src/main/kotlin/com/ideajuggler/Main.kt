@@ -1,14 +1,20 @@
 package com.ideajuggler
 
-import com.ideajuggler.cli.createCLI
-import kotlin.system.exitProcess
+import com.ideajuggler.cli.*
+import com.ideajuggler.cli.framework.CliApp
 
 fun main(args: Array<String>) {
-    try {
-        val cli = createCLI()
-        cli.main(args)
-    } catch (e: Exception) {
-        System.err.println("Error: ${e.message}")
-        exitProcess(1)
-    }
+    val app = CliApp(
+        name = "idea-juggler",
+        version = "1.0.0",
+        commands = listOf(
+            OpenCommand(),
+            ListCommand(),
+            CleanCommand(),
+            ConfigCommand(),
+            RecentCommand()
+        )
+    )
+
+    app.run(args)
 }

@@ -1,9 +1,6 @@
 package com.ideajuggler.cli
 
-import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.parameters.options.flag
-import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.types.path
+import com.ideajuggler.cli.framework.*
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.core.BaseVMOptionsTracker
 import com.ideajuggler.platform.ConfigLocator
@@ -11,26 +8,52 @@ import com.ideajuggler.platform.PluginLocator
 import java.nio.file.Paths
 import kotlin.io.path.exists
 
-class ConfigCommand : CliktCommand(
+class ConfigCommand : Command(
     name = "config",
     help = "Configure global settings"
 ) {
-    private val intellijPath by option("--intellij-path", help = "Path to IntelliJ executable")
-        .path(mustExist = true)
-    private val baseVmOptionsPath by option("--base-vmoptions", help = "Path to base VM options file")
-        .path(mustExist = true, mustBeReadable = true, canBeDir = false)
-    private val basePluginsPath by option("--base-plugins", help = "Path to base IntelliJ plugins directory")
-        .path(mustExist = true, mustBeReadable = true, canBeDir = true)
-    private val baseConfigPath by option("--base-config", help = "Path to base IntelliJ config directory")
-        .path(mustExist = true, mustBeReadable = true, canBeDir = true)
-    private val show by option("--show", help = "Show current configuration").flag()
+    private val intellijPathOpt = PathOption(
+        shortName = null,
+        longName = "intellij-path",
+        help = "Path to IntelliJ executable"
+    ).also { options.add(it) }
+
+    private val baseVmOptionsOpt = PathOption(
+        shortName = null,
+        longName = "base-vmoptions",
+        help = "Path to base VM options file"
+    ).also { options.add(it) }
+
+    private val basePluginsOpt = PathOption(
+        shortName = null,
+        longName = "base-plugins",
+        help = "Path to base IntelliJ plugins directory"
+    ).also { options.add(it) }
+
+    private val baseConfigOpt = PathOption(
+        shortName = null,
+        longName = "base-config",
+        help = "Path to base IntelliJ config directory"
+    ).also { options.add(it) }
+
+    private val showOpt = FlagOption(
+        shortName = null,
+        longName = "show",
+        help = "Show current configuration"
+    ).also { options.add(it) }
 
     override fun run() {
         val configRepository = ConfigRepository.create()
 
+        val show = showOpt.getValue()
+        val hasAnyOption = intellijPathOpt.getValueOrNull() != null ||
+                           baseVmOptionsOpt.getValueOrNull() != null ||
+                           basePluginsOpt.getValueOrNull() != null ||
+                           baseConfigOpt.getValueOrNull() != null
+
         when {
             show -> showConfig(configRepository)
-            intellijPath != null || baseVmOptionsPath != null || basePluginsPath != null || baseConfigPath != null -> updateConfig(configRepository)
+            hasAnyOption -> updateConfig(configRepository)
             else -> showConfig(configRepository)
         }
     }
@@ -38,13 +61,11 @@ class ConfigCommand : CliktCommand(
     private fun showConfig(configRepository: ConfigRepository) {
         val config = configRepository.load()
 
-        // Auto-detect base plugins path for display
         val detectedPluginsPath = PluginLocator.findDefaultPluginsDirectory()
         val pluginsPathDisplay = config.basePluginsPath
             ?: detectedPluginsPath?.toString()
             ?: "(not set, will auto-detect)"
 
-        // Auto-detect base config path for display
         val detectedConfigPath = ConfigLocator.findDefaultConfigDirectory()
         val configPathDisplay = config.baseConfigPath
             ?: detectedConfigPath?.toString()
@@ -63,58 +84,55 @@ class ConfigCommand : CliktCommand(
 
     private fun updateConfig(configRepository: ConfigRepository) {
         // Validate paths before updating
-        intellijPath?.let { path ->
+        intellijPathOpt.getValueOrNull()?.let { path ->
             if (!path.exists()) {
                 echo("Error: IntelliJ path does not exist: $path", err = true)
-                return
+                throw ExitException(1)
             }
         }
 
-        baseVmOptionsPath?.let { path ->
+        baseVmOptionsOpt.getValueOrNull()?.let { path ->
             if (!path.exists()) {
                 echo("Error: Base VM options file does not exist: $path", err = true)
-                return
+                throw ExitException(1)
             }
         }
 
-        basePluginsPath?.let { path ->
+        basePluginsOpt.getValueOrNull()?.let { path ->
             if (!path.exists()) {
                 echo("Error: Base plugins path does not exist: $path", err = true)
-                return
+                throw ExitException(1)
             }
         }
 
-        baseConfigPath?.let { path ->
+        baseConfigOpt.getValueOrNull()?.let { path ->
             if (!path.exists()) {
                 echo("Error: Base config path does not exist: $path", err = true)
-                return
+                throw ExitException(1)
             }
         }
 
-        // Update configuration
         configRepository.update { config ->
             var updated = config
 
-            intellijPath?.let { path ->
+            intellijPathOpt.getValueOrNull()?.let { path ->
                 updated = updated.copy(intellijPath = path.toString())
                 echo("IntelliJ path updated: $path")
             }
 
-            baseVmOptionsPath?.let { path ->
+            baseVmOptionsOpt.getValueOrNull()?.let { path ->
                 updated = updated.copy(baseVmOptionsPath = path.toString())
                 echo("Base VM options path updated: $path")
-
-                // Calculate and store initial hash
                 BaseVMOptionsTracker.getInstance(configRepository).updateHash()
                 echo("Base VM options hash calculated and stored")
             }
 
-            basePluginsPath?.let { path ->
+            basePluginsOpt.getValueOrNull()?.let { path ->
                 updated = updated.copy(basePluginsPath = path.toString())
                 echo("Base plugins path updated: $path")
             }
 
-            baseConfigPath?.let { path ->
+            baseConfigOpt.getValueOrNull()?.let { path ->
                 updated = updated.copy(baseConfigPath = path.toString())
                 echo("Base config path updated: $path")
             }

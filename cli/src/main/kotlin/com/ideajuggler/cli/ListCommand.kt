@@ -1,21 +1,23 @@
 package com.ideajuggler.cli
 
-import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.parameters.options.flag
-import com.github.ajalt.clikt.parameters.options.option
+import com.ideajuggler.cli.framework.*
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.core.ProjectManager
 import com.ideajuggler.util.TimeUtils
 
-class ListCommand : CliktCommand(
+class ListCommand : Command(
     name = "list",
     help = "List all tracked projects"
 ) {
-    private val verbose by option("-v", "--verbose", help = "Show detailed information").flag()
+    private val verboseOpt = FlagOption(
+        shortName = "v",
+        longName = "verbose",
+        help = "Show detailed information"
+    ).also { options.add(it) }
 
     override fun run() {
+        val verbose = verboseOpt.getValue()
         val configRepository = ConfigRepository.create()
-
         val projects = ProjectManager.getInstance(configRepository).listAll()
 
         if (projects.isEmpty()) {

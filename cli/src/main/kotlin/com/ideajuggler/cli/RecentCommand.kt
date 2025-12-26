@@ -1,25 +1,25 @@
 package com.ideajuggler.cli
 
-import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.core.terminal
-import com.github.ajalt.clikt.parameters.options.default
-import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.types.int
+import com.ideajuggler.cli.framework.*
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.RecentProjectsIndex
 import com.ideajuggler.core.ProjectLauncher
 import com.ideajuggler.util.TimeUtils
 import java.nio.file.Paths
 
-class RecentCommand : CliktCommand(
+class RecentCommand : Command(
     name = "recent",
     help = "Show recently opened projects"
 ) {
-    private val limit by option("-n", "--limit", help = "Number of projects to show")
-        .int()
-        .default(10)
+    private val limitOpt = IntOption(
+        shortName = "n",
+        longName = "limit",
+        help = "Number of projects to show",
+        default = 10
+    ).also { options.add(it) }
 
     override fun run() {
+        val limit = limitOpt.getValue()
         val configRepository = ConfigRepository.create()
 
         val recentProjects = RecentProjectsIndex.getInstance(configRepository).getRecent(limit)
@@ -41,7 +41,7 @@ class RecentCommand : CliktCommand(
         }
 
         // Interactive selection
-        val selection = terminal.prompt("Select project number to open (or press Enter to cancel)")
+        val selection = prompt("Select project number to open (or press Enter to cancel)")
 
         if (selection.isNullOrBlank()) {
             echo("Cancelled.")
@@ -51,16 +51,15 @@ class RecentCommand : CliktCommand(
         val selectedIndex = selection.toIntOrNull()?.minus(1)
         if (selectedIndex == null || selectedIndex !in recentProjects.indices) {
             echo("Invalid selection: $selection", err = true)
-            return
+            throw ExitException(1)
         }
 
         val selectedProject = recentProjects[selectedIndex]
         val projectPath = Paths.get(selectedProject.path)
 
-        // Launch the selected project
         echo("Opening ${selectedProject.name}...")
 
-        val launcher = ProjectLauncher.getInstance(ConfigRepository.create())
-        launcher.launch(CliktMessageOutput(this), projectPath, selectedProject.id)
+        val launcher = ProjectLauncher.getInstance(configRepository)
+        launcher.launch(SimpleMessageOutput(), projectPath, selectedProject.id)
     }
 }
