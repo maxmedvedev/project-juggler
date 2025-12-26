@@ -12,4 +12,10 @@ subprojects {
     repositories {
         mavenCentral()
     }
+
+    // Reproducible builds for all subprojects
+    tasks.withType<AbstractArchiveTask>().configureEach {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
+    }
 }

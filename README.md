@@ -14,6 +14,13 @@ A Kotlin-based CLI tool that manages separate IntelliJ IDEA instances per projec
 
 ## Installation
 
+### Via Homebrew (macOS and Linux)
+
+```bash
+brew tap YOUR_USERNAME/homebrew-tap
+brew install idea-juggler
+```
+
 ### Prerequisites
 
 - JDK 17 or higher (for building from source)
