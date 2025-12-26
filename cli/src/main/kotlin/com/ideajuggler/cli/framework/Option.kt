@@ -64,6 +64,6 @@ class PathOption(
     longName: String,
     help: String
 ) : OptionSpec<Path>(shortName, longName, help) {
-    override fun parse(arg: String) = Path.of(arg)
+    override fun parse(arg: String): Path = Path.of(arg)
     override fun defaultValue() = null
 }

@@ -4,9 +4,6 @@ import com.ideajuggler.cli.framework.ExitException
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.io.path.createTempFile
 

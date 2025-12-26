@@ -45,11 +45,8 @@ class ProjectLauncher(
 
         if (syncVmOptions) {
             val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
-            if (baseVmOptionsPath == null && syncVmOptions) {
-                throw IllegalStateException(
-                    "Base VM options path not configured. Configure it using: idea-juggler config --base-vmoptions <path>"
-                )
-            }
+                ?: throw IllegalStateException("Base VM options path not configured. Configure it using: idea-juggler config --base-vmoptions <path>")
+
             val debugPort = projectManager.ensureDebugPort(projectId)
             VMOptionsGenerator.generate(
                 baseVmOptionsPath,
