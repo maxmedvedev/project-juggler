@@ -9,6 +9,7 @@ fun main(args: Array<String>) {
         version = "0.0.3",
         commands = listOf(
             OpenCommand(),
+            OpenCopyCommand(),
             ListCommand(),
             CleanCommand(),
             ConfigCommand(),

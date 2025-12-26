@@ -29,5 +29,11 @@
                 icon="AllIcons.Actions.Execute">
             <add-to-group group-id="FileMenu" anchor="after" relative-to-action="OpenFile"/>
         </action>
+
+        <action id="com.ideajuggler.plugin.OpenProjectCopy"
+                class="com.ideajuggler.plugin.actions.OpenProjectCopyAction"
+                icon="AllIcons.Actions.Copy">
+            <add-to-group group-id="FileMenu" anchor="after" relative-to-action="com.ideajuggler.plugin.OpenWithIdeaJuggler"/>
+        </action>
     </actions>
 </idea-plugin>
