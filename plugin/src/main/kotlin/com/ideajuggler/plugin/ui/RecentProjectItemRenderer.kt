@@ -30,7 +30,7 @@ internal class RecentProjectItemRenderer : ListCellRenderer<RecentProjectItem> {
 
         // Get project icon using IntelliJ's icon helper
         val projectIcon = iconHelper.getProjectIcon(
-            path = value.metadata.path.pathString,
+            path = value.metadata.path.path,
             isProjectValid = true,
             name = value.metadata.name
         )
