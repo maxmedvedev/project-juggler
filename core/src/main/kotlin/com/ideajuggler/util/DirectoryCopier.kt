@@ -1,11 +1,24 @@
 package com.ideajuggler.util
 
+import java.io.File
 import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
 object DirectoryCopier {
+
+    // Files to exclude when copying IntelliJ config directories
+    private val EXCLUDED_FILES = setOf(
+        ".lock",                           // Running instance lock
+        "recentProjects.xml",              // Legacy recent projects
+        "recentProjectDirectories.xml",    // Legacy recent directories
+    )
+
+    // Path patterns to exclude (relative to source, normalized with forward slashes)
+    private val EXCLUDED_PATTERNS = setOf(
+        "options/recentProjects.xml",      // Modern recent projects location
+    )
 
     /**
      * Copy directory contents from source to destination.
@@ -87,8 +100,17 @@ object DirectoryCopier {
                 file: Path,
                 attrs: BasicFileAttributes
             ): FileVisitResult {
-                // Skip .lock files to avoid conflicts with running IntelliJ instances
-                if (file.fileName.toString() == ".lock") {
+                val fileName = file.fileName.toString()
+
+                // Check filename exclusions
+                if (fileName in EXCLUDED_FILES) {
+                    return FileVisitResult.CONTINUE
+                }
+
+                // Check path pattern exclusions
+                val relativePath = source.relativize(file).toString()
+                    .replace(File.separator, "/")  // Normalize to forward slashes
+                if (relativePath in EXCLUDED_PATTERNS) {
                     return FileVisitResult.CONTINUE
                 }
 
