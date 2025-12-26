@@ -23,11 +23,19 @@
                            key="notification.group.idea-juggler.notifications"/>
     </extensions>
 
-    <actions>
+    <actions resource-bundle="messages.IdeaJugglerBundle">
         <action id="com.ideajuggler.plugin.OpenWithIdeaJuggler"
                 class="com.ideajuggler.plugin.actions.OpenWithIdeaJugglerAction"
                 icon="AllIcons.Actions.Execute">
             <add-to-group group-id="FileMenu" anchor="after" relative-to-action="OpenFile"/>
+        </action>
+        <action id="com.ideajuggler.plugin.ShowRecentProjects"
+                class="com.ideajuggler.plugin.actions.ShowRecentProjectsAction"
+                icon="AllIcons.Actions.Search">
+            <add-to-group group-id="FileMenu" anchor="after"
+                          relative-to-action="com.ideajuggler.plugin.OpenWithIdeaJuggler"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="meta shift P"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift P"/>
         </action>
 
         <action id="com.ideajuggler.plugin.OpenProjectCopy"

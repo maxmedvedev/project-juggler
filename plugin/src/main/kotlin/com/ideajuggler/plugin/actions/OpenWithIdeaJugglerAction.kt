@@ -17,11 +17,6 @@ import com.intellij.openapi.project.Project
 import kotlin.io.path.isDirectory
 
 internal class OpenWithIdeaJugglerAction : AnAction() {
-    init {
-        templatePresentation.text = IdeaJugglerBundle.message("action.OpenWithIdeaJuggler.text")
-        templatePresentation.description = IdeaJugglerBundle.message("action.OpenWithIdeaJuggler.description")
-    }
-
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun actionPerformed(e: AnActionEvent) {
