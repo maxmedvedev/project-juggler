@@ -27,7 +27,7 @@ class RecentCommand : Command(
 
         if (recentProjects.isEmpty()) {
             echo("No recent projects.")
-            echo("Use 'idea-juggler open <project-path>' to open a project.")
+            echo("Use 'project-juggler open <project-path>' to open a project.")
             return
         }
 

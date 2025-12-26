@@ -68,7 +68,7 @@ abstract class Command(
         val project = projectManager.get(projectPath)
         if (project == null) {
             echo("Project not found: $projectPath", err = true)
-            echo("Use 'idea-juggler list' to see tracked projects", err = true)
+            echo("Use 'project-juggler list' to see tracked projects", err = true)
             throw ExitException(1)
         }
 

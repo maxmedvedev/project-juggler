@@ -19,7 +19,7 @@ import kotlin.io.path.writeText
 class IntegrationTest : StringSpec({
 
     "should complete full workflow: configure, open, list, clean" {
-        val baseDir = createTempDirectory("test-idea-juggler")
+        val baseDir = createTempDirectory("test-project-juggler")
         val projectDir = createTempDirectory("test-project")
         val baseVmOptions = createTempFile("base", ".vmoptions")
 
@@ -114,7 +114,7 @@ class IntegrationTest : StringSpec({
     }
 
     "should detect and handle base VM options changes" {
-        val baseDir = createTempDirectory("test-idea-juggler")
+        val baseDir = createTempDirectory("test-project-juggler")
         val projectDir1 = createTempDirectory("test-project-1")
         val projectDir2 = createTempDirectory("test-project-2")
         val baseVmOptions = createTempFile("base", ".vmoptions")
@@ -209,7 +209,7 @@ class IntegrationTest : StringSpec({
     }
 
     "should handle multiple projects independently" {
-        val baseDir = createTempDirectory("test-idea-juggler")
+        val baseDir = createTempDirectory("test-project-juggler")
         val projectDir1 = createTempDirectory("project-alpha")
         val projectDir2 = createTempDirectory("project-beta")
         val projectDir3 = createTempDirectory("project-gamma")

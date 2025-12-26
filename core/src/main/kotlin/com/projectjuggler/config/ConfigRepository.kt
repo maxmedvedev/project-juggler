@@ -104,7 +104,7 @@ class ConfigRepository(val baseDir: Path) {
 
     companion object {
         fun getDefaultBaseDir(): Path {
-            return Paths.get(System.getProperty("user.home"), ".idea-juggler")
+            return Paths.get(System.getProperty("user.home"), ".project-juggler")
         }
 
         fun create() = ConfigRepository(getDefaultBaseDir())

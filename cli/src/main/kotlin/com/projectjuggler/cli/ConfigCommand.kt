@@ -81,7 +81,7 @@ class ConfigCommand : Command(
         echo("  Base plugins:        $pluginsPathDisplay")
         echo("  Max recent projects: ${config.maxRecentProjects}")
         echo()
-        echo("Configuration file: ${Paths.get(System.getProperty("user.home"), ".idea-juggler", "config.json")}")
+        echo("Configuration file: ${Paths.get(System.getProperty("user.home"), ".project-juggler", "config.json")}")
     }
 
     private fun updateConfig(configRepository: ConfigRepository) {

@@ -23,7 +23,7 @@ class ProjectLauncher(
     ) {
         // Check if base VM options changed
         if (baseVMOptionsTracker.hasChanged()) {
-            messageOutput.echo("Note: Base VM options have changed. Use 'idea-juggler sync <project>' to update project settings.")
+            messageOutput.echo("Note: Base VM options have changed. Use 'project-juggler sync <project>' to update project settings.")
             baseVMOptionsTracker.updateHash()
         }
 
@@ -45,7 +45,7 @@ class ProjectLauncher(
 
         if (syncVmOptions) {
             val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
-                ?: throw IllegalStateException("Base VM options path not configured. Configure it using: idea-juggler config --base-vmoptions <path>")
+                ?: throw IllegalStateException("Base VM options path not configured. Configure it using: project-juggler config --base-vmoptions <path>")
 
             val debugPort = projectManager.ensureDebugPort(project)
             VMOptionsGenerator.generate(

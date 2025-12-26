@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.10.5" apply false
 }
 
-group = "com.ideajuggler"
+group = "com.projectjuggler"
 
 subprojects {
     group = rootProject.group

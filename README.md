@@ -537,7 +537,7 @@ done
 ### Project Structure
 
 ```
-src/main/kotlin/com/ideajuggler/
+src/main/kotlin/com/projectjuggler/
 ├── Main.kt                              # Entry point
 ├── cli/                                 # CLI commands
 │   ├── framework/                       # Custom CLI framework

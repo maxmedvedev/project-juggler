@@ -32,8 +32,8 @@ object VMOptionsGenerator {
                 appendLine()
             }
 
-            // Add idea-juggler overrides
-            appendLine("# idea-juggler overrides (auto-generated)")
+            // Add project-juggler overrides
+            appendLine("# project-juggler overrides (auto-generated)")
             appendLine("-Didea.config.path=${projectDirectories.config}")
             appendLine("-Didea.system.path=${projectDirectories.system}")
             appendLine("-Didea.log.path=${projectDirectories.logs}")
@@ -50,7 +50,7 @@ object VMOptionsGenerator {
 
         // Find the start of the override section
         for (i in lines.indices) {
-            if (lines[i].trim() == "# idea-juggler overrides (auto-generated)") {
+            if (lines[i].trim() == "# project-juggler overrides (auto-generated)") {
                 overrideStartIndex = i
                 break
             }
@@ -59,7 +59,7 @@ object VMOptionsGenerator {
         if (overrideStartIndex == -1) {
             // Override section doesn't exist, append it
             lines.add("")
-            lines.add("# idea-juggler overrides (auto-generated)")
+            lines.add("# project-juggler overrides (auto-generated)")
             lines.add("-Didea.config.path=${projectDirectories.config}")
             lines.add("-Didea.system.path=${projectDirectories.system}")
             lines.add("-Didea.log.path=${projectDirectories.logs}")
@@ -67,7 +67,7 @@ object VMOptionsGenerator {
         } else {
             // Update the override section
             val newOverrides = listOf(
-                "# idea-juggler overrides (auto-generated)",
+                "# project-juggler overrides (auto-generated)",
                 "-Didea.config.path=${projectDirectories.config}",
                 "-Didea.system.path=${projectDirectories.system}",
                 "-Didea.log.path=${projectDirectories.logs}",

@@ -30,7 +30,7 @@ class IntelliJLauncher(
         // 4. Find IntelliJ executable
         val intellijPath = getIntelliJPath()
             ?: throw IllegalStateException(
-                "IntelliJ IDEA not found. Please configure the path using: idea-juggler config --intellij-path <path>"
+                "IntelliJ IDEA not found. Please configure the path using: project-juggler config --intellij-path <path>"
             )
 
         // 5. Launch IntelliJ with custom VM options

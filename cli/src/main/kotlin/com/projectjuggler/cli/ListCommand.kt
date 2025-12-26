@@ -22,7 +22,7 @@ class ListCommand : Command(
 
         if (projects.isEmpty()) {
             echo("No projects tracked yet.")
-            echo("Use 'idea-juggler open <project-path>' to start tracking a project.")
+            echo("Use 'project-juggler open <project-path>' to start tracking a project.")
             return
         }
 
