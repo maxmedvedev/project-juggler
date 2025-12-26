@@ -2,21 +2,23 @@ package com.ideajuggler.cli
 
 import com.ideajuggler.cli.framework.*
 import com.ideajuggler.config.ConfigRepository
-import com.ideajuggler.core.ProjectIdGenerator
 import com.ideajuggler.core.ProjectLauncher
-import com.ideajuggler.core.ProjectManager
-import com.ideajuggler.util.PathUtils
-import java.nio.file.Path
-import kotlin.io.path.exists
 
 class SyncCommand : Command(
     name = "sync",
     help = "Synchronize project settings with base settings"
 ) {
-    private val projectIdentifierArg = StringArgument(
-        name = "project-id-or-path",
-        help = "Project ID or path"
-    ).also { arguments.add(it) }
+    private val projectIdOpt = StringOption(
+        shortName = "i",
+        longName = "id",
+        help = "Project ID"
+    ).also { options.add(it) }
+
+    private val projectPathOpt = PathOption(
+        shortName = "p",
+        longName = "path",
+        help = "Project path"
+    ).also { options.add(it) }
 
     private val vmOptionsFlag = FlagOption(
         shortName = null,
@@ -43,14 +45,17 @@ class SyncCommand : Command(
     ).also { options.add(it) }
 
     override fun run() {
-        val projectIdentifier = projectIdentifierArg.getValue()
+        val projectId = projectIdOpt.getValueOrNull()
+        val projectPath = projectPathOpt.getValueOrNull()
         val syncVmOptions = vmOptionsFlag.getValue()
         val syncConfig = configFlag.getValue()
         val syncPlugins = pluginsFlag.getValue()
         val syncAll = allFlag.getValue()
 
+        // Resolve project using helper method
+        val (resolvedProjectId, project) = resolveProject(projectId, projectPath)
+
         val configRepository = ConfigRepository.create()
-        val projectManager = ProjectManager.getInstance(configRepository)
         val projectLauncher = ProjectLauncher.getInstance(configRepository)
 
         // Determine what to sync
@@ -75,16 +80,6 @@ class SyncCommand : Command(
             true
         } else {
             syncAll || syncPlugins
-        }
-
-        // Resolve project ID
-        val projectId = resolveProjectId(projectIdentifier, projectManager)
-        val project = projectManager.get(projectId)
-
-        if (project == null) {
-            echo("Project not found: $projectIdentifier", err = true)
-            echo("Use 'idea-juggler list' to see tracked projects", err = true)
-            throw ExitException(1)
         }
 
         echo("Synchronizing project: ${project.name}")
@@ -122,7 +117,7 @@ class SyncCommand : Command(
             echo()
 
             projectLauncher.syncProject(
-                projectId,
+                resolvedProjectId,
                 shouldSyncVmOptions,
                 shouldSyncConfig,
                 shouldSyncPlugins
@@ -138,21 +133,5 @@ class SyncCommand : Command(
             echo("Error syncing project: ${e.message}", err = true)
             throw ExitException(1)
         }
-    }
-
-    private fun resolveProjectId(identifier: String, projectManager: ProjectManager): String {
-        // Try as ID first
-        if (projectManager.get(identifier) != null) {
-            return identifier
-        }
-
-        // Try as path
-        val path = PathUtils.expandTilde(Path.of(identifier))
-        if (path.exists()) {
-            return ProjectIdGenerator.generate(path)
-        }
-
-        // Return as-is, will fail with proper error later
-        return identifier
     }
 }

@@ -4,20 +4,22 @@ import com.ideajuggler.cli.framework.*
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.RecentProjectsIndex
 import com.ideajuggler.core.DirectoryManager
-import com.ideajuggler.core.ProjectIdGenerator
-import com.ideajuggler.core.ProjectManager
-import com.ideajuggler.util.PathUtils
-import java.nio.file.Path
-import kotlin.io.path.exists
 
 class CleanCommand : Command(
     name = "clean",
     help = "Clean up config folders for a project"
 ) {
-    private val projectIdentifierArg = StringArgument(
-        name = "project-id-or-path",
-        help = "Project ID or path"
-    ).also { arguments.add(it) }
+    private val projectIdOpt = StringOption(
+        shortName = "i",
+        longName = "id",
+        help = "Project ID"
+    ).also { options.add(it) }
+
+    private val projectPathOpt = PathOption(
+        shortName = "p",
+        longName = "path",
+        help = "Project path"
+    ).also { options.add(it) }
 
     private val forceOpt = FlagOption(
         shortName = "f",
@@ -26,19 +28,14 @@ class CleanCommand : Command(
     ).also { options.add(it) }
 
     override fun run() {
-        val projectIdentifier = projectIdentifierArg.getValue()
+        val projectId = projectIdOpt.getValueOrNull()
+        val projectPath = projectPathOpt.getValueOrNull()
         val force = forceOpt.getValue()
 
+        // Resolve project using helper method
+        val (resolvedProjectId, project) = resolveProject(projectId, projectPath)
+
         val configRepository = ConfigRepository.create()
-        val projectManager = ProjectManager.getInstance(configRepository)
-
-        val projectId = resolveProjectId(projectIdentifier, projectManager)
-        val project = projectManager.get(projectId)
-
-        if (project == null) {
-            echo("Project not found: $projectIdentifier", err = true)
-            throw ExitException(1)
-        }
 
         // Confirm deletion
         if (!force) {
@@ -55,23 +52,10 @@ class CleanCommand : Command(
         }
 
         // Clean project directories
-        DirectoryManager.getInstance(configRepository).cleanProject(projectId)
-        projectManager.remove(projectId)
-        RecentProjectsIndex.getInstance(configRepository).remove(projectId)
+        DirectoryManager.getInstance(configRepository).cleanProject(resolvedProjectId)
+        com.ideajuggler.core.ProjectManager.getInstance(configRepository).remove(resolvedProjectId)
+        RecentProjectsIndex.getInstance(configRepository).remove(resolvedProjectId)
 
         echo("Successfully cleaned project: ${project.name}")
-    }
-
-    private fun resolveProjectId(identifier: String, projectManager: ProjectManager): String {
-        if (projectManager.get(identifier) != null) {
-            return identifier
-        }
-
-        val path = PathUtils.expandTilde(Path.of(identifier))
-        if (path.exists()) {
-            return ProjectIdGenerator.generate(path)
-        }
-
-        return identifier
     }
 }

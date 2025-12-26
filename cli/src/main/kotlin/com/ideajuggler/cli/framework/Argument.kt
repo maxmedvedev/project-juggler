@@ -1,6 +1,5 @@
 package com.ideajuggler.cli.framework
 
-import com.ideajuggler.util.PathUtils
 import java.nio.file.Path
 
 sealed class ArgumentSpec<T>(
@@ -29,5 +28,5 @@ class PathArgument(
     name: String,
     help: String
 ) : ArgumentSpec<Path>(name, help) {
-    override fun parse(arg: String) = PathUtils.expandTilde(Path.of(arg))
+    override fun parse(arg: String): Path = Path.of(arg)
 }
