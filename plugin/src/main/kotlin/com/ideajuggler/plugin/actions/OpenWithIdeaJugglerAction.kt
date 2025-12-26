@@ -11,8 +11,6 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.progress.currentThreadCoroutineScope
-import kotlinx.coroutines.launch
 import kotlin.io.path.isDirectory
 
 internal class OpenWithIdeaJugglerAction : AnAction() {
