@@ -41,8 +41,8 @@ class ConfigRepository(val baseDir: Path) {
         save(updated)
     }
 
-    fun saveProjectMetadata(projectId: String, metadata: ProjectMetadata) {
-        val projectDir = projectsDir.resolve(projectId)
+    fun saveProjectMetadata(metadata: ProjectMetadata) {
+        val projectDir = projectsDir.resolve(metadata.id)
         val metadataFile = projectDir.resolve("metadata.json")
         Files.createDirectories(projectDir)
         withFileLock(metadataFile) {
@@ -50,7 +50,10 @@ class ConfigRepository(val baseDir: Path) {
         }
     }
 
-    fun loadProjectMetadata(projectId: String): ProjectMetadata? {
+    fun loadProjectMetadata(projectPath: ProjectPath): ProjectMetadata? =
+        loadProjectMetadata(projectPath.id)
+
+    fun loadProjectMetadata(projectId: ProjectId): ProjectMetadata? {
         val metadataFile = projectsDir.resolve(projectId).resolve("metadata.json")
         if (!metadataFile.exists()) return null
         return withFileLock(metadataFile) {
@@ -74,8 +77,8 @@ class ConfigRepository(val baseDir: Path) {
         }
     }
 
-    fun deleteProjectMetadata(projectId: String) {
-        val metadataFile = projectsDir.resolve(projectId).resolve("metadata.json")
+    fun deleteProjectMetadata(projectPath: ProjectPath) {
+        val metadataFile = projectsDir.resolve(projectPath.id).resolve("metadata.json")
         if (metadataFile.exists()) {
             Files.delete(metadataFile)
         }
@@ -96,6 +99,8 @@ class ConfigRepository(val baseDir: Path) {
             }
         }
     }
+
+    private fun Path.resolve(id: ProjectId) = resolve(id.id)
 
     companion object {
         fun getDefaultBaseDir(): Path {

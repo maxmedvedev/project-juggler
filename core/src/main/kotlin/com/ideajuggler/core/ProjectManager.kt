@@ -2,26 +2,27 @@ package com.ideajuggler.core
 
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.ProjectMetadata
+import com.ideajuggler.config.ProjectPath
+import com.ideajuggler.util.PathUtils
 import java.nio.file.Path
 import java.time.Instant
+import kotlin.io.path.exists
 
 class ProjectManager(
     private val configRepository: ConfigRepository,
 ) {
 
-    fun registerOrUpdate(projectId: String, projectPath: Path): ProjectMetadata {
-        val existing = configRepository.loadProjectMetadata(projectId)
+    fun registerOrUpdate(projectPath: ProjectPath): ProjectMetadata {
+        val existing = configRepository.loadProjectMetadata(projectPath)
 
         val metadata = ProjectMetadata(
-            id = projectId,
-            path = projectPath.toString(),
-            name = projectPath.fileName.toString(),
+            path = projectPath,
             lastOpened = Instant.now().toString(),
             openCount = (existing?.openCount ?: 0) + 1,
             debugPort = existing?.debugPort  // Preserve existing debug port
         )
 
-        configRepository.saveProjectMetadata(projectId, metadata)
+        configRepository.saveProjectMetadata(metadata)
         return metadata
     }
 
@@ -31,12 +32,10 @@ class ProjectManager(
      * If not, allocates a new port and updates the project metadata.
      * Returns null if all ports are exhausted.
      */
-    fun ensureDebugPort(projectId: String): Int? {
-        val existing = configRepository.loadProjectMetadata(projectId) ?: return null
-
+    fun ensureDebugPort(project: ProjectMetadata): Int? {
         // If already has a port, return it
-        if (existing.debugPort != null) {
-            return existing.debugPort
+        if (project.debugPort != null) {
+            return project.debugPort
         }
 
         // Otherwise, allocate a new port
@@ -44,8 +43,8 @@ class ProjectManager(
         val newPort = portAllocator.allocatePort() ?: return null
 
         // Update metadata with new port
-        val updated = existing.copy(debugPort = newPort)
-        configRepository.saveProjectMetadata(projectId, updated)
+        val updated = project.copy(debugPort = newPort)
+        configRepository.saveProjectMetadata(updated)
 
         return newPort
     }
@@ -54,17 +53,40 @@ class ProjectManager(
         return configRepository.loadAllProjects().sortedByDescending { it.lastOpened }
     }
 
-    fun remove(projectId: String) {
+    fun remove(projectId: ProjectPath) {
         configRepository.deleteProjectMetadata(projectId)
     }
 
-    fun get(projectId: String): ProjectMetadata? {
+    fun get(projectId: ProjectPath): ProjectMetadata? {
         return configRepository.loadProjectMetadata(projectId)
     }
 
-    fun findByPath(projectPath: Path): ProjectMetadata? {
-        val projectId = ProjectIdGenerator.generate(projectPath)
-        return configRepository.loadProjectMetadata(projectId)
+    /**
+     * Resolves a raw path string by expanding tildes and converting to Path.
+     * This is the centralized location for all path expansion logic.
+     *
+     * @param rawPath The raw path string (may contain tildes, relative paths)
+     * @return The resolved Path object with tilde expansion applied
+     */
+    fun resolvePath(rawPath: String): ProjectPath {
+        val path = Path.of(rawPath)
+        val resolved = PathUtils.expandTilde(path)
+
+        // Normalize to absolute canonical path for consistent ID generation
+        val normalized = resolved.toAbsolutePath().normalize()
+
+        return ProjectPath(normalized.toString())
+    }
+
+    /**
+     * Validates that a raw path string resolves to an existing filesystem path.
+     *
+     * @param rawPath The raw path string (may contain tildes, relative paths)
+     * @return true if the resolved path exists in the filesystem, false otherwise
+     */
+    fun validatePathExists(rawPath: String): Boolean {
+        val resolvedPath = resolvePath(rawPath)
+        return resolvedPath.path.exists()
     }
 
     companion object {

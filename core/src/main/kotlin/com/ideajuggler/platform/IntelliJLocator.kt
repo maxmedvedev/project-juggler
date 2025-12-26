@@ -1,5 +1,6 @@
 package com.ideajuggler.platform
 
+import com.ideajuggler.util.PathUtils
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -89,10 +90,14 @@ object IntelliJLocator {
     }
 
     private fun expandPath(path: String): String {
-        return path
-            .replace("~", System.getProperty("user.home"))
+        // Handle environment variable substitutions first
+        val envExpanded = path
             .replace("\${user.home}", System.getProperty("user.home"))
             .replace("\${LOCALAPPDATA}", System.getenv("LOCALAPPDATA") ?: "")
             .replace("\${ProgramFiles}", System.getenv("ProgramFiles") ?: "C:\\Program Files")
+
+        // Then handle tilde expansion using PathUtils
+        val pathObj = Paths.get(envExpanded)
+        return PathUtils.expandTilde(pathObj).toString()
     }
 }

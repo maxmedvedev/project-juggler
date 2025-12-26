@@ -1,7 +1,5 @@
 package com.ideajuggler.cli.framework
 
-import java.nio.file.Path
-
 sealed class OptionSpec<T>(
     val shortName: String?,
     val longName: String,
@@ -56,14 +54,6 @@ class IntOption(
 ) : OptionSpec<Int>(shortName, longName, help) {
     override fun parse(arg: String) = arg.toIntOrNull()
         ?: throw CliException("Invalid integer value for $longName: $arg")
-    override fun defaultValue() = default
-}
 
-class PathOption(
-    shortName: String?,
-    longName: String,
-    help: String
-) : OptionSpec<Path>(shortName, longName, help) {
-    override fun parse(arg: String): Path = Path.of(arg)
-    override fun defaultValue() = null
+    override fun defaultValue() = default
 }

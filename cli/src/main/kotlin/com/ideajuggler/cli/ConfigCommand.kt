@@ -5,32 +5,34 @@ import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.core.BaseVMOptionsTracker
 import com.ideajuggler.platform.ConfigLocator
 import com.ideajuggler.platform.PluginLocator
+import com.ideajuggler.util.PathUtils.expandTilde
 import java.nio.file.Paths
+import kotlin.io.path.Path
 import kotlin.io.path.exists
 
 class ConfigCommand : Command(
     name = "config",
     help = "Configure global settings"
 ) {
-    private val intellijPathOpt = PathOption(
+    private val intellijPathOpt = StringOption(
         shortName = null,
         longName = "intellij-path",
         help = "Path to IntelliJ executable"
     ).also { options.add(it) }
 
-    private val baseVmOptionsOpt = PathOption(
+    private val baseVmOptionsOpt = StringOption(
         shortName = null,
         longName = "base-vmoptions",
         help = "Path to base VM options file"
     ).also { options.add(it) }
 
-    private val basePluginsOpt = PathOption(
+    private val basePluginsOpt = StringOption(
         shortName = null,
         longName = "base-plugins",
         help = "Path to base IntelliJ plugins directory"
     ).also { options.add(it) }
 
-    private val baseConfigOpt = PathOption(
+    private val baseConfigOpt = StringOption(
         shortName = null,
         longName = "base-config",
         help = "Path to base IntelliJ config directory"
@@ -85,28 +87,28 @@ class ConfigCommand : Command(
     private fun updateConfig(configRepository: ConfigRepository) {
         // Validate paths before updating
         intellijPathOpt.getValueOrNull()?.let { path ->
-            if (!path.exists()) {
+            if (!expandTilde(Path(path)).exists()) {
                 echo("Error: IntelliJ path does not exist: $path", err = true)
                 throw ExitException(1)
             }
         }
 
         baseVmOptionsOpt.getValueOrNull()?.let { path ->
-            if (!path.exists()) {
+            if (!expandTilde(Path(path)).exists()) {
                 echo("Error: Base VM options file does not exist: $path", err = true)
                 throw ExitException(1)
             }
         }
 
         basePluginsOpt.getValueOrNull()?.let { path ->
-            if (!path.exists()) {
+            if (!expandTilde(Path(path)).exists()) {
                 echo("Error: Base plugins path does not exist: $path", err = true)
                 throw ExitException(1)
             }
         }
 
         baseConfigOpt.getValueOrNull()?.let { path ->
-            if (!path.exists()) {
+            if (!expandTilde(Path(path)).exists()) {
                 echo("Error: Base config path does not exist: $path", err = true)
                 throw ExitException(1)
             }
@@ -116,24 +118,24 @@ class ConfigCommand : Command(
             var updated = config
 
             intellijPathOpt.getValueOrNull()?.let { path ->
-                updated = updated.copy(intellijPath = path.toString())
+                updated = updated.copy(intellijPath = expandTilde(Path(path)).toString())
                 echo("IntelliJ path updated: $path")
             }
 
             baseVmOptionsOpt.getValueOrNull()?.let { path ->
-                updated = updated.copy(baseVmOptionsPath = path.toString())
+                updated = updated.copy(baseVmOptionsPath = expandTilde(Path(path)).toString())
                 echo("Base VM options path updated: $path")
                 BaseVMOptionsTracker.getInstance(configRepository).updateHash()
                 echo("Base VM options hash calculated and stored")
             }
 
             basePluginsOpt.getValueOrNull()?.let { path ->
-                updated = updated.copy(basePluginsPath = path.toString())
+                updated = updated.copy(basePluginsPath = expandTilde(Path(path)).toString())
                 echo("Base plugins path updated: $path")
             }
 
             baseConfigOpt.getValueOrNull()?.let { path ->
-                updated = updated.copy(baseConfigPath = path.toString())
+                updated = updated.copy(baseConfigPath = expandTilde(Path(path)).toString())
                 echo("Base config path updated: $path")
             }
 

@@ -1,6 +1,7 @@
 package com.ideajuggler.core
 
 import com.ideajuggler.config.ConfigRepository
+import com.ideajuggler.config.ProjectMetadata
 import com.ideajuggler.platform.IntelliJLocator
 import com.ideajuggler.platform.ProcessLauncher
 import java.nio.file.Path
@@ -13,15 +14,15 @@ class IntelliJLauncher(
     private val baseVMOptionsTracker: BaseVMOptionsTracker = BaseVMOptionsTracker.getInstance(configRepository)
     private val projectManager: ProjectManager = ProjectManager.getInstance(configRepository)
 
-    fun launch(projectId: String, projectPath: Path) {
+    fun launch(project: ProjectMetadata) {
         // 1. Ensure project directories exist
-        val projectDirs = directoryManager.ensureProjectDirectories(projectId)
+        val projectDirs = directoryManager.ensureProjectDirectories(project)
 
         // 2. Get base VM options path (if configured)
         val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
 
         // 3. Ensure debug port is allocated (if base VM options contains JDWP)
-        val debugPort = projectManager.ensureDebugPort(projectId)
+        val debugPort = projectManager.ensureDebugPort(project)
 
         // 4. Generate or update VM options file
         val vmOptionsFile = VMOptionsGenerator.generate(baseVmOptionsPath, projectDirs, debugPort)
@@ -34,10 +35,10 @@ class IntelliJLauncher(
 
         // 5. Launch IntelliJ with custom VM options
         val environment = mapOf("IDEA_VM_OPTIONS" to vmOptionsFile.toString())
-        ProcessLauncher.launch(intellijPath, listOf(projectPath.toString()), environment)
+        ProcessLauncher.launch(intellijPath, listOf(project.path.toString()), environment)
 
-        println("Launched IntelliJ IDEA for project: ${projectPath.fileName}")
-        println("Project ID: $projectId")
+        println("Launched IntelliJ IDEA for project: ${project.name}")
+        println("Project ID: ${project.id}")
         println("VM options file: $vmOptionsFile")
     }
 

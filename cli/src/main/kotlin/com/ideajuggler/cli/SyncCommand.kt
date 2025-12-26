@@ -8,13 +8,8 @@ class SyncCommand : Command(
     name = "sync",
     help = "Synchronize project settings with base settings"
 ) {
-    private val projectIdOpt = StringOption(
-        shortName = "i",
-        longName = "id",
-        help = "Project ID"
-    ).also { options.add(it) }
 
-    private val projectPathOpt = PathOption(
+    private val projectPath = StringOption(
         shortName = "p",
         longName = "path",
         help = "Project path"
@@ -45,15 +40,14 @@ class SyncCommand : Command(
     ).also { options.add(it) }
 
     override fun run() {
-        val projectId = projectIdOpt.getValueOrNull()
-        val projectPath = projectPathOpt.getValueOrNull()
+        val projectPath = projectPath.getValueOrNull()
         val syncVmOptions = vmOptionsFlag.getValue()
         val syncConfig = configFlag.getValue()
         val syncPlugins = pluginsFlag.getValue()
         val syncAll = allFlag.getValue()
 
         // Resolve project using helper method
-        val (resolvedProjectId, project) = resolveProject(projectId, projectPath)
+        val project = resolveProject(projectPath)
 
         val configRepository = ConfigRepository.create()
         val projectLauncher = ProjectLauncher.getInstance(configRepository)
@@ -117,7 +111,7 @@ class SyncCommand : Command(
             echo()
 
             projectLauncher.syncProject(
-                resolvedProjectId,
+                project,
                 shouldSyncVmOptions,
                 shouldSyncConfig,
                 shouldSyncPlugins

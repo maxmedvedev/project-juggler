@@ -1,8 +1,9 @@
 package com.ideajuggler.core
 
 import com.ideajuggler.config.ConfigRepository
+import com.ideajuggler.config.ProjectMetadata
+import com.ideajuggler.config.ProjectPath
 import com.ideajuggler.config.RecentProjectsIndex
-import java.nio.file.Path
 
 class ProjectLauncher(
     configRepository: ConfigRepository
@@ -18,8 +19,7 @@ class ProjectLauncher(
      */
     fun launch(
         messageOutput: MessageOutput,
-        projectPath: Path,
-        projectId: String = ProjectIdGenerator.generate(projectPath)
+        projectPath: ProjectPath,
     ) {
         // Check if base VM options changed
         if (baseVMOptionsTracker.hasChanged()) {
@@ -28,26 +28,26 @@ class ProjectLauncher(
         }
 
         // Register or update project metadata
-        projectManager.registerOrUpdate(projectId, projectPath)
+        val project = projectManager.registerOrUpdate(projectPath)
 
         // Record in recent projects
-        recentProjectsIndex.recordOpen(projectId)
+        recentProjectsIndex.recordOpen(projectPath)
 
         // Launch IntelliJ
-        intellijLauncher.launch(projectId, projectPath)
+        intellijLauncher.launch(project)
     }
 
     /**
      * Synchronize a project's settings with base settings (vmoptions, config, plugins)
      */
-    fun syncProject(projectId: String, syncVmOptions: Boolean, syncConfig: Boolean, syncPlugins: Boolean) {
-        val projectDirs = directoryManager.ensureProjectDirectories(projectId)
+    fun syncProject(project: ProjectMetadata, syncVmOptions: Boolean, syncConfig: Boolean, syncPlugins: Boolean) {
+        val projectDirs = directoryManager.ensureProjectDirectories(project)
 
         if (syncVmOptions) {
             val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
                 ?: throw IllegalStateException("Base VM options path not configured. Configure it using: idea-juggler config --base-vmoptions <path>")
 
-            val debugPort = projectManager.ensureDebugPort(projectId)
+            val debugPort = projectManager.ensureDebugPort(project)
             VMOptionsGenerator.generate(
                 baseVmOptionsPath,
                 projectDirs,
@@ -57,11 +57,11 @@ class ProjectLauncher(
         }
 
         if (syncConfig) {
-            directoryManager.syncConfigFromBase(projectId)
+            directoryManager.syncConfigFromBase(project)
         }
 
         if (syncPlugins) {
-            directoryManager.syncPluginsFromBase(projectId)
+            directoryManager.syncPluginsFromBase(project)
         }
     }
 

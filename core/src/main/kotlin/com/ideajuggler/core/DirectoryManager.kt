@@ -1,6 +1,8 @@
 package com.ideajuggler.core
 
 import com.ideajuggler.config.ConfigRepository
+import com.ideajuggler.config.ProjectId
+import com.ideajuggler.config.ProjectMetadata
 import com.ideajuggler.platform.ConfigLocator
 import com.ideajuggler.platform.PluginLocator
 import com.ideajuggler.util.DirectoryCopier
@@ -12,8 +14,8 @@ import kotlin.io.path.deleteRecursively
 
 class DirectoryManager(private val configRepository: ConfigRepository) {
 
-    fun ensureProjectDirectories(projectId: String): ProjectDirectories {
-        val root = getProjectRoot(projectId)
+    fun ensureProjectDirectories(project: ProjectMetadata): ProjectDirectories {
+        val root = getProjectRoot(project.id)
 
         val directories = ProjectDirectories(
             root = root,
@@ -87,35 +89,35 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
     /**
      * Force sync config from base location, overwriting existing config
      */
-    fun syncConfigFromBase(projectId: String) {
+    fun syncConfigFromBase(project: ProjectMetadata) {
         val baseConfigPath = getBaseConfigPath() ?: throw IllegalStateException(
             "Base config path not found. Either configure it using 'idea-juggler config --base-config <path>' or ensure IntelliJ is installed with default paths."
         )
-        val projectDirs = ensureProjectDirectories(projectId)
+        val projectDirs = ensureProjectDirectories(project)
         DirectoryCopier.copy(baseConfigPath, projectDirs.config)
     }
 
     /**
      * Force sync plugins from base location, overwriting existing plugins
      */
-    fun syncPluginsFromBase(projectId: String) {
+    fun syncPluginsFromBase(project: ProjectMetadata) {
         val basePluginsPath = getBasePluginsPath() ?: throw IllegalStateException(
             "Base plugins path not found. Either configure it using 'idea-juggler config --base-plugins <path>' or ensure IntelliJ is installed with default paths."
         )
-        val projectDirs = ensureProjectDirectories(projectId)
+        val projectDirs = ensureProjectDirectories(project)
         DirectoryCopier.copy(basePluginsPath, projectDirs.plugins)
     }
 
-    fun cleanProject(projectId: String) {
-        val projectRoot = getProjectRoot(projectId)
+    fun cleanProject(project: ProjectMetadata) {
+        val projectRoot = getProjectRoot(project.id)
         if (!Files.exists(projectRoot)) return
 
         @OptIn(ExperimentalPathApi::class)
         projectRoot.deleteRecursively()
     }
 
-    fun getProjectRoot(projectId: String): Path {
-        return configRepository.baseDir.resolve("projects").resolve(projectId)
+    fun getProjectRoot(projectId: ProjectId): Path {
+        return configRepository.baseDir.resolve("projects").resolve(projectId.id)
     }
 
     companion object {

@@ -1,6 +1,8 @@
 package com.ideajuggler.core
 
 import com.ideajuggler.config.ConfigRepository
+import com.ideajuggler.config.ProjectMetadata
+import com.ideajuggler.config.ProjectPath
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
@@ -14,9 +16,14 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
             Files.exists(dirs.root) shouldBe true
             Files.exists(dirs.config) shouldBe true
@@ -33,11 +40,16 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
-            dirs.root.toString() shouldBe tempDir.resolve("projects").resolve(projectId).toString()
+            dirs.root.toString() shouldBe tempDir.resolve("projects").resolve(project.id.id).toString()
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -48,9 +60,14 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
             dirs.config.toString() shouldBe dirs.root.resolve("config").toString()
             dirs.system.toString() shouldBe dirs.root.resolve("system").toString()
@@ -66,13 +83,18 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
             // Create first time
-            val dirs1 = manager.ensureProjectDirectories(projectId)
+            val dirs1 = manager.ensureProjectDirectories(project)
 
             // Create second time (should not fail)
-            val dirs2 = manager.ensureProjectDirectories(projectId)
+            val dirs2 = manager.ensureProjectDirectories(project)
 
             dirs1.root shouldBe dirs2.root
             Files.exists(dirs2.config) shouldBe true
@@ -89,10 +111,15 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
             // Create directories
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
             // Create some files
             Files.writeString(dirs.config.resolve("test.txt"), "test content")
@@ -102,7 +129,7 @@ class DirectoryManagerTest : StringSpec({
             Files.exists(dirs.root) shouldBe true
 
             // Clean
-            manager.cleanProject(projectId)
+            manager.cleanProject(project)
 
             // Verify directories are gone
             Files.exists(dirs.root) shouldBe false
@@ -118,9 +145,15 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
+            val projectPath = ProjectPath("/non/existent/project")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
             // Try to clean non-existent project (should not throw)
-            manager.cleanProject("non-existent-project")
+            manager.cleanProject(project)
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -132,11 +165,12 @@ class DirectoryManagerTest : StringSpec({
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
 
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val projectId = projectPath.id
 
             val root = manager.getProjectRoot(projectId)
 
-            root.toString() shouldBe tempDir.resolve("projects").resolve(projectId).toString()
+            root.toString() shouldBe tempDir.resolve("projects").resolve(projectId.id).toString()
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -148,9 +182,14 @@ class DirectoryManagerTest : StringSpec({
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
 
-            val projectId = "test-project-@#$-123"
+            val projectPath = ProjectPath("/test/project/@#$/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
             Files.exists(dirs.root) shouldBe true
             Files.exists(dirs.config) shouldBe true
@@ -168,9 +207,14 @@ class DirectoryManagerTest : StringSpec({
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
 
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
             Files.exists(tempDir) shouldBe true
             Files.exists(tempDir.resolve("projects")) shouldBe true
@@ -187,15 +231,20 @@ class DirectoryManagerTest : StringSpec({
         try {
             val configRepository = ConfigRepository(tempDir)
             val manager = DirectoryManager.getInstance(configRepository)
-            val projectId = "test-project-123"
+            val projectPath = ProjectPath("/test/project/path")
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-12-25T10:00:00Z",
+                openCount = 1
+            )
 
-            val dirs = manager.ensureProjectDirectories(projectId)
+            val dirs = manager.ensureProjectDirectories(project)
 
             // Verify plugins directory exists (even if no plugins copied)
             Files.exists(dirs.plugins) shouldBe true
 
             // Second call should not fail
-            val dirs2 = manager.ensureProjectDirectories(projectId)
+            val dirs2 = manager.ensureProjectDirectories(project)
             Files.exists(dirs2.plugins) shouldBe true
         } finally {
             tempDir.toFile().deleteRecursively()

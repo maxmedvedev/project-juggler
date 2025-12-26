@@ -16,9 +16,11 @@ class RecentProjectsIndex(private val configRepository: ConfigRepository) {
     }
 
     @Serializable
-    data class RecentEntry(val projectId: String, val timestamp: String)
+    data class RecentEntry(val projectId: ProjectId, val timestamp: String)
 
-    fun recordOpen(projectId: String) {
+    fun recordOpen(projectPath: ProjectPath) {
+        val projectId = projectPath.id
+
         val entries = loadEntries().toMutableList()
         entries.removeIf { it.projectId == projectId }
         entries.add(0, RecentEntry(projectId, java.time.Instant.now().toString()))
@@ -49,7 +51,7 @@ class RecentProjectsIndex(private val configRepository: ConfigRepository) {
         recentFile.writeText(json.encodeToString(entries))
     }
 
-    fun remove(projectId: String) {
+    fun remove(projectId: ProjectId) {
         val entries = loadEntries().filter { it.projectId != projectId }
         saveEntries(entries)
     }

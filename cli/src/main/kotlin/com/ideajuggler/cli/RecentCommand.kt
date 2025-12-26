@@ -1,11 +1,12 @@
 package com.ideajuggler.cli
 
-import com.ideajuggler.cli.framework.*
+import com.ideajuggler.cli.framework.Command
+import com.ideajuggler.cli.framework.ExitException
+import com.ideajuggler.cli.framework.IntOption
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.RecentProjectsIndex
 import com.ideajuggler.core.ProjectLauncher
 import com.ideajuggler.util.TimeUtils
-import java.nio.file.Paths
 
 class RecentCommand : Command(
     name = "recent",
@@ -55,11 +56,11 @@ class RecentCommand : Command(
         }
 
         val selectedProject = recentProjects[selectedIndex]
-        val projectPath = Paths.get(selectedProject.path)
+        val projectPath = selectedProject.path
 
         echo("Opening ${selectedProject.name}...")
 
         val launcher = ProjectLauncher.getInstance(configRepository)
-        launcher.launch(SimpleMessageOutput(), projectPath, selectedProject.id)
+        launcher.launch(SimpleMessageOutput(), projectPath)
     }
 }

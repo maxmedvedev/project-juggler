@@ -2,8 +2,8 @@ package com.ideajuggler.plugin.actions
 
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.core.MessageOutput
-import com.ideajuggler.core.ProjectIdGenerator
 import com.ideajuggler.core.ProjectLauncher
+import com.ideajuggler.core.ProjectManager
 import com.ideajuggler.plugin.IdeaJugglerBundle
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -11,10 +11,9 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.project.Project
-import java.nio.file.Paths
 import kotlin.io.path.isDirectory
 
 internal class OpenWithIdeaJugglerAction : AnAction() {
@@ -38,8 +37,9 @@ internal class OpenWithIdeaJugglerAction : AnAction() {
             ?: return // User cancelled the dialog
 
 
-        val projectPath = Paths.get(selectedFile.path)
-        if (!projectPath.isDirectory()) {
+        val configRepository = ConfigRepository.create()
+        val projectPath = ProjectManager.getInstance(configRepository).resolvePath(selectedFile.path)
+        if (!projectPath.path.isDirectory()) {
             showErrorNotification(
                 project,
                 IdeaJugglerBundle.message("notification.error.not.directory", selectedFile.path)
@@ -50,9 +50,7 @@ internal class OpenWithIdeaJugglerAction : AnAction() {
         // Launch asynchronously in background thread
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val configRepository = ConfigRepository.create()
                 val launcher = ProjectLauncher.getInstance(configRepository)
-                val projectId = ProjectIdGenerator.generate(projectPath)
 
                 // Silent message output for plugin context
                 val messageOutput = object : MessageOutput {
@@ -62,7 +60,7 @@ internal class OpenWithIdeaJugglerAction : AnAction() {
                     }
                 }
 
-                launcher.launch(messageOutput, projectPath, projectId)
+                launcher.launch(messageOutput, projectPath)
 
                 showInfoNotification(
                     project,

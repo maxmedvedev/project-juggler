@@ -67,16 +67,15 @@ class ConfigRepositoryTest : StringSpec({
         try {
             val repository = ConfigRepository(tempDir)
 
+            val projectPath = ProjectPath("/path/to/project")
             val metadata = ProjectMetadata(
-                id = "project123",
-                path = "/path/to/project",
-                name = "My Project",
+                path = projectPath,
                 lastOpened = "2025-12-25T10:00:00Z",
                 openCount = 5
             )
 
-            repository.saveProjectMetadata("project123", metadata)
-            val loaded = repository.loadProjectMetadata("project123")
+            repository.saveProjectMetadata(metadata)
+            val loaded = repository.loadProjectMetadata(projectPath)
 
             loaded shouldBe metadata
         } finally {
@@ -88,7 +87,7 @@ class ConfigRepositoryTest : StringSpec({
         val tempDir = createTempDirectory("test-config")
         try {
             val repository = ConfigRepository(tempDir)
-            val loaded = repository.loadProjectMetadata("non-existent")
+            val loaded = repository.loadProjectMetadata(ProjectPath("/non-existent"))
 
             loaded shouldBe null
         } finally {
@@ -101,24 +100,22 @@ class ConfigRepositoryTest : StringSpec({
         try {
             val repository = ConfigRepository(tempDir)
 
+            val projectPath1 = ProjectPath("/path/to/project1")
             val metadata1 = ProjectMetadata(
-                id = "project1",
-                path = "/path/to/project1",
-                name = "Project 1",
+                path = projectPath1,
                 lastOpened = "2025-12-25T10:00:00Z",
                 openCount = 1
             )
 
+            val projectPath2 = ProjectPath("/path/to/project2")
             val metadata2 = ProjectMetadata(
-                id = "project2",
-                path = "/path/to/project2",
-                name = "Project 2",
+                path = projectPath2,
                 lastOpened = "2025-12-25T11:00:00Z",
                 openCount = 2
             )
 
-            repository.saveProjectMetadata("project1", metadata1)
-            repository.saveProjectMetadata("project2", metadata2)
+            repository.saveProjectMetadata(metadata1)
+            repository.saveProjectMetadata(metadata2)
 
             val projects = repository.loadAllProjects()
 
@@ -147,24 +144,23 @@ class ConfigRepositoryTest : StringSpec({
         try {
             val repository = ConfigRepository(tempDir)
 
+            val projectPath = ProjectPath("/path/to/project")
             val metadata = ProjectMetadata(
-                id = "project123",
-                path = "/path/to/project",
-                name = "My Project",
+                path = projectPath,
                 lastOpened = "2025-12-25T10:00:00Z",
                 openCount = 5
             )
 
-            repository.saveProjectMetadata("project123", metadata)
+            repository.saveProjectMetadata(metadata)
 
             // Verify it exists
-            repository.loadProjectMetadata("project123") shouldNotBe null
+            repository.loadProjectMetadata(projectPath.id) shouldNotBe null
 
             // Delete it
-            repository.deleteProjectMetadata("project123")
+            repository.deleteProjectMetadata(projectPath)
 
             // Verify it's gone
-            repository.loadProjectMetadata("project123") shouldBe null
+            repository.loadProjectMetadata(projectPath.id) shouldBe null
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -175,8 +171,9 @@ class ConfigRepositoryTest : StringSpec({
         try {
             val repository = ConfigRepository(tempDir)
 
+            val projectPath = ProjectPath("/non/existent")
             // Should not throw
-            repository.deleteProjectMetadata("non-existent")
+            repository.deleteProjectMetadata(projectPath)
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -208,14 +205,13 @@ class ConfigRepositoryTest : StringSpec({
             val repository = ConfigRepository(tempDir)
 
             // Create valid project
+            val projectPath = ProjectPath("/path/to/valid")
             val validMetadata = ProjectMetadata(
-                id = "valid-project",
-                path = "/path/to/valid",
-                name = "Valid Project",
+                path = projectPath,
                 lastOpened = "2025-12-25T10:00:00Z",
                 openCount = 1
             )
-            repository.saveProjectMetadata("valid-project", validMetadata)
+            repository.saveProjectMetadata(validMetadata)
 
             // Create corrupted project metadata by writing invalid JSON
             val corruptedProjectDir = tempDir.resolve("projects").resolve("corrupted-project")

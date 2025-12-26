@@ -2,6 +2,7 @@ package com.ideajuggler
 
 import com.ideajuggler.config.ConfigRepository
 import com.ideajuggler.config.GlobalConfig
+import com.ideajuggler.config.ProjectPath
 import com.ideajuggler.config.RecentProjectsIndex
 import com.ideajuggler.core.*
 import io.kotest.core.spec.style.StringSpec
@@ -45,12 +46,14 @@ class IntegrationTest : StringSpec({
             config.baseVmOptionsHash shouldNotBe null
 
             // Step 2: Open a project (simulate)
-            val projectId = ProjectIdGenerator.generate(projectDir)
-            projectManager.registerOrUpdate(projectId, projectDir)
+            val projectPath = ProjectPath(projectDir.toString())
+            var project = projectManager.registerOrUpdate(projectPath)
 
-            val projectDirs = directoryManager.ensureProjectDirectories(projectId)
+            val projectDirs = directoryManager.ensureProjectDirectories(project)
             // Allocate debug port
-            val debugPort = projectManager.ensureDebugPort(projectId)
+            val debugPort = projectManager.ensureDebugPort(project)
+            // Reload project after debug port allocation updates metadata
+            project = projectManager.get(projectPath)!!
             VMOptionsGenerator.generate(
                 baseVMOptionsTracker.getBaseVmOptionsPath(),
                 ProjectDirectories(
@@ -63,7 +66,7 @@ class IntegrationTest : StringSpec({
                 debugPort
             )
 
-            recentProjectsIndex.recordOpen(projectId)
+            recentProjectsIndex.recordOpen(projectPath)
 
             // Verify project directories created
             projectDirs.config.exists() shouldBe true
@@ -84,9 +87,9 @@ class IntegrationTest : StringSpec({
             val projects = projectManager.listAll()
             projects shouldHaveSize 1
 
-            val project = projects[0]
-            project.id shouldBe projectId
-            project.path shouldBe projectDir.toString()
+            val listedProject = projects[0]
+            listedProject.id shouldBe project.id
+            listedProject.path shouldBe projectPath
 
             // Step 4: Verify recent projects
             val recentProjects = recentProjectsIndex.getRecent(10)
@@ -94,9 +97,9 @@ class IntegrationTest : StringSpec({
             recentProjects shouldContain project
 
             // Step 5: Clean project
-            directoryManager.cleanProject(projectId)
-            projectManager.remove(projectId)
-            recentProjectsIndex.remove(projectId)
+            directoryManager.cleanProject(project)
+            projectManager.remove(projectPath)
+            recentProjectsIndex.remove(project.id)
 
             // Verify cleanup
             projectDirs.root.exists() shouldBe false
@@ -128,18 +131,18 @@ class IntegrationTest : StringSpec({
             configRepository.save(GlobalConfig(baseVmOptionsPath = baseVmOptions.toString()))
             baseVMOptionsTracker.updateHash()
 
-            val projectId1 = ProjectIdGenerator.generate(projectDir1)
-            val projectId2 = ProjectIdGenerator.generate(projectDir2)
+            val projectPath1 = ProjectPath(projectDir1.toString())
+            val projectPath2 = ProjectPath(projectDir2.toString())
 
-            projectManager.registerOrUpdate(projectId1, projectDir1)
-            projectManager.registerOrUpdate(projectId2, projectDir2)
+            val project1 = projectManager.registerOrUpdate(projectPath1)
+            val project2 = projectManager.registerOrUpdate(projectPath2)
 
-            val dirs1 = directoryManager.ensureProjectDirectories(projectId1)
-            val dirs2 = directoryManager.ensureProjectDirectories(projectId2)
+            val dirs1 = directoryManager.ensureProjectDirectories(project1)
+            val dirs2 = directoryManager.ensureProjectDirectories(project2)
 
             // Allocate debug ports
-            val debugPort1 = projectManager.ensureDebugPort(projectId1)
-            val debugPort2 = projectManager.ensureDebugPort(projectId2)
+            val debugPort1 = projectManager.ensureDebugPort(project1)
+            val debugPort2 = projectManager.ensureDebugPort(project2)
 
             VMOptionsGenerator.generate(
                 baseVmOptions, ProjectDirectories(
@@ -166,9 +169,9 @@ class IntegrationTest : StringSpec({
             // Regenerate all projects
             val projects = projectManager.listAll()
             projects.forEach { project ->
-                val projectDirs = directoryManager.ensureProjectDirectories(project.id)
+                val projectDirs = directoryManager.ensureProjectDirectories(project)
                 // Allocate debug port
-                val debugPort = projectManager.ensureDebugPort(project.id)
+                val debugPort = projectManager.ensureDebugPort(project)
                 VMOptionsGenerator.generate(
                     baseVmOptions,
                     ProjectDirectories(
@@ -217,37 +220,37 @@ class IntegrationTest : StringSpec({
             val directoryManager = DirectoryManager.getInstance(configRepository)
 
             // Create three projects
-            val id1 = ProjectIdGenerator.generate(projectDir1)
-            val id2 = ProjectIdGenerator.generate(projectDir2)
-            val id3 = ProjectIdGenerator.generate(projectDir3)
+            val projectPath1 = ProjectPath(projectDir1.toString())
+            val projectPath2 = ProjectPath(projectDir2.toString())
+            val projectPath3 = ProjectPath(projectDir3.toString())
 
-            projectManager.registerOrUpdate(id1, projectDir1)
-            projectManager.registerOrUpdate(id2, projectDir2)
-            projectManager.registerOrUpdate(id3, projectDir3)
+            val project1 = projectManager.registerOrUpdate(projectPath1)
+            val project2 = projectManager.registerOrUpdate(projectPath2)
+            val project3 = projectManager.registerOrUpdate(projectPath3)
 
-            directoryManager.ensureProjectDirectories(id1)
-            directoryManager.ensureProjectDirectories(id2)
-            directoryManager.ensureProjectDirectories(id3)
+            directoryManager.ensureProjectDirectories(project1)
+            directoryManager.ensureProjectDirectories(project2)
+            directoryManager.ensureProjectDirectories(project3)
 
             // Verify all projects exist
             projectManager.listAll() shouldHaveSize 3
 
             // Clean one project
-            directoryManager.cleanProject(id2)
-            projectManager.remove(id2)
+            directoryManager.cleanProject(project2)
+            projectManager.remove(projectPath2)
 
             // Verify only that project was removed
             val remainingProjects = projectManager.listAll()
             remainingProjects shouldHaveSize 2
 
             val remainingIds = remainingProjects.map { it.id }
-            remainingIds shouldContain id1
-            remainingIds shouldContain id3
+            remainingIds shouldContain project1.id
+            remainingIds shouldContain project3.id
 
             // Verify directories
-            directoryManager.getProjectRoot(id1).exists() shouldBe true
-            directoryManager.getProjectRoot(id2).exists() shouldBe false
-            directoryManager.getProjectRoot(id3).exists() shouldBe true
+            directoryManager.getProjectRoot(project1.id).exists() shouldBe true
+            directoryManager.getProjectRoot(project2.id).exists() shouldBe false
+            directoryManager.getProjectRoot(project3.id).exists() shouldBe true
 
         } finally {
             baseDir.toFile().deleteRecursively()
