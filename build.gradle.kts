@@ -5,7 +5,6 @@ plugins {
 }
 
 group = "com.ideajuggler"
-version = "0.0.3"
 
 subprojects {
     group = rootProject.group
