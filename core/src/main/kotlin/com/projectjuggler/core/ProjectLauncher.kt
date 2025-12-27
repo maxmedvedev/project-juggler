@@ -6,7 +6,7 @@ import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 
 class ProjectLauncher(
-    configRepository: ConfigRepository
+    private val configRepository: ConfigRepository
 ) {
     private val projectManager = ProjectManager.getInstance(configRepository)
     private val directoryManager = DirectoryManager.getInstance(configRepository)
@@ -15,13 +15,34 @@ class ProjectLauncher(
     private val recentProjectsIndex = RecentProjectsIndex.getInstance(configRepository)
 
     /**
+     * Checks if the given project path is the configured main project.
+     */
+    private fun isMainProject(projectPath: ProjectPath): Boolean {
+        val config = configRepository.load()
+        val mainProjectPath = config.mainProjectPath ?: return false
+
+        // Resolve main project path to normalized form
+        val normalizedMainPath = projectManager.resolvePath(mainProjectPath)
+
+        // Compare normalized path strings
+        return projectPath.pathString == normalizedMainPath.pathString
+    }
+
+    /**
      * Launch a project by ID and path (for when ID is already known)
      */
     fun launch(
         messageOutput: MessageOutput,
         projectPath: ProjectPath,
     ) {
-        // Check if base VM options changed
+        // Check if this is the main project
+        if (isMainProject(projectPath)) {
+            messageOutput.echo("Opening main project: ${projectPath.name}")
+            intellijLauncher.launchMain(projectPath.path)
+            return
+        }
+
+        // For isolated projects: check if base VM options changed
         if (baseVMOptionsTracker.hasChanged()) {
             messageOutput.echo("Note: Base VM options have changed. Use 'project-juggler sync <project>' to update project settings.")
             baseVMOptionsTracker.updateHash()
@@ -33,7 +54,7 @@ class ProjectLauncher(
         // Record in recent projects
         recentProjectsIndex.recordOpen(projectPath)
 
-        // Launch IntelliJ
+        // Launch IntelliJ with isolated configuration
         intellijLauncher.launch(project)
     }
 
