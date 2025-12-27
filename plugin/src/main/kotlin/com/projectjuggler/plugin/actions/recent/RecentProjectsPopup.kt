@@ -67,7 +67,11 @@ internal class RecentProjectsPopup(
                 popup.showInFocusCenter()
             }
         } catch (ex: Exception) {
-            showNotification("Failed to load recent projects: ${ex.message}", project, NotificationType.ERROR)
+            showNotification(
+                ProjectJugglerBundle.message("notification.error.recent.projects.load.failed", ex.message ?: ""),
+                project,
+                NotificationType.ERROR
+            )
             ex.printStackTrace()
         }
     }
@@ -126,14 +130,16 @@ private class RecentProjectPopupStep(
     }
 
     private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<String> {
-        val actions = listOf("Open Project", "Sync All Settings")
+        val openProjectAction = ProjectJugglerBundle.message("popup.recent.projects.action.open.project")
+        val syncSettingsAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.settings")
+        val actions = listOf(openProjectAction, syncSettingsAction)
         return object : BaseListPopupStep<String>(null, actions) {
             override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? {
                 if (!finalChoice) return FINAL_CHOICE
 
                 when (selectedValue) {
-                    "Open Project" -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
-                    "Sync All Settings" -> syncProjectSettings(item.projectPath)
+                    openProjectAction -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
+                    syncSettingsAction -> syncProjectSettings(item.projectPath)
                 }
                 return FINAL_CHOICE
             }
@@ -151,7 +157,10 @@ private class RecentProjectPopupStep(
     }
 
     private fun syncAllProjects() {
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Syncing settings for all projects...") {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(
+            project,
+            ProjectJugglerBundle.message("progress.sync.all.projects")
+        ) {
             override fun run(p0: ProgressIndicator) {
                 try {
                     val allProjects = configRepository.loadAllProjects()
@@ -164,12 +173,16 @@ private class RecentProjectPopupStep(
                         )
                     }
                     showNotification(
-                        "Synced ${allProjects.size} projects successfully",
+                        ProjectJugglerBundle.message("notification.success.sync.all.projects", allProjects.size),
                         project,
                         NotificationType.INFORMATION
                     )
                 } catch (e: Exception) {
-                    showNotification("Failed to sync projects: ${e.message}", project, NotificationType.ERROR)
+                    showNotification(
+                        ProjectJugglerBundle.message("notification.error.sync.projects.failed", e.message ?: ""),
+                        project,
+                        NotificationType.ERROR
+                    )
                 }
             }
         })
@@ -197,14 +210,25 @@ private class RecentProjectPopupStep(
     }
 
     private fun syncProjectSettings(projectPath: ProjectPath) {
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Syncing settings for ${projectPath.name}...") {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(
+            project,
+            ProjectJugglerBundle.message("progress.sync.project.settings", projectPath.name)
+        ) {
             override fun run(p0: ProgressIndicator) {
                 val metadata = ProjectManager.getInstance(configRepository).get(projectPath) ?: return
                 try {
                     ProjectLauncher(configRepository).syncProject(metadata, true, true, true)
-                    showNotification("Settings synced successfully for ${metadata.path.name}", project, NotificationType.INFORMATION)
+                    showNotification(
+                        ProjectJugglerBundle.message("notification.success.sync.project.settings", metadata.path.name),
+                        project,
+                        NotificationType.INFORMATION
+                    )
                 } catch (e: Exception) {
-                    showNotification("Failed to sync settings: ${e.message}", project, NotificationType.ERROR)
+                    showNotification(
+                        ProjectJugglerBundle.message("notification.error.sync.settings.failed", e.message ?: ""),
+                        project,
+                        NotificationType.ERROR
+                    )
                 }
             }
         })
@@ -216,7 +240,7 @@ private class RecentProjectPopupStep(
     override fun getTextFor(value: PopupListItem): String = when (value) {
         is RecentProjectItem -> formatDisplayText(value.projectPath, value.gitBranch)
         is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.label")
-        is SyncAllProjectsItem -> "Sync all projects"
+        is SyncAllProjectsItem -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
     }
 
     private fun formatDisplayText(projectPath: ProjectPath, gitBranch: String?): String {
@@ -241,8 +265,8 @@ private class RecentProjectPopupStep(
     override fun getIndexedString(value: PopupListItem): String {
         return when (value) {
             is RecentProjectItem -> buildProjectSearchString(value.projectPath, value.gitBranch)
-            is OpenFileChooserItem -> "Browse"
-            is SyncAllProjectsItem -> "Sync all projects"
+            is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.search")
+            is SyncAllProjectsItem -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
         }
     }
 
