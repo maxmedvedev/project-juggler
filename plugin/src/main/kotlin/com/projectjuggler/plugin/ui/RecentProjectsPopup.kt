@@ -8,6 +8,8 @@ import com.projectjuggler.plugin.ProjectLauncherHelper
 import com.projectjuggler.plugin.model.OpenFileChooserItem
 import com.projectjuggler.plugin.model.PopupListItem
 import com.projectjuggler.plugin.model.RecentProjectItem
+import com.projectjuggler.plugin.model.SyncAllProjectsItem
+import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.util.GitUtils
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -16,12 +18,12 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.popup.PopupChooserBuilder
-import com.intellij.ui.components.JBList
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.PopupStep
+import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.intellij.util.concurrency.annotations.RequiresEdt
 import java.nio.file.Files
-import javax.swing.DefaultListModel
 import kotlin.io.path.isDirectory
 
 internal class RecentProjectsPopup(
@@ -36,46 +38,63 @@ internal class RecentProjectsPopup(
 
     @RequiresEdt
     private fun createAndShowItems(items: List<RecentProjectItem>) {
-        // Create a JBList with custom renderer
-        val listModel = DefaultListModel<PopupListItem>()
-        items.forEach { listModel.addElement(it) }
+        // Create popup using JBPopupFactory with submenu support
+        val itemsList = mutableListOf<PopupListItem>()
+        itemsList.addAll(items)
+        itemsList.add(OpenFileChooserItem)
+        itemsList.add(SyncAllProjectsItem)
 
-        // Add the "Browse..." item at the end
-        listModel.addElement(OpenFileChooserItem)
+        val popup = JBPopupFactory.getInstance().createListPopup(
+            createPopupStep(itemsList)
+        )
+        popup.showInFocusCenter()
+    }
 
-        val list = JBList(listModel)
-        list.cellRenderer = PopupListItemRenderer()
-
-        // Create popup using PopupChooserBuilder
-        val popup = PopupChooserBuilder(list)
-            .setTitle(ProjectJugglerBundle.message("popup.recent.projects.title"))
-            .setItemChosenCallback(Runnable {
-                list.selectedValue?.let { handleItemSelection(it) }
-            })
-            .setFilterAlwaysVisible(true)
-            .setNamerForFiltering { item ->
-                when (item) {
-                    is RecentProjectItem -> {
-                        // Return searchable text: project name, branch, and path
-                        buildString {
-                            append(item.metadata.name)
-                            append(" ")
-                            item.gitBranch?.let {
-                                append(it)
-                                append(" ")
-                            }
-                            append(item.metadata.path.pathString)
-                        }
-                    }
-                    is OpenFileChooserItem -> {
-                        // Always visible by making it searchable
-                        "Browse"
-                    }
+    private fun createPopupStep(items: List<PopupListItem>): BaseListPopupStep<PopupListItem> {
+        return object : BaseListPopupStep<PopupListItem>(
+            ProjectJugglerBundle.message("popup.recent.projects.title"),
+            items
+        ) {
+            override fun onChosen(selectedValue: PopupListItem, finalChoice: Boolean): PopupStep<*>? {
+                if (finalChoice) {
+                    handleItemSelection(selectedValue)
+                    return FINAL_CHOICE
+                }
+                return when (selectedValue) {
+                    is RecentProjectItem -> createProjectSubmenu(selectedValue)
+                    else -> FINAL_CHOICE
                 }
             }
-            .createPopup()
 
-        popup.showInFocusCenter()
+            override fun hasSubstep(selectedValue: PopupListItem): Boolean {
+                return selectedValue is RecentProjectItem
+            }
+
+            override fun getTextFor(value: PopupListItem): String {
+                return when (value) {
+                    is RecentProjectItem -> value.displayText
+                    is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.label")
+                    is SyncAllProjectsItem -> "Sync all projects"
+                }
+            }
+        }
+    }
+
+    private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<String> {
+        val actions = listOf("Open Project", "Sync All Settings")
+        return object : BaseListPopupStep<String>(null, actions) {
+            override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? {
+                if (!finalChoice) return FINAL_CHOICE
+
+                when (selectedValue) {
+                    "Open Project" -> launchProject(item)
+                    "Sync All Settings" -> syncProjectSettings(item.metadata)
+                }
+                return FINAL_CHOICE
+            }
+
+            override fun getTextFor(value: String): String = value
+        }
     }
 
     @RequiresBackgroundThread
@@ -134,6 +153,7 @@ internal class RecentProjectsPopup(
         when (item) {
             is RecentProjectItem -> launchProject(item)
             is OpenFileChooserItem -> showFileChooserAndLaunch()
+            is SyncAllProjectsItem -> syncAllProjects()
         }
     }
 
@@ -165,10 +185,60 @@ internal class RecentProjectsPopup(
         )
     }
 
-    private fun showNotification(message: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("project-juggler.notifications")
-            .createNotification(message, NotificationType.ERROR)
-            .notify(project)
+    private fun syncProjectSettings(metadata: ProjectMetadata) {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                ProjectLauncher(configRepository).syncProject(
+                    metadata,
+                    syncVmOptions = true,
+                    syncConfig = true,
+                    syncPlugins = true
+                )
+
+                showNotification(
+                    "Settings synced successfully for ${metadata.path.name}",
+                    NotificationType.INFORMATION
+                )
+            } catch (e: Exception) {
+                showNotification(
+                    "Failed to sync settings: ${e.message}",
+                    NotificationType.ERROR
+                )
+            }
+        }
+    }
+
+    private fun syncAllProjects() {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val allProjects = configRepository.loadAllProjects()
+                allProjects.forEach { projectMetadata ->
+                    ProjectLauncher(configRepository).syncProject(
+                        projectMetadata,
+                        syncVmOptions = true,
+                        syncConfig = true,
+                        syncPlugins = true
+                    )
+                }
+                showNotification(
+                    "Synced ${allProjects.size} projects successfully",
+                    NotificationType.INFORMATION
+                )
+            } catch (e: Exception) {
+                showNotification(
+                    "Failed to sync projects: ${e.message}",
+                    NotificationType.ERROR
+                )
+            }
+        }
+    }
+
+    private fun showNotification(message: String, type: NotificationType = NotificationType.ERROR) {
+        ApplicationManager.getApplication().invokeLater {
+            NotificationGroupManager.getInstance()
+                .getNotificationGroup("project-juggler.notifications")
+                .createNotification(message, type)
+                .notify(project)
+        }
     }
 }

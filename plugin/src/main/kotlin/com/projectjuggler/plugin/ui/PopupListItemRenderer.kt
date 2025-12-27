@@ -4,6 +4,7 @@ import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.model.OpenFileChooserItem
 import com.projectjuggler.plugin.model.PopupListItem
 import com.projectjuggler.plugin.model.RecentProjectItem
+import com.projectjuggler.plugin.model.SyncAllProjectsItem
 import com.intellij.icons.AllIcons
 import com.intellij.ide.RecentProjectsManager
 import com.intellij.ide.RecentProjectsManagerBase
@@ -33,6 +34,7 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         return when (value) {
             is RecentProjectItem -> renderRecentProject(value, isSelected, cellHasFocus)
             is OpenFileChooserItem -> renderOpenFileChooser(isSelected, cellHasFocus)
+            is SyncAllProjectsItem -> renderSyncAllProjects(isSelected, cellHasFocus)
         }
     }
 
@@ -129,6 +131,49 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         // Label text
         val textComponent = SimpleColoredComponent()
         val label = ProjectJugglerBundle.message("popup.open.file.chooser.label")
+        if (isSelected) {
+            textComponent.append(label, SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, UIUtil.getListSelectionForeground(cellHasFocus)))
+        } else {
+            textComponent.append(label, SimpleTextAttributes.REGULAR_ATTRIBUTES)
+        }
+        textComponent.isOpaque = false
+        panel.add(textComponent, BorderLayout.CENTER)
+
+        // Handle selection colors
+        if (isSelected) {
+            panel.background = UIUtil.getListSelectionBackground(cellHasFocus)
+            panel.foreground = UIUtil.getListSelectionForeground(cellHasFocus)
+        } else {
+            panel.background = UIUtil.getListBackground()
+            panel.foreground = UIUtil.getListForeground()
+        }
+
+        return panel
+    }
+
+    private fun renderSyncAllProjects(
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        val panel = JPanel(BorderLayout())
+        panel.accessibleContext.accessibleName = "Sync all projects"
+
+        // Add top separator border
+        panel.border = JBUI.Borders.merge(
+            JBUI.Borders.customLine(JBUI.CurrentTheme.Popup.separatorColor(), 1, 0, 0, 0),
+            JBUI.Borders.empty(6, 6, 4, 6),
+            true
+        )
+
+        // Refresh/sync icon
+        val iconLabel = JLabel(AllIcons.Actions.ForceRefresh)
+        iconLabel.verticalAlignment = SwingConstants.CENTER
+        iconLabel.border = JBUI.Borders.empty(0, 0, 0, 8)
+        panel.add(iconLabel, BorderLayout.WEST)
+
+        // Label text
+        val textComponent = SimpleColoredComponent()
+        val label = "Sync all projects"
         if (isSelected) {
             textComponent.append(label, SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, UIUtil.getListSelectionForeground(cellHasFocus)))
         } else {

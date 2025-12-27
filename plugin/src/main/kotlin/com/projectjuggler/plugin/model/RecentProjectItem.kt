@@ -11,3 +11,5 @@ data class RecentProjectItem(
 ) : PopupListItem()
 
 object OpenFileChooserItem : PopupListItem()
+
+object SyncAllProjectsItem : PopupListItem()
