@@ -1,21 +1,21 @@
 package com.projectjuggler.plugin.actions
 
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
+import com.intellij.util.application
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.core.MessageOutput
 import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.util.GitWorktreeManager
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileChooser.FileChooser
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
@@ -96,7 +96,7 @@ internal class OpenProjectCopyAction : AnAction() {
         )
 
         // Perform worktree creation and launch in background thread
-        ApplicationManager.getApplication().executeOnPooledThread {
+        application.executeOnPooledThread {
             try {
                 // Create git worktree (no progress messages in plugin context)
                 GitWorktreeManager.createWorktree(

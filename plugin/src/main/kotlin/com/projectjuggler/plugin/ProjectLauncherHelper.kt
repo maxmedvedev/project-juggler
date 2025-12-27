@@ -8,6 +8,7 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.util.application
 
 internal object ProjectLauncherHelper {
     /**
@@ -22,7 +23,7 @@ internal object ProjectLauncherHelper {
         configRepository: ConfigRepository,
         projectPath: ProjectPath,
     ) {
-        ApplicationManager.getApplication().executeOnPooledThread {
+        application.executeOnPooledThread {
             try {
                 val launcher = ProjectLauncher.getInstance(configRepository)
 
@@ -36,15 +37,9 @@ internal object ProjectLauncherHelper {
 
                 launcher.launch(messageOutput, projectPath)
 
-                showInfoNotification(
-                    project,
-                    ProjectJugglerBundle.message("notification.success.launched", projectPath.name)
-                )
+                showInfoNotification(project, ProjectJugglerBundle.message("notification.success.launched", projectPath.name))
             } catch (ex: Exception) {
-                showErrorNotification(
-                    project,
-                    ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error")
-                )
+                showErrorNotification(project, ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error"))
                 ex.printStackTrace()
             }
         }

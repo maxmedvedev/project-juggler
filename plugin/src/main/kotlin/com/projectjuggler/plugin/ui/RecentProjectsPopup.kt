@@ -1,112 +1,48 @@
 package com.projectjuggler.plugin.ui
 
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.popup.PopupStep
+import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.intellij.ui.popup.list.ListPopupImpl
+import com.intellij.ui.popup.list.PopupListElementRenderer
+import com.intellij.util.application
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.RecentProjectsIndex
+import com.projectjuggler.core.ProjectLauncher
+import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.ProjectLauncherHelper
 import com.projectjuggler.plugin.model.OpenFileChooserItem
 import com.projectjuggler.plugin.model.PopupListItem
 import com.projectjuggler.plugin.model.RecentProjectItem
 import com.projectjuggler.plugin.model.SyncAllProjectsItem
-import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.util.GitUtils
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
-import com.projectjuggler.core.ProjectManager
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileChooser.FileChooser
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.openapi.ui.popup.PopupStep
-import com.intellij.openapi.ui.popup.util.BaseListPopupStep
-import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
-import com.intellij.util.concurrency.annotations.RequiresEdt
-import java.nio.file.Files
+import java.awt.Component
+import java.nio.file.Files.exists
+import javax.swing.JList
 import kotlin.io.path.isDirectory
 
 internal class RecentProjectsPopup(
     private val project: Project?,
 ) {
-    val configRepository = ConfigRepository.create()
-
     @RequiresBackgroundThread
     fun show() {
-        computeDataOnBGT()
-    }
-
-    @RequiresEdt
-    private fun createAndShowItems(items: List<RecentProjectItem>) {
-        // Create popup using JBPopupFactory with submenu support
-        val itemsList = mutableListOf<PopupListItem>()
-        itemsList.addAll(items)
-        itemsList.add(OpenFileChooserItem)
-        itemsList.add(SyncAllProjectsItem)
-
-        val popup = JBPopupFactory.getInstance().createListPopup(
-            createPopupStep(itemsList)
-        )
-        popup.showInFocusCenter()
-    }
-
-    private fun createPopupStep(items: List<PopupListItem>): BaseListPopupStep<PopupListItem> {
-        return object : BaseListPopupStep<PopupListItem>(
-            ProjectJugglerBundle.message("popup.recent.projects.title"),
-            items
-        ) {
-            override fun onChosen(selectedValue: PopupListItem, finalChoice: Boolean): PopupStep<*>? {
-                if (finalChoice) {
-                    handleItemSelection(selectedValue)
-                    return FINAL_CHOICE
-                }
-                return when (selectedValue) {
-                    is RecentProjectItem -> createProjectSubmenu(selectedValue)
-                    else -> FINAL_CHOICE
-                }
-            }
-
-            override fun hasSubstep(selectedValue: PopupListItem): Boolean {
-                return selectedValue is RecentProjectItem
-            }
-
-            override fun getTextFor(value: PopupListItem): String {
-                return when (value) {
-                    is RecentProjectItem -> value.displayText
-                    is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.label")
-                    is SyncAllProjectsItem -> "Sync all projects"
-                }
-            }
-        }
-    }
-
-    private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<String> {
-        val actions = listOf("Open Project", "Sync All Settings")
-        return object : BaseListPopupStep<String>(null, actions) {
-            override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? {
-                if (!finalChoice) return FINAL_CHOICE
-
-                when (selectedValue) {
-                    "Open Project" -> launchProject(item)
-                    "Sync All Settings" -> syncProjectSettings(item.metadata)
-                }
-                return FINAL_CHOICE
-            }
-
-            override fun getTextFor(value: String): String = value
-        }
-    }
-
-    @RequiresBackgroundThread
-    private fun computeDataOnBGT() {
         try {
+            val configRepository = ConfigRepository.create()
+
             // Load recent projects
             val recentIndex = RecentProjectsIndex.getInstance(configRepository)
             val recentMetadata = recentIndex.getRecent(20)
 
             // Filter out non-existent paths (deleted projects)
             val validProjects = recentMetadata.filter { metadata ->
-                Files.exists(metadata.path.path)
+                exists(metadata.path.path)
             }
 
             // Create items with git branch info (even if empty, we'll still show the "Browse..." item)
@@ -114,14 +50,20 @@ internal class RecentProjectsPopup(
                 createRecentProjectItem(metadata)
             }
 
+            // Create popup using ListPopupImpl with custom renderer and submenu support
+            val itemsList = mutableListOf<PopupListItem>()
+            itemsList.addAll(items)
+            itemsList.add(OpenFileChooserItem)
+            itemsList.add(SyncAllProjectsItem)
+
             // Show popup on EDT
-            ApplicationManager.getApplication().invokeLater {
-                createAndShowItems(items)
+            application.invokeLater {
+                val popupStep = RecentProjectPopupStep(items, project, configRepository)
+                val popup = RecentProjectPopup(popupStep, project)
+                popup.showInFocusCenter()
             }
         } catch (ex: Exception) {
-            ApplicationManager.getApplication().invokeLater {
-                showNotification("Failed to load recent projects: ${ex.message}")
-            }
+            showNotification("Failed to load recent projects: ${ex.message}", project, NotificationType.ERROR)
             ex.printStackTrace()
         }
     }
@@ -148,68 +90,74 @@ internal class RecentProjectsPopup(
             append(path)
         }
     }
+}
+
+@Suppress("jol")
+private class RecentProjectPopup(popupStep: BaseListPopupStep<PopupListItem>, project: Project?) : ListPopupImpl(project, popupStep) {
+    override fun getListElementRenderer(): PopupListElementRenderer<*> {
+        @Suppress("UNCHECKED_CAST")
+        return ProjectItemRenderer(this) as PopupListElementRenderer<*>
+    }
+}
+
+private class ProjectItemRenderer(popup: ListPopupImpl) : PopupListElementRenderer<PopupListItem>(popup) {
+    private val customRenderer = PopupListItemRenderer()
+
+    override fun getListCellRendererComponent(
+        list: JList<out PopupListItem>,
+        value: PopupListItem?,
+        index: Int,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component = customRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+}
+
+private class RecentProjectPopupStep(
+    items: List<PopupListItem>,
+    val project: Project?,
+    val configRepository: ConfigRepository
+) : BaseListPopupStep<PopupListItem>(
+    ProjectJugglerBundle.message("popup.recent.projects.title"),
+    items
+) {
+    override fun onChosen(selectedValue: PopupListItem, finalChoice: Boolean): PopupStep<*>? {
+        if (finalChoice) {
+            handleItemSelection(selectedValue)
+            return FINAL_CHOICE
+        }
+        return when (selectedValue) {
+            is RecentProjectItem -> createProjectSubmenu(selectedValue)
+            else -> FINAL_CHOICE
+        }
+    }
+
+    private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<String> {
+        val actions = listOf("Open Project", "Sync All Settings")
+        return object : BaseListPopupStep<String>(null, actions) {
+            override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? {
+                if (!finalChoice) return FINAL_CHOICE
+
+                when (selectedValue) {
+                    "Open Project" -> launchProject(item, project, configRepository)
+                    "Sync All Settings" -> syncProjectSettings(item.metadata)
+                }
+                return FINAL_CHOICE
+            }
+
+            override fun getTextFor(value: String): String = value
+        }
+    }
 
     private fun handleItemSelection(item: PopupListItem) {
         when (item) {
-            is RecentProjectItem -> launchProject(item)
+            is RecentProjectItem -> launchProject(item, project, configRepository)
             is OpenFileChooserItem -> showFileChooserAndLaunch()
             is SyncAllProjectsItem -> syncAllProjects()
         }
     }
 
-    private fun showFileChooserAndLaunch() {
-        // Show directory chooser dialog
-        val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor().apply {
-            title = ProjectJugglerBundle.message("file.chooser.title")
-            description = ProjectJugglerBundle.message("file.chooser.description")
-        }
-
-        val selectedFile = FileChooser.chooseFile(descriptor, project, null)
-            ?: return // User cancelled the dialog
-
-        val projectPath = ProjectManager.getInstance(configRepository).resolvePath(selectedFile.path)
-        if (!projectPath.path.isDirectory()) {
-            showNotification(ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path))
-            return
-        }
-
-        // Launch project using shared helper
-        ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
-    }
-
-    private fun launchProject(item: RecentProjectItem) {
-        ProjectLauncherHelper.launchProject(
-            project,
-            configRepository,
-            item.metadata.path,
-        )
-    }
-
-    private fun syncProjectSettings(metadata: ProjectMetadata) {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                ProjectLauncher(configRepository).syncProject(
-                    metadata,
-                    syncVmOptions = true,
-                    syncConfig = true,
-                    syncPlugins = true
-                )
-
-                showNotification(
-                    "Settings synced successfully for ${metadata.path.name}",
-                    NotificationType.INFORMATION
-                )
-            } catch (e: Exception) {
-                showNotification(
-                    "Failed to sync settings: ${e.message}",
-                    NotificationType.ERROR
-                )
-            }
-        }
-    }
-
     private fun syncAllProjects() {
-        ApplicationManager.getApplication().executeOnPooledThread {
+        application.executeOnPooledThread {
             try {
                 val allProjects = configRepository.loadAllProjects()
                 allProjects.forEach { projectMetadata ->
@@ -220,25 +168,82 @@ internal class RecentProjectsPopup(
                         syncPlugins = true
                     )
                 }
-                showNotification(
-                    "Synced ${allProjects.size} projects successfully",
-                    NotificationType.INFORMATION
-                )
+                showNotification("Synced ${allProjects.size} projects successfully", project, NotificationType.INFORMATION)
             } catch (e: Exception) {
-                showNotification(
-                    "Failed to sync projects: ${e.message}",
-                    NotificationType.ERROR
-                )
+                showNotification("Failed to sync projects: ${e.message}", project, NotificationType.ERROR)
             }
         }
     }
 
-    private fun showNotification(message: String, type: NotificationType = NotificationType.ERROR) {
-        ApplicationManager.getApplication().invokeLater {
-            NotificationGroupManager.getInstance()
-                .getNotificationGroup("project-juggler.notifications")
-                .createNotification(message, type)
-                .notify(project)
+    private fun showFileChooserAndLaunch() {
+        val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor().apply {
+            title = ProjectJugglerBundle.message("file.chooser.title")
+            description = ProjectJugglerBundle.message("file.chooser.description")
+        }
+
+        val selectedFile = FileChooser.chooseFile(descriptor, project, null) ?: return
+
+        val projectPath = ProjectManager.getInstance(configRepository).resolvePath(selectedFile.path)
+        if (!projectPath.path.isDirectory()) {
+            showNotification(ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path), project, NotificationType.ERROR)
+            return
+        }
+
+        ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
+    }
+
+    private fun syncProjectSettings(metadata: ProjectMetadata) {
+        application.executeOnPooledThread {
+            try {
+                ProjectLauncher(configRepository).syncProject(metadata, syncVmOptions = true, syncConfig = true, syncPlugins = true)
+                showNotification("Settings synced successfully for ${metadata.path.name}", project, NotificationType.INFORMATION)
+            } catch (e: Exception) {
+                showNotification("Failed to sync settings: ${e.message}", project, NotificationType.ERROR)
+            }
         }
     }
+
+    override fun hasSubstep(selectedValue: PopupListItem): Boolean = selectedValue is RecentProjectItem
+
+    override fun getTextFor(value: PopupListItem): String = when (value) {
+        is RecentProjectItem -> value.displayText
+        is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.label")
+        is SyncAllProjectsItem -> "Sync all projects"
+    }
+
+    override fun isSpeedSearchEnabled(): Boolean = true
+
+    override fun getIndexedString(value: PopupListItem): String {
+        return when (value) {
+            is RecentProjectItem -> {
+                // Return searchable text: project name, branch, and path
+                buildString {
+                    append(value.metadata.name)
+                    append(" ")
+                    value.gitBranch?.let {
+                        append(it)
+                        append(" ")
+                    }
+                    append(value.metadata.path.pathString)
+                }
+            }
+            is OpenFileChooserItem -> "Browse"
+            is SyncAllProjectsItem -> "Sync all projects"
+        }
+    }
+}
+
+private fun launchProject(item: RecentProjectItem, project: Project?, configRepository: ConfigRepository) {
+    ProjectLauncherHelper.launchProject(
+        project,
+        configRepository,
+        item.metadata.path,
+    )
+}
+
+private fun showNotification(message: String, project: Project?, type: NotificationType) {
+    NotificationGroupManager.getInstance()
+        .getNotificationGroup("project-juggler.notifications")
+        .createNotification(message, type)
+        .notify(project)
 }
