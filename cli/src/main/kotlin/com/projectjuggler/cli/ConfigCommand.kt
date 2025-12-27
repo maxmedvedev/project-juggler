@@ -6,6 +6,7 @@ import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.platform.ConfigLocator
 import com.projectjuggler.platform.PluginLocator
 import com.projectjuggler.util.PathUtils.expandTilde
+import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.io.path.Path
 import kotlin.io.path.exists
@@ -38,6 +39,12 @@ class ConfigCommand : Command(
         help = "Path to base IntelliJ config directory"
     ).also { options.add(it) }
 
+    private val mainProjectOpt = StringOption(
+        shortName = null,
+        longName = "main-project",
+        help = "Path to main project (for quick access via 'project-juggler main')"
+    ).also { options.add(it) }
+
     private val showOpt = FlagOption(
         shortName = null,
         longName = "show",
@@ -51,7 +58,8 @@ class ConfigCommand : Command(
         val hasAnyOption = intellijPathOpt.getValueOrNull() != null ||
                            baseVmOptionsOpt.getValueOrNull() != null ||
                            basePluginsOpt.getValueOrNull() != null ||
-                           baseConfigOpt.getValueOrNull() != null
+                           baseConfigOpt.getValueOrNull() != null ||
+                           mainProjectOpt.getValueOrNull() != null
 
         when {
             show -> showConfig(configRepository)
@@ -79,6 +87,7 @@ class ConfigCommand : Command(
         echo("  Base VM options:     ${config.baseVmOptionsPath ?: "(not set)"}")
         echo("  Base config:         $configPathDisplay")
         echo("  Base plugins:        $pluginsPathDisplay")
+        echo("  Main project:        ${config.mainProjectPath ?: "(not set)"}")
         echo("  Max recent projects: ${config.maxRecentProjects}")
         echo()
         echo("Configuration file: ${Paths.get(System.getProperty("user.home"), ".project-juggler", "config.json")}")
@@ -114,6 +123,18 @@ class ConfigCommand : Command(
             }
         }
 
+        mainProjectOpt.getValueOrNull()?.let { path ->
+            val expandedPath = expandTilde(Path(path))
+            if (!expandedPath.exists()) {
+                echo("Error: Main project path does not exist: $path", err = true)
+                throw ExitException(1)
+            }
+            if (!Files.isDirectory(expandedPath)) {
+                echo("Error: Main project path is not a directory: $path", err = true)
+                throw ExitException(1)
+            }
+        }
+
         configRepository.update { config ->
             var updated = config
 
@@ -137,6 +158,11 @@ class ConfigCommand : Command(
             baseConfigOpt.getValueOrNull()?.let { path ->
                 updated = updated.copy(baseConfigPath = expandTilde(Path(path)).toString())
                 echo("Base config path updated: $path")
+            }
+
+            mainProjectOpt.getValueOrNull()?.let { path ->
+                updated = updated.copy(mainProjectPath = expandTilde(Path(path)).toString())
+                echo("Main project path updated: $path")
             }
 
             updated

@@ -42,6 +42,37 @@ class IntelliJLauncher(
         println("VM options file: $vmOptionsFile")
     }
 
+    fun launchMain(projectPath: Path) {
+        // Get IntelliJ executable path
+        val intellijPath = getIntelliJPath()
+            ?: throw IllegalStateException(
+                "IntelliJ IDEA not found. Please configure the path using: project-juggler config --intellij-path <path>"
+            )
+
+        // Get base VM options path (if configured)
+        val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
+
+        // Build environment - include IDEA_VM_OPTIONS if base vmoptions is configured
+        val environment = if (baseVmOptionsPath != null) {
+            mapOf("IDEA_VM_OPTIONS" to baseVmOptionsPath.toString())
+        } else {
+            emptyMap()
+        }
+
+        // Launch IntelliJ with the project path
+        ProcessLauncher.launch(intellijPath, listOf(projectPath.toString()), environment)
+
+        // Get project name for display
+        val projectName = projectPath.fileName.toString()
+
+        // Print status message
+        if (baseVmOptionsPath != null) {
+            println("Launched main project: $projectName (using base vmoptions)")
+        } else {
+            println("Launched main project: $projectName")
+        }
+    }
+
     private fun getIntelliJPath(): Path? {
         // First, check if path is configured
         val config = configRepository.load()

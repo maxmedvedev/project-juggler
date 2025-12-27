@@ -10,6 +10,7 @@ fun main(args: Array<String>) {
         commands = listOf(
             OpenCommand(),
             OpenCopyCommand(),
+            MainCommand(),
             ListCommand(),
             CleanCommand(),
             ConfigCommand(),

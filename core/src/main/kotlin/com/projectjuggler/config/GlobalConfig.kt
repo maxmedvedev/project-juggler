@@ -10,6 +10,7 @@ data class GlobalConfig(
     val maxRecentProjects: Int = 10,
     val basePluginsPath: String? = null,
     val baseConfigPath: String? = null,
+    val mainProjectPath: String? = null,
 ) {
     companion object {
         fun default() = GlobalConfig()
