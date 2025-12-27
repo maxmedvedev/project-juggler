@@ -181,7 +181,7 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         )
 
         // Refresh/sync icon
-        val iconLabel = JLabel(AllIcons.Actions.ForceRefresh)
+        val iconLabel = JLabel(AllIcons.Actions.Refresh)
         iconLabel.verticalAlignment = SwingConstants.CENTER
         iconLabel.border = JBUI.Borders.empty(0, 0, 0, 8)
         panel.add(iconLabel, BorderLayout.WEST)
