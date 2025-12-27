@@ -4,13 +4,12 @@ import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.ProjectLauncherHelper
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.projectjuggler.plugin.showErrorNotification
 import kotlin.io.path.isDirectory
 
 internal class OpenWithProjectJugglerAction : AnAction() {
@@ -25,20 +24,12 @@ internal class OpenWithProjectJugglerAction : AnAction() {
             description = ProjectJugglerBundle.message("file.chooser.description")
         }
 
-        val selectedFile = FileChooser.chooseFile(descriptor, project, null)
-            ?: return // User cancelled the dialog
-
+        val selectedFile = FileChooser.chooseFile(descriptor, project, null) ?: return
 
         val configRepository = ConfigRepository.create()
         val projectPath = ProjectManager.getInstance(configRepository).resolvePath(selectedFile.path)
         if (!projectPath.path.isDirectory()) {
-            NotificationGroupManager.getInstance()
-                .getNotificationGroup("project-juggler.notifications")
-                .createNotification(
-                    ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path),
-                    NotificationType.ERROR
-                )
-                .notify(project)
+            showErrorNotification(ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path), project)
             return
         }
 

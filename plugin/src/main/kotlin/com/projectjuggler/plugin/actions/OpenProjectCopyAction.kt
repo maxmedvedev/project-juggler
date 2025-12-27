@@ -1,13 +1,10 @@
 package com.projectjuggler.plugin.actions
 
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.application
 import com.projectjuggler.config.ConfigRepository
@@ -15,6 +12,8 @@ import com.projectjuggler.core.MessageOutput
 import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.showErrorNotification
+import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.util.GitWorktreeManager
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
@@ -64,36 +63,24 @@ internal class OpenProjectCopyAction : AnAction() {
 
         // Validate source is a directory
         if (!sourcePath.path.isDirectory()) {
-            showErrorNotification(
-                project,
-                ProjectJugglerBundle.message("notification.error.not.directory", sourceFile.path)
-            )
+            showErrorNotification(ProjectJugglerBundle.message("notification.error.not.directory", sourceFile.path), project)
             return
         }
 
         // Validate source is a git repository
         if (!GitWorktreeManager.isGitRepository(sourcePath.path)) {
-            showErrorNotification(
-                project,
-                ProjectJugglerBundle.message("notification.error.not.git.repository", sourceFile.path)
-            )
+            showErrorNotification(ProjectJugglerBundle.message("notification.error.not.git.repository", sourceFile.path), project)
             return
         }
 
         // Validate destination doesn't exist
         if (destPath.path.exists()) {
-            showErrorNotification(
-                project,
-                ProjectJugglerBundle.message("notification.error.destination.exists", destFile.path)
-            )
+            showErrorNotification(ProjectJugglerBundle.message("notification.error.destination.exists", destFile.path), project)
             return
         }
 
         // Show info notification that worktree creation is starting
-        showInfoNotification(
-            project,
-            ProjectJugglerBundle.message("notification.info.worktree.started", sourceFile.name)
-        )
+        showInfoNotification(ProjectJugglerBundle.message("notification.info.worktree.started", sourceFile.name), project)
 
         // Perform worktree creation and launch in background thread
         application.executeOnPooledThread {
@@ -115,47 +102,18 @@ internal class OpenProjectCopyAction : AnAction() {
                 }
                 launcher.launch(messageOutput, destPath)
 
-                showInfoNotification(
-                    project,
-                    ProjectJugglerBundle.message(
+                showInfoNotification(ProjectJugglerBundle.message(
                         "notification.success.worktree.launched",
                         destFile.name,
                         branchName
-                    )
-                )
+                    ), project)
             } catch (ex: IllegalArgumentException) {
-                showErrorNotification(
-                    project,
-                    ProjectJugglerBundle.message(
-                        "notification.error.worktree.failed",
-                        ex.message ?: "Unknown error"
-                    )
-                )
+                showErrorNotification(ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error"), project)
                 ex.printStackTrace()
             } catch (ex: Exception) {
-                showErrorNotification(
-                    project,
-                    ProjectJugglerBundle.message(
-                        "notification.error.worktree.failed",
-                        ex.message ?: "Unknown error"
-                    )
-                )
+                showErrorNotification(ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error"), project)
                 ex.printStackTrace()
             }
         }
-    }
-
-    private fun showInfoNotification(project: Project?, message: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("project-juggler.notifications")
-            .createNotification(message, NotificationType.INFORMATION)
-            .notify(project)
-    }
-
-    private fun showErrorNotification(project: Project?, message: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("project-juggler.notifications")
-            .createNotification(message, NotificationType.ERROR)
-            .notify(project)
     }
 }

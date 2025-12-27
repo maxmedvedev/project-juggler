@@ -1,6 +1,5 @@
 package com.projectjuggler.plugin.actions.recent
 
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
@@ -18,6 +17,7 @@ import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.ProjectLauncherHelper
+import com.projectjuggler.plugin.showNotification
 import com.projectjuggler.util.GitUtils
 import java.awt.Component
 import java.nio.file.Files.exists
@@ -235,11 +235,4 @@ private fun launchProject(item: RecentProjectItem, project: Project?, configRepo
         configRepository,
         item.metadata.path,
     )
-}
-
-private fun showNotification(message: String, project: Project?, type: NotificationType) {
-    NotificationGroupManager.getInstance()
-        .getNotificationGroup("project-juggler.notifications")
-        .createNotification(message, type)
-        .notify(project)
 }

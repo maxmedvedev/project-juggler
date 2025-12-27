@@ -4,9 +4,6 @@ import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.MessageOutput
 import com.projectjuggler.core.ProjectLauncher
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.util.application
 
@@ -37,25 +34,11 @@ internal object ProjectLauncherHelper {
 
                 launcher.launch(messageOutput, projectPath)
 
-                showInfoNotification(project, ProjectJugglerBundle.message("notification.success.launched", projectPath.name))
+                showInfoNotification(ProjectJugglerBundle.message("notification.success.launched", projectPath.name), project)
             } catch (ex: Exception) {
-                showErrorNotification(project, ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error"))
+                showErrorNotification(ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error"), project)
                 ex.printStackTrace()
             }
         }
-    }
-
-    private fun showInfoNotification(project: Project?, message: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("project-juggler.notifications")
-            .createNotification(message, NotificationType.INFORMATION)
-            .notify(project)
-    }
-
-    private fun showErrorNotification(project: Project?, message: String) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("project-juggler.notifications")
-            .createNotification(message, NotificationType.ERROR)
-            .notify(project)
     }
 }
