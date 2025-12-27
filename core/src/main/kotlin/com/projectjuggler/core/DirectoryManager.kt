@@ -31,10 +31,10 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
         Files.createDirectories(directories.logs)
         Files.createDirectories(directories.plugins)
 
-        // Copy base config on first open (BEFORE plugins)
+        // Copy base config on first open (plugins subdirectory is excluded)
         copyBaseConfigIfNeeded(directories.config)
 
-        // Copy base plugins on first open (AFTER config, will overwrite plugins subdir)
+        // Copy base plugins to separate plugins directory on first open
         copyBasePluginsIfNeeded(directories.plugins)
 
         return directories
@@ -68,7 +68,13 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
      */
     private fun copyBaseConfigIfNeeded(configDir: Path) {
         val baseConfigPath = getBaseConfigPath() ?: return
-        DirectoryCopier.copyIfFirstOpen(baseConfigPath, configDir)
+        DirectoryCopier.copyIfFirstOpen(
+            baseConfigPath,
+            configDir,
+            EXCLUDED_DIRECTORIES,
+            EXCLUDED_FILES,
+            EXCLUDED_PATTERNS,
+        )
     }
 
     /**
@@ -87,7 +93,8 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
     }
 
     /**
-     * Force sync config from base location, overwriting existing config
+     * Force sync config from base location, overwriting existing config.
+     * Note: plugins subdirectory is excluded (plugins are stored separately).
      */
     fun syncConfigFromBase(project: ProjectMetadata) {
         val baseConfigPath = getBaseConfigPath() ?: throw IllegalStateException(
@@ -124,3 +131,22 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
         fun getInstance(configRepository: ConfigRepository) = DirectoryManager(configRepository)
     }
 }
+
+// Files to exclude when copying IntelliJ config directories
+private val EXCLUDED_FILES = setOf(
+    ".lock",                           // Running instance lock
+    "recentProjects.xml",              // Legacy recent projects
+    "recentProjectDirectories.xml",    // Legacy recent directories
+)
+
+
+// Path patterns to exclude (relative to source, normalized with forward slashes)
+private val EXCLUDED_PATTERNS = setOf(
+    "options/recentProjects.xml",      // Modern recent projects location
+)
+
+// Directory names to exclude (plugins are stored separately in project-juggler)
+private val EXCLUDED_DIRECTORIES = setOf(
+    "plugins"
+)
+

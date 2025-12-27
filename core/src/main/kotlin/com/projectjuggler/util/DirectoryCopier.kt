@@ -8,18 +8,6 @@ import kotlin.io.path.isDirectory
 
 object DirectoryCopier {
 
-    // Files to exclude when copying IntelliJ config directories
-    private val EXCLUDED_FILES = setOf(
-        ".lock",                           // Running instance lock
-        "recentProjects.xml",              // Legacy recent projects
-        "recentProjectDirectories.xml",    // Legacy recent directories
-    )
-
-    // Path patterns to exclude (relative to source, normalized with forward slashes)
-    private val EXCLUDED_PATTERNS = setOf(
-        "options/recentProjects.xml",      // Modern recent projects location
-    )
-
     /**
      * Copy directory contents from source to destination.
      * Only copies if destination is empty (first open detection).
@@ -29,7 +17,13 @@ object DirectoryCopier {
      * @param destination Destination directory
      * @return true if directory was copied, false if skipped
      */
-    fun copyIfFirstOpen(source: Path, destination: Path): Boolean {
+    fun copyIfFirstOpen(
+        source: Path,
+        destination: Path,
+        excludedDirectories: Set<String> = emptySet(),
+        excludedFiles: Set<String> = emptySet(),
+        excludedPatterns: Set<String> = emptySet(),
+    ): Boolean {
         // Check if source exists and is readable
         if (!source.exists() || !source.isDirectory()) {
             return false // Silently skip
@@ -41,7 +35,7 @@ object DirectoryCopier {
         }
 
         try {
-            copyDirectoryRecursively(source, destination)
+            copyDirectoryRecursively(source, destination, excludedDirectories, excludedFiles, excludedPatterns)
             return true
         } catch (e: Exception) {
             // Silently fail - don't break project opening
@@ -85,12 +79,23 @@ object DirectoryCopier {
     /**
      * Recursively copy directory contents.
      */
-    private fun copyDirectoryRecursively(source: Path, destination: Path) {
+    private fun copyDirectoryRecursively(source: Path,
+                                         destination: Path,
+                                         excludedDirectories: Set<String> = emptySet(),
+                                         excludedFiles: Set<String> = emptySet(),
+                                         excludedPatterns: Set<String> = emptySet(),
+    ) {
         Files.walkFileTree(source, object : SimpleFileVisitor<Path>() {
             override fun preVisitDirectory(
                 dir: Path,
                 attrs: BasicFileAttributes
             ): FileVisitResult {
+                // Skip excluded directories (like plugins, which are stored separately)
+                val dirName = dir.fileName?.toString()
+                if (dirName != null && dirName in excludedDirectories) {
+                    return FileVisitResult.SKIP_SUBTREE
+                }
+
                 val targetDir = destination.resolve(source.relativize(dir))
                 Files.createDirectories(targetDir)
                 return FileVisitResult.CONTINUE
@@ -103,14 +108,14 @@ object DirectoryCopier {
                 val fileName = file.fileName.toString()
 
                 // Check filename exclusions
-                if (fileName in EXCLUDED_FILES) {
+                if (fileName in excludedFiles) {
                     return FileVisitResult.CONTINUE
                 }
 
                 // Check path pattern exclusions
                 val relativePath = source.relativize(file).toString()
                     .replace(File.separator, "/")  // Normalize to forward slashes
-                if (relativePath in EXCLUDED_PATTERNS) {
+                if (relativePath in excludedPatterns) {
                     return FileVisitResult.CONTINUE
                 }
 
