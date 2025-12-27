@@ -63,49 +63,27 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         contentPanel.isOpaque = false
 
         // First line: Project name
-        val nameComponent = SimpleColoredComponent()
-        if (isSelected) {
-            nameComponent.append(value.metadata.name,
-                SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, UIUtil.getListSelectionForeground(cellHasFocus))
-            )
-        } else {
-            nameComponent.append(value.metadata.name, SimpleTextAttributes.REGULAR_ATTRIBUTES)
+        val nameComponent = SimpleColoredComponent().apply {
+            append(value.metadata.name, getRegularTextAttributes(isSelected, cellHasFocus))
+            isOpaque = false
         }
-        nameComponent.isOpaque = false
         contentPanel.add(nameComponent)
 
         // Second line: Git branch (if present)
         if (value.gitBranch != null) {
-            val branchComponent = SimpleColoredComponent()
-            if (isSelected) {
-                branchComponent.append("[${value.gitBranch}]",
-                    SimpleTextAttributes(
-                        SimpleTextAttributes.STYLE_PLAIN,
-                        UIUtil.getListSelectionForeground(cellHasFocus)
-                    )
-                )
-            } else {
-                branchComponent.append("[${value.gitBranch}]", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            val branchComponent = SimpleColoredComponent().apply {
+                append("[${value.gitBranch}]", getAdditionalDataAttributes(isSelected, cellHasFocus))
+                isOpaque = false
             }
-            branchComponent.isOpaque = false
             contentPanel.add(branchComponent)
         }
 
         // Third line: Path
-        val path = value.metadata.path.pathString
-        val compactPath = compactPath(path)
-        val pathComponent = SimpleColoredComponent()
-        if (isSelected) {
-            pathComponent.append(compactPath,
-                SimpleTextAttributes(
-                    SimpleTextAttributes.STYLE_SMALLER,
-                    UIUtil.getListSelectionForeground(cellHasFocus)
-                )
-            )
-        } else {
-            pathComponent.append(compactPath, SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES)
+        val pathComponent = SimpleColoredComponent().apply {
+            val compactPath = compactPath(value.metadata.path.pathString)
+            append(compactPath, getAdditionalDataAttributes(isSelected, cellHasFocus))
+            isOpaque = false
         }
-        pathComponent.isOpaque = false
         contentPanel.add(pathComponent)
 
         panel.add(contentPanel, BorderLayout.CENTER)
@@ -113,6 +91,17 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         applySelectionColors(panel, isSelected, cellHasFocus)
 
         return panel
+    }
+
+    private fun getAdditionalDataAttributes(
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): SimpleTextAttributes = when {
+        isSelected -> SimpleTextAttributes(
+            SimpleTextAttributes.STYLE_SMALLER,
+            UIUtil.getListSelectionForeground(cellHasFocus)
+        )
+        else -> SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES
     }
 
     private fun renderOpenFileChooser(
@@ -158,24 +147,31 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         // Icon
         val iconLabel = JLabel(icon)
         iconLabel.verticalAlignment = SwingConstants.CENTER
-        iconLabel.border = JBUI.Borders.empty(0, 0, 0, 8)
+        iconLabel.border = JBUI.Borders.emptyRight(8)
         panel.add(iconLabel, BorderLayout.WEST)
 
         // Label text
+        val attributes = getRegularTextAttributes(isSelected, cellHasFocus)
         val textComponent = SimpleColoredComponent()
-        if (isSelected) {
-            textComponent.append(label,
-                SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, UIUtil.getListSelectionForeground(cellHasFocus))
-            )
-        } else {
-            textComponent.append(label, SimpleTextAttributes.REGULAR_ATTRIBUTES)
-        }
+        textComponent.append(label, attributes)
         textComponent.isOpaque = false
         panel.add(textComponent, BorderLayout.CENTER)
 
         applySelectionColors(panel, isSelected, cellHasFocus)
 
         return panel
+    }
+
+    private fun getRegularTextAttributes(
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): SimpleTextAttributes {
+        val attributes = if (isSelected) {
+            SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, UIUtil.getListSelectionForeground(cellHasFocus))
+        } else {
+            SimpleTextAttributes.REGULAR_ATTRIBUTES
+        }
+        return attributes
     }
 
     private fun applySelectionColors(panel: JPanel, isSelected: Boolean, cellHasFocus: Boolean) {
