@@ -10,8 +10,10 @@ import com.intellij.ui.popup.list.ListPopupImpl
 import com.intellij.ui.popup.list.PopupListElementRenderer
 import com.intellij.util.application
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
+import com.intellij.util.containers.addIfNotNull
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectMetadata
+import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
@@ -48,6 +50,9 @@ internal class RecentProjectsPopup(
 
             // Create popup using ListPopupImpl with custom renderer and submenu support
             val itemsList = mutableListOf<PopupListItem>()
+
+            // Add main project at the top if configured
+            itemsList.addIfNotNull(prepareMainProjectItem(configRepository))
             itemsList.addAll(items)
             itemsList.add(OpenFileChooserItem)
             itemsList.add(SyncAllProjectsItem)
@@ -62,6 +67,13 @@ internal class RecentProjectsPopup(
             showNotification("Failed to load recent projects: ${ex.message}", project, NotificationType.ERROR)
             ex.printStackTrace()
         }
+    }
+
+    private fun prepareMainProjectItem(configRepository: ConfigRepository): MainProjectItem? {
+        val mainProjectPathStr = configRepository.load().mainProjectPath ?: return null
+        val path = ProjectPath(mainProjectPathStr)
+        val gitBranch = GitUtils.detectGitBranch(path.path)
+        return MainProjectItem(path, gitBranch)
     }
 
     private fun createRecentProjectItem(metadata: ProjectMetadata): RecentProjectItem {
@@ -146,10 +158,19 @@ private class RecentProjectPopupStep(
 
     private fun handleItemSelection(item: PopupListItem) {
         when (item) {
+            is MainProjectItem -> launchMainProject(item)
             is RecentProjectItem -> launchProject(item, project, configRepository)
             is OpenFileChooserItem -> showFileChooserAndLaunch()
             is SyncAllProjectsItem -> syncAllProjects()
         }
+    }
+
+    private fun launchMainProject(item: MainProjectItem) {
+        ProjectLauncherHelper.launchProject(
+            project,
+            configRepository,
+            item.path
+        )
     }
 
     private fun syncAllProjects() {
@@ -199,9 +220,11 @@ private class RecentProjectPopupStep(
         }
     }
 
-    override fun hasSubstep(selectedValue: PopupListItem): Boolean = selectedValue is RecentProjectItem
+    override fun hasSubstep(selectedValue: PopupListItem): Boolean =
+        selectedValue is RecentProjectItem || selectedValue is MainProjectItem
 
     override fun getTextFor(value: PopupListItem): String = when (value) {
+        is MainProjectItem -> value.path.name
         is RecentProjectItem -> value.displayText
         is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.label")
         is SyncAllProjectsItem -> "Sync all projects"
@@ -211,20 +234,22 @@ private class RecentProjectPopupStep(
 
     override fun getIndexedString(value: PopupListItem): String {
         return when (value) {
-            is RecentProjectItem -> {
-                // Return searchable text: project name, branch, and path
-                buildString {
-                    append(value.metadata.name)
-                    append(" ")
-                    value.gitBranch?.let {
-                        append(it)
-                        append(" ")
-                    }
-                    append(value.metadata.path.pathString)
-                }
-            }
+            is MainProjectItem -> buildProjectSearchString(value.path, value.gitBranch)
+            is RecentProjectItem -> buildProjectSearchString(value.metadata.path, value.gitBranch)
             is OpenFileChooserItem -> "Browse"
             is SyncAllProjectsItem -> "Sync all projects"
+        }
+    }
+
+    private fun buildProjectSearchString(path: ProjectPath, gitBranch: String?): String {
+        return buildString {
+            append(path.name)
+            append(" ")
+            gitBranch?.let {
+                append(it)
+                append(" ")
+            }
+            append(path.pathString)
         }
     }
 }

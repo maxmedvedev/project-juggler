@@ -7,17 +7,12 @@ import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
+import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import java.awt.BorderLayout
 import java.awt.Component
 import java.io.File
-import javax.swing.BoxLayout
-import javax.swing.Icon
-import javax.swing.JLabel
-import javax.swing.JList
-import javax.swing.JPanel
-import javax.swing.ListCellRenderer
-import javax.swing.SwingConstants
+import javax.swing.*
 
 internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
     private val recentProjectsManager = RecentProjectsManager.getInstance() as RecentProjectsManagerBase
@@ -34,10 +29,25 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         }
 
         return when (value) {
+            is MainProjectItem -> renderMainProject(value, isSelected, cellHasFocus)
             is RecentProjectItem -> renderRecentProject(value, isSelected, cellHasFocus)
             is OpenFileChooserItem -> renderOpenFileChooser(isSelected, cellHasFocus)
             is SyncAllProjectsItem -> renderSyncAllProjects(isSelected, cellHasFocus)
         }
+    }
+
+    private fun renderMainProject(
+        value: MainProjectItem,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        return renderProjectItem(
+            path = ProjectPath(value.path.pathString),
+            gitBranch = value.gitBranch,
+            isSelected = isSelected,
+            cellHasFocus = cellHasFocus,
+            addBottomSeparator = true
+        )
     }
 
     private fun renderRecentProject(
@@ -45,13 +55,28 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         isSelected: Boolean,
         cellHasFocus: Boolean
     ): Component {
-        val panel = JPanel(BorderLayout())
-        panel.accessibleContext.accessibleName = value.metadata.name
+        return renderProjectItem(
+            path = value.metadata.path,
+            gitBranch = value.gitBranch,
+            isSelected = isSelected,
+            cellHasFocus = cellHasFocus,
+            addBottomSeparator = false
+        )
+    }
 
+    private fun renderProjectItem(
+        path: ProjectPath,
+        gitBranch: String?,
+        isSelected: Boolean,
+        cellHasFocus: Boolean,
+        addBottomSeparator: Boolean
+    ): Component {
+        val panel = JPanel(BorderLayout())
+        panel.accessibleContext.accessibleName = path.name
         panel.border = JBUI.Borders.empty(4, 6)
 
         // Get project icon using IntelliJ's icon helper
-        val projectIcon = recentProjectsManager.getProjectIcon(value.metadata.path.path, true)
+        val projectIcon = recentProjectsManager.getProjectIcon(path.path, true)
         val iconLabel = JLabel(projectIcon)
         iconLabel.verticalAlignment = SwingConstants.TOP
         iconLabel.border = JBUI.Borders.empty(2, 0, 0, 8)
@@ -64,15 +89,15 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
 
         // First line: Project name
         val nameComponent = SimpleColoredComponent().apply {
-            append(value.metadata.name, getRegularTextAttributes(isSelected, cellHasFocus))
+            append(path.name, getRegularTextAttributes(isSelected, cellHasFocus))
             isOpaque = false
         }
         contentPanel.add(nameComponent)
 
         // Second line: Git branch (if present)
-        if (value.gitBranch != null) {
+        if (gitBranch != null) {
             val branchComponent = SimpleColoredComponent().apply {
-                append("[${value.gitBranch}]", getAdditionalDataAttributes(isSelected, cellHasFocus))
+                append("[$gitBranch]", getAdditionalDataAttributes(isSelected, cellHasFocus))
                 isOpaque = false
             }
             contentPanel.add(branchComponent)
@@ -80,7 +105,7 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
 
         // Third line: Path
         val pathComponent = SimpleColoredComponent().apply {
-            val compactPath = compactPath(value.metadata.path.pathString)
+            val compactPath = compactPath(path.pathString)
             append(compactPath, getAdditionalDataAttributes(isSelected, cellHasFocus))
             isOpaque = false
         }
@@ -90,7 +115,15 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
 
         applySelectionColors(panel, isSelected, cellHasFocus)
 
-        return panel
+        return if (addBottomSeparator) {
+            val outerPanel = JPanel(BorderLayout())
+            outerPanel.isOpaque = false
+            outerPanel.border = JBUI.Borders.customLineBottom(JBUI.CurrentTheme.Popup.separatorColor())
+            outerPanel.add(panel, BorderLayout.CENTER)
+            outerPanel
+        } else {
+            panel
+        }
     }
 
     private fun getAdditionalDataAttributes(
