@@ -59,7 +59,10 @@ internal class RecentProjectsPopup(
             itemsList.addIfNotNull(createMainProjectItem(configRepository))
             itemsList.addAll(items)
             itemsList.add(OpenFileChooserItem)
-            itemsList.add(SyncAllProjectsItem)
+            itemsList.add(SyncProjectsItem(SyncType.All))
+            itemsList.add(SyncProjectsItem(SyncType.VmOptions))
+            itemsList.add(SyncProjectsItem(SyncType.Config))
+            itemsList.add(SyncProjectsItem(SyncType.Plugins))
 
             // Show popup on EDT
             application.invokeLater {
@@ -140,15 +143,29 @@ private class RecentProjectPopupStep(
 
     private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<String> {
         val openProjectAction = ProjectJugglerBundle.message("popup.recent.projects.action.open.project")
-        val syncSettingsAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.settings")
-        val actions = listOf(openProjectAction, syncSettingsAction)
+        val syncAllAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.all")
+        val syncVmOptionsAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.vmoptions")
+        val syncConfigAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.config")
+        val syncPluginsAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.plugins")
+
+        val actions = listOf(
+            openProjectAction,
+            syncAllAction,
+            syncVmOptionsAction,
+            syncConfigAction,
+            syncPluginsAction
+        )
+
         return object : BaseListPopupStep<String>(null, actions) {
             override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? {
                 if (!finalChoice) return FINAL_CHOICE
 
                 when (selectedValue) {
                     openProjectAction -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
-                    syncSettingsAction -> syncProjectSettings(item.projectPath)
+                    syncAllAction -> syncSingleProjectWithType(item.projectPath, SyncType.All)
+                    syncVmOptionsAction -> syncSingleProjectWithType(item.projectPath, SyncType.VmOptions)
+                    syncConfigAction -> syncSingleProjectWithType(item.projectPath, SyncType.Config)
+                    syncPluginsAction -> syncSingleProjectWithType(item.projectPath, SyncType.Plugins)
                 }
                 return FINAL_CHOICE
             }
@@ -161,33 +178,44 @@ private class RecentProjectPopupStep(
         when (item) {
             is RecentProjectItem -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
             is OpenFileChooserItem -> showFileChooserAndLaunch()
-            is SyncAllProjectsItem -> syncAllProjects()
+            is SyncProjectsItem -> syncAllProjectsWithType(item.syncType)
         }
     }
 
-    private fun syncAllProjects() {
+    private fun syncAllProjectsWithType(syncType: SyncType) {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project,
-            ProjectJugglerBundle.message("progress.sync.all.projects")
+            ProjectJugglerBundle.message("progress.sync.all.projects.type", syncType.displayName)
         ) {
-            override fun run(p0: ProgressIndicator) {
+            override fun run(indicator: ProgressIndicator) {
                 try {
-                    p0.isIndeterminate = false
+                    indicator.isIndeterminate = false
                     val allProjects = configRepository.loadAllProjects()
+                    val launcher = ProjectLauncher(configRepository)
+
                     allProjects.forEachIndexed { index, projectMetadata ->
-                        p0.text = ProjectJugglerBundle.message("progress.sync.project.settings", projectMetadata.path.name)
+                        indicator.text = ProjectJugglerBundle.message(
+                            "progress.sync.project.type",
+                            syncType.displayName,
+                            projectMetadata.path.name
+                        )
 
-                        p0.fraction = index.toDouble() / allProjects.size
-                        ProjectLauncher(configRepository).syncProject(projectMetadata, syncVmOptions = true, syncConfig = false, syncPlugins = false)
+                        indicator.fraction = index.toDouble() / allProjects.size
 
-                        p0.fraction = (3 * index.toDouble() +  1) / (allProjects.size * 3)
-                        ProjectLauncher(configRepository).syncProject(projectMetadata, syncVmOptions = false, syncConfig = true, syncPlugins = false)
-
-                        p0.fraction = (3* index.toDouble() + 2) / (allProjects.size * 3)
-                        ProjectLauncher(configRepository).syncProject(projectMetadata, syncVmOptions = false, syncConfig = false, syncPlugins = true)
+                        launcher.syncProject(
+                            projectMetadata,
+                            syncVmOptions = syncType.syncVmOptions,
+                            syncConfig = syncType.syncConfig,
+                            syncPlugins = syncType.syncPlugins
+                        )
                     }
+
                     showInfoNotification(
-                        ProjectJugglerBundle.message("notification.success.sync.all.projects", allProjects.size),
+                        ProjectJugglerBundle.message(
+                            "notification.success.sync.all.projects.type",
+                            syncType.displayName,
+                            allProjects.size
+                        ),
                         project
                     )
                 } catch (e: Exception) {
@@ -197,8 +225,6 @@ private class RecentProjectPopupStep(
                     )
                 }
             }
-
-
         })
     }
 
@@ -222,17 +248,26 @@ private class RecentProjectPopupStep(
         ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
     }
 
-    private fun syncProjectSettings(projectPath: ProjectPath) {
+    private fun syncSingleProjectWithType(projectPath: ProjectPath, syncType: SyncType) {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project,
-            ProjectJugglerBundle.message("progress.sync.project.settings", projectPath.name)
+            ProjectJugglerBundle.message("progress.sync.project.type", syncType.displayName, projectPath.name)
         ) {
-            override fun run(p0: ProgressIndicator) {
+            override fun run(indicator: ProgressIndicator) {
                 val metadata = ProjectManager.getInstance(configRepository).get(projectPath) ?: return
                 try {
-                    ProjectLauncher(configRepository).syncProject(metadata, true, true, true)
+                    ProjectLauncher(configRepository).syncProject(
+                        metadata,
+                        syncVmOptions = syncType.syncVmOptions,
+                        syncConfig = syncType.syncConfig,
+                        syncPlugins = syncType.syncPlugins
+                    )
                     showInfoNotification(
-                        ProjectJugglerBundle.message("notification.success.sync.project.settings", metadata.path.name),
+                        ProjectJugglerBundle.message(
+                            "notification.success.sync.single.project.type",
+                            syncType.displayName,
+                            metadata.path.name
+                        ),
                         project
                     )
                 } catch (e: Exception) {
@@ -251,7 +286,12 @@ private class RecentProjectPopupStep(
     override fun getTextFor(value: PopupListItem): String = when (value) {
         is RecentProjectItem -> formatDisplayText(value.projectPath, value.gitBranch)
         is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.label")
-        is SyncAllProjectsItem -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
+        is SyncProjectsItem -> when (value.syncType) {
+            SyncType.All -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
+            SyncType.VmOptions -> ProjectJugglerBundle.message("popup.sync.vmoptions.label")
+            SyncType.Config -> ProjectJugglerBundle.message("popup.sync.config.label")
+            SyncType.Plugins -> ProjectJugglerBundle.message("popup.sync.plugins.label")
+        }
     }
 
     private fun formatDisplayText(projectPath: ProjectPath, gitBranch: String?): String {
@@ -277,7 +317,12 @@ private class RecentProjectPopupStep(
         return when (value) {
             is RecentProjectItem -> buildProjectSearchString(value.projectPath, value.gitBranch)
             is OpenFileChooserItem -> ProjectJugglerBundle.message("popup.open.file.chooser.search")
-            is SyncAllProjectsItem -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
+            is SyncProjectsItem -> when (value.syncType) {
+                SyncType.All -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
+                SyncType.VmOptions -> ProjectJugglerBundle.message("popup.sync.vmoptions.label")
+                SyncType.Config -> ProjectJugglerBundle.message("popup.sync.config.label")
+                SyncType.Plugins -> ProjectJugglerBundle.message("popup.sync.plugins.label")
+            }
         }
     }
 

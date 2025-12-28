@@ -40,7 +40,7 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         return when (value) {
             is RecentProjectItem -> renderRecentProject(value, isSelected, cellHasFocus, value.projectPath)
             is OpenFileChooserItem -> renderOpenFileChooser(isSelected, cellHasFocus)
-            is SyncAllProjectsItem -> renderSyncAllProjects(isSelected, cellHasFocus)
+            is SyncProjectsItem -> renderSyncProjects(value.syncType, isSelected, cellHasFocus)
         }
     }
 
@@ -125,12 +125,19 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         )
     }
 
-    private fun renderSyncAllProjects(
+    private fun renderSyncProjects(
+        syncType: SyncType,
         isSelected: Boolean,
         cellHasFocus: Boolean
     ): Component {
+        val label = when (syncType) {
+            SyncType.All -> ProjectJugglerBundle.message("popup.sync.all.projects.label")
+            SyncType.VmOptions -> ProjectJugglerBundle.message("popup.sync.vmoptions.label")
+            SyncType.Config -> ProjectJugglerBundle.message("popup.sync.config.label")
+            SyncType.Plugins -> ProjectJugglerBundle.message("popup.sync.plugins.label")
+        }
         return renderActionItem(
-            label = "Sync all projects",
+            label = label,
             icon = AllIcons.Actions.Refresh,
             isSelected = isSelected,
             cellHasFocus = cellHasFocus
