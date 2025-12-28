@@ -17,6 +17,14 @@ sealed class SyncType(val displayName: String) {
     object Plugins : SyncType("plugins")
 }
 
+/**
+ * Represents actions that can be performed on a specific recent project.
+ */
+sealed interface ProjectAction {
+    object OpenProject : ProjectAction
+    data class SyncSettings(val syncType: SyncType) : ProjectAction
+}
+
 sealed class PopupListItem
 
 data class RecentProjectItem(

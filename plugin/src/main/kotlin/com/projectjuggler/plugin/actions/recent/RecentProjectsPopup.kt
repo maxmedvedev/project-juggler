@@ -141,36 +141,38 @@ private class RecentProjectPopupStep(
         }
     }
 
-    private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<String> {
-        val openProjectAction = ProjectJugglerBundle.message("popup.recent.projects.action.open.project")
-        val syncAllAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.all")
-        val syncVmOptionsAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.vmoptions")
-        val syncConfigAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.config")
-        val syncPluginsAction = ProjectJugglerBundle.message("popup.recent.projects.action.sync.plugins")
-
+    private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<ProjectAction> {
         val actions = listOf(
-            openProjectAction,
-            syncAllAction,
-            syncVmOptionsAction,
-            syncConfigAction,
-            syncPluginsAction
+            ProjectAction.OpenProject,
+            ProjectAction.SyncSettings(SyncType.All),
+            ProjectAction.SyncSettings(SyncType.VmOptions),
+            ProjectAction.SyncSettings(SyncType.Config),
+            ProjectAction.SyncSettings(SyncType.Plugins)
         )
 
-        return object : BaseListPopupStep<String>(null, actions) {
-            override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? {
+        return object : BaseListPopupStep<ProjectAction>(null, actions) {
+            override fun onChosen(selectedValue: ProjectAction, finalChoice: Boolean): PopupStep<*>? {
                 if (!finalChoice) return FINAL_CHOICE
 
                 when (selectedValue) {
-                    openProjectAction -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
-                    syncAllAction -> syncSingleProjectWithType(item.projectPath, SyncType.All)
-                    syncVmOptionsAction -> syncSingleProjectWithType(item.projectPath, SyncType.VmOptions)
-                    syncConfigAction -> syncSingleProjectWithType(item.projectPath, SyncType.Config)
-                    syncPluginsAction -> syncSingleProjectWithType(item.projectPath, SyncType.Plugins)
+                    ProjectAction.OpenProject ->
+                        ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
+                    is ProjectAction.SyncSettings ->
+                        syncSingleProjectWithType(item.projectPath, selectedValue.syncType)
                 }
                 return FINAL_CHOICE
             }
 
-            override fun getTextFor(value: String): String = value
+            override fun getTextFor(value: ProjectAction): String = when (value) {
+                ProjectAction.OpenProject ->
+                    ProjectJugglerBundle.message("popup.recent.projects.action.open.project")
+                is ProjectAction.SyncSettings -> when (value.syncType) {
+                    SyncType.All -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.all")
+                    SyncType.VmOptions -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.vmoptions")
+                    SyncType.Config -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.config")
+                    SyncType.Plugins -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.plugins")
+                }
+            }
         }
     }
 
