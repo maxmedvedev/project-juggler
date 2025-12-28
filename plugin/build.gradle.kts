@@ -27,6 +27,16 @@ tasks {
         sinceBuild.set("253")
         untilBuild.set("261.*")
     }
+
+    // Bundle CLI distribution with the plugin
+    processResources {
+        dependsOn(":cli:installDist")
+
+        // Copy CLI distribution into plugin resources
+        from(project(":cli").layout.buildDirectory.dir("install/cli")) {
+            into("project-juggler-cli")
+        }
+    }
 }
 
 kotlin {

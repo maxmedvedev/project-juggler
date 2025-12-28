@@ -57,6 +57,7 @@ class ProjectManager(
         configRepository.deleteProjectMetadata(projectId)
     }
 
+    // todo inline
     fun get(projectId: ProjectPath): ProjectMetadata? {
         return configRepository.loadProjectMetadata(projectId)
     }

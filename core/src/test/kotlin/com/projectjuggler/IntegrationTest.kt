@@ -248,9 +248,9 @@ class IntegrationTest : StringSpec({
             remainingIds shouldContain project3.id
 
             // Verify directories
-            directoryManager.getProjectRoot(project1.id).exists() shouldBe true
-            directoryManager.getProjectRoot(project2.id).exists() shouldBe false
-            directoryManager.getProjectRoot(project3.id).exists() shouldBe true
+            directoryManager.getProjectRoot(project1).exists() shouldBe true
+            directoryManager.getProjectRoot(project2).exists() shouldBe false
+            directoryManager.getProjectRoot(project3).exists() shouldBe true
 
         } finally {
             baseDir.toFile().deleteRecursively()

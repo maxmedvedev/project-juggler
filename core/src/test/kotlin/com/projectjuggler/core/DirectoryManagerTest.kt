@@ -166,11 +166,14 @@ class DirectoryManagerTest : StringSpec({
             val manager = DirectoryManager.getInstance(configRepository)
 
             val projectPath = ProjectPath("/test/project/path")
-            val projectId = projectPath.id
+            val project = ProjectMetadata(
+                path = projectPath,
+                lastOpened = "2025-01-01T00:00:00Z"
+            )
 
-            val root = manager.getProjectRoot(projectId)
+            val root = manager.getProjectRoot(project)
 
-            root.toString() shouldBe tempDir.resolve("projects").resolve(projectId.id).toString()
+            root.toString() shouldBe tempDir.resolve("projects").resolve(project.id.id).toString()
         } finally {
             tempDir.toFile().deleteRecursively()
         }

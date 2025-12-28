@@ -3,6 +3,8 @@ package com.projectjuggler.cli
 import com.projectjuggler.cli.framework.*
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.core.ProjectLauncher
+import com.projectjuggler.core.SyncOptions
+import com.projectjuggler.core.SyncProgress
 
 class SyncCommand : Command(
     name = "sync",
@@ -43,6 +45,25 @@ class SyncCommand : Command(
         shortName = null,
         longName = "all-projects",
         help = "Sync all tracked projects"
+    ).also { options.add(it) }
+
+    private val noStopFlag = FlagOption(
+        shortName = null,
+        longName = "no-stop",
+        help = "Don't stop running IntelliJ instances (default is to stop and restart)"
+    ).also { options.add(it) }
+
+    private val noRestartFlag = FlagOption(
+        shortName = null,
+        longName = "no-restart",
+        help = "Don't restart IntelliJ after sync (project will remain closed)"
+    ).also { options.add(it) }
+
+    private val timeoutOption = IntOption(
+        shortName = null,
+        longName = "timeout",
+        help = "Shutdown timeout in seconds (default: 60)",
+        default = 60
     ).also { options.add(it) }
 
     override fun run() {
@@ -106,6 +127,35 @@ class SyncCommand : Command(
             syncAll || syncPlugins
         }
 
+        // Create sync options with stop/restart behavior
+        val shouldStop = !noStopFlag.getValue()
+        val shouldRestart = !noRestartFlag.getValue()
+        val timeout = timeoutOption.getValue()
+
+        val syncOptions = SyncOptions(
+            stopIfRunning = shouldStop,
+            autoRestart = shouldRestart,
+            shutdownTimeout = timeout,
+            onProgress = { progress ->
+                when (progress) {
+                    is SyncProgress.Stopping -> {
+                        if (progress.secondsElapsed == 1) {
+                            echo("  Waiting for IntelliJ to close...")
+                        }
+                    }
+                    is SyncProgress.Syncing -> {
+                        // Already showing sync details below
+                    }
+                    is SyncProgress.Restarting -> {
+                        echo("  Restarting IntelliJ...")
+                    }
+                    is SyncProgress.Error -> {
+                        echo("  Warning: ${progress.message}", err = true)
+                    }
+                }
+            }
+        )
+
         val projectLauncher = ProjectLauncher.getInstance(configRepository)
         val directoryManager = com.projectjuggler.core.DirectoryManager.getInstance(configRepository)
         val baseVMOptionsTracker = com.projectjuggler.core.BaseVMOptionsTracker.getInstance(configRepository)
@@ -150,7 +200,8 @@ class SyncCommand : Command(
                     project,
                     shouldSyncVmOptions,
                     shouldSyncConfig,
-                    shouldSyncPlugins
+                    shouldSyncPlugins,
+                    syncOptions
                 )
 
                 echo("Successfully synchronized project settings.")
@@ -158,6 +209,11 @@ class SyncCommand : Command(
             } catch (e: IllegalStateException) {
                 echo()
                 echo("Error: ${e.message}", err = true)
+                failureCount++
+            } catch (e: com.projectjuggler.core.SyncException) {
+                echo()
+                echo("Sync failed:", err = true)
+                echo(e.message ?: "Unknown error", err = true)
                 failureCount++
             } catch (e: Exception) {
                 echo()

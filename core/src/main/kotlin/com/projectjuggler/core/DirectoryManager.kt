@@ -1,7 +1,6 @@
 package com.projectjuggler.core
 
 import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.platform.ConfigLocator
 import com.projectjuggler.platform.PluginLocator
@@ -15,7 +14,7 @@ import kotlin.io.path.deleteRecursively
 class DirectoryManager(private val configRepository: ConfigRepository) {
 
     fun ensureProjectDirectories(project: ProjectMetadata): ProjectDirectories {
-        val root = getProjectRoot(project.id)
+        val root = getProjectRoot(project)
 
         val directories = ProjectDirectories(
             root = root,
@@ -116,15 +115,15 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
     }
 
     fun cleanProject(project: ProjectMetadata) {
-        val projectRoot = getProjectRoot(project.id)
+        val projectRoot = getProjectRoot(project)
         if (!Files.exists(projectRoot)) return
 
         @OptIn(ExperimentalPathApi::class)
         projectRoot.deleteRecursively()
     }
 
-    fun getProjectRoot(projectId: ProjectId): Path {
-        return configRepository.baseDir.resolve("projects").resolve(projectId.id)
+    fun getProjectRoot(project: ProjectMetadata): Path {
+        return configRepository.baseDir.resolve("projects").resolve(project.id.id)
     }
 
     companion object {
