@@ -24,6 +24,7 @@ import com.projectjuggler.plugin.ProjectLauncherHelper
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.util.GitUtils
+import com.projectjuggler.util.ProjectLockUtils
 import java.awt.Component
 import java.nio.file.Files.exists
 import javax.swing.JList
@@ -48,7 +49,7 @@ internal class RecentProjectsPopup(
 
             // Create items with git branch info (even if empty, we'll still show the "Browse..." item)
             val items = validProjects.map { metadata ->
-                createRecentProjectItem(metadata)
+                createRecentProjectItem(metadata, configRepository)
             }
 
             // Create popup using ListPopupImpl with custom renderer and submenu support
@@ -79,12 +80,21 @@ internal class RecentProjectsPopup(
         val mainProjectPathStr = configRepository.load().mainProjectPath ?: return null
         val path = ProjectPath(mainProjectPathStr)
         val gitBranch = GitUtils.detectGitBranch(path.path)
-        return RecentProjectItem(path, gitBranch)
+        val isOpen = detectIfProjectOpen(configRepository, path)
+        return RecentProjectItem(path, gitBranch, isOpen)
     }
 
-    private fun createRecentProjectItem(metadata: ProjectMetadata): RecentProjectItem {
+    private fun createRecentProjectItem(
+        metadata: ProjectMetadata,
+        configRepository: ConfigRepository
+    ): RecentProjectItem {
         val gitBranch = GitUtils.detectGitBranch(metadata.path.path)
-        return RecentProjectItem(metadata.path, gitBranch)
+        val isOpen = detectIfProjectOpen(configRepository, metadata.path)
+        return RecentProjectItem(metadata.path, gitBranch, isOpen)
+    }
+
+    private fun detectIfProjectOpen(configRepository: ConfigRepository, projectPath: ProjectPath): Boolean {
+        return ProjectLockUtils.isProjectOpen(configRepository, projectPath)
     }
 }
 

@@ -7,6 +7,7 @@ sealed class PopupListItem
 data class RecentProjectItem(
     val projectPath: ProjectPath,
     val gitBranch: String?, // null if not a git repo or error occurred
+    val isOpen: Boolean = false, // true if project has running instance
 ) : PopupListItem()
 
 object OpenFileChooserItem : PopupListItem()

@@ -3,6 +3,8 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.icons.AllIcons
 import com.intellij.ide.RecentProjectsManager
 import com.intellij.ide.RecentProjectsManagerBase
+import com.intellij.ui.IconManager
+import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.JBUI
@@ -51,8 +53,15 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         val panel = JPanel(BorderLayout())
         panel.accessibleContext.accessibleName = path.name
         panel.border = empty(4, 6)
+
         // Get project icon using IntelliJ's icon helper
-        val projectIcon = recentProjectsManager.getProjectIcon(path.path, true)
+        var projectIcon = recentProjectsManager.getProjectIcon(path.path, true)
+
+        // Add green dot badge if project is currently open
+        if (value.isOpen) {
+            val greenColor = JBColor(0x5CB85C, 0x5CB85C) // Green color for "running" status
+            projectIcon = IconManager.getInstance().withIconBadge(projectIcon, greenColor)
+        }
 
         val iconLabel = JLabel(projectIcon)
         iconLabel.verticalAlignment = TOP
