@@ -456,6 +456,7 @@ private class RecentProjectPopupStep(
 
                     showInfoNotification(successMessage(projects), project)
                 } catch (e: Exception) {
+                    if (e is ControlFlowException) throw e
                     showErrorNotification(errorMessage(e), project)
                 }
             }
