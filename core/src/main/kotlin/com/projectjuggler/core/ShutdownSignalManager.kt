@@ -2,9 +2,12 @@ package com.projectjuggler.core
 
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectMetadata
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import sun.security.krb5.internal.KDCOptions.with
 import java.nio.channels.FileLock
 import java.nio.file.Files
 import java.nio.file.Path
@@ -128,23 +131,23 @@ class ShutdownSignalManager(private val configRepository: ConfigRepository) {
      * @param project Project
      * @return A SyncLock if acquired, null if already locked
      */
-    fun acquireSyncLock(project: ProjectMetadata): SyncLock? {
-        val signalsDir = getSignalsDirectory(project)
-        Files.createDirectories(signalsDir)
-        val lockFile = signalsDir.resolve("sync-in-progress.lock")
+    suspend fun acquireSyncLock(project: ProjectMetadata): SyncLock? = withContext(Dispatchers.IO) {
+        try {
+            val signalsDir = getSignalsDirectory(project)
+            Files.createDirectories(signalsDir)
+            val lockFile = signalsDir.resolve("sync-in-progress.lock")
 
-        return try {
             val raf = java.io.RandomAccessFile(lockFile.toFile(), "rw")
             val lock = raf.channel.tryLock()
 
             if (lock != null) {
-                SyncLock(raf, lock, lockFile)
+                return@withContext SyncLock(raf, lock, lockFile)
             } else {
                 raf.close()
-                null
+                return@withContext null
             }
         } catch (e: Exception) {
-            null
+            return@withContext null
         }
     }
 }

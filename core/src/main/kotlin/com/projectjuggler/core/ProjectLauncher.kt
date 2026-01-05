@@ -5,6 +5,9 @@ import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.util.ProjectLockUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 class ProjectLauncher(
     private val configRepository: ConfigRepository
@@ -69,7 +72,7 @@ class ProjectLauncher(
      * @param options Sync options (stop/restart behavior, timeout, progress callbacks)
      * @throws SyncException if sync fails or times out
      */
-    fun syncProject(
+    suspend fun syncProject(
         project: ProjectMetadata,
         syncVmOptions: Boolean,
         syncConfig: Boolean,
@@ -81,10 +84,32 @@ class ProjectLauncher(
         }
     }
 
-    private fun doWithLock(
+    /**
+     * Synchronize a project's settings with base settings (vmoptions, config, plugins)
+     *
+     * @param project Project to sync
+     * @param syncVmOptions Whether to sync VM options
+     * @param syncConfig Whether to sync config directory
+     * @param syncPlugins Whether to sync plugins directory
+     * @param options Sync options (stop/restart behavior, timeout, progress callbacks)
+     * @throws SyncException if sync fails or times out
+     */
+    fun syncProjectBlocking(
+        project: ProjectMetadata,
+        syncVmOptions: Boolean,
+        syncConfig: Boolean,
+        syncPlugins: Boolean,
+        options: SyncOptions = SyncOptions.DEFAULT
+    ) {
+        runBlocking(Dispatchers.IO) {
+            syncProject(project, syncVmOptions, syncConfig, syncPlugins, options)
+        }
+    }
+
+    private suspend fun doWithLock(
         project: ProjectMetadata,
         options: SyncOptions = SyncOptions.DEFAULT,
-        block: () -> Unit
+        block: suspend () -> Unit
     ) {
         val signalManager = ShutdownSignalManager(configRepository)
 
@@ -156,7 +181,7 @@ class ProjectLauncher(
     /**
      * Requests shutdown of a running IntelliJ instance and waits for it to complete.
      */
-    private fun requestShutdownAndWait(
+    private suspend fun requestShutdownAndWait(
         project: ProjectMetadata,
         options: SyncOptions,
         signalManager: ShutdownSignalManager
@@ -167,12 +192,14 @@ class ProjectLauncher(
         // For now, just use a generic message
         syncTypes.add("settings")
 
-        // Create stop request signal
-        signalManager.createStopRequest(
-            project = project,
-            autoRestart = options.autoRestart,
-            syncTypes = syncTypes
-        )
+        withContext(Dispatchers.IO) {
+            // Create stop request signal
+            signalManager.createStopRequest(
+                project = project,
+                autoRestart = options.autoRestart,
+                syncTypes = syncTypes
+            )
+        }
 
         // Wait for shutdown
         val result = ShutdownWaiter.waitForShutdown(

@@ -1,11 +1,7 @@
 package com.projectjuggler.plugin.actions.recent
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
@@ -18,21 +14,15 @@ import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
-import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
-import com.projectjuggler.core.SyncOptions
-import com.projectjuggler.core.SyncProgress
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.ProjectLauncherHelper
 import com.projectjuggler.plugin.showErrorNotification
-import com.projectjuggler.plugin.showInfoNotification
-import com.projectjuggler.plugin.util.BundledCliManager
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
 import java.awt.Component
 import java.nio.file.Files.exists
 import javax.swing.JList
-import kotlin.io.path.Path
 import kotlin.io.path.isDirectory
 
 internal class RecentProjectsPopup(
@@ -107,30 +97,6 @@ internal class RecentProjectsPopup(
     }
 }
 
-/**
- * Determines if the given project is the currently running project.
- * Returns true if syncing this project would require self-shutdown.
- */
-private fun isCurrentProject(configRepository: ConfigRepository, projectPath: ProjectPath): Boolean {
-    val configPathStr = System.getProperty("idea.config.path") ?: return false
-    val configPath = Path(configPathStr)
-
-    // Check if this is an isolated project:
-    // Path should be: ~/.project-juggler/projects/<project-id>/config
-    val parts = configPath.toString().split("/").filter { it.isNotEmpty() }
-    val projectsIndex = parts.indexOf("projects")
-
-    if (projectsIndex >= 0 && projectsIndex + 2 < parts.size && parts[projectsIndex + 2] == "config") {
-        val currentProjectId = parts[projectsIndex + 1]
-
-        // Get the project ID for the target path
-        val targetMetadata = ProjectManager.getInstance(configRepository).get(projectPath)
-        return targetMetadata?.id?.id == currentProjectId
-    }
-
-    return false
-}
-
 @Suppress("jol")
 private class RecentProjectPopup(popupStep: BaseListPopupStep<PopupListItem>, project: Project?) :
     ListPopupImpl(project, popupStep) {
@@ -188,7 +154,7 @@ private class RecentProjectPopupStep(
                     ProjectAction.OpenProject ->
                         ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
                     is ProjectAction.SyncSettings ->
-                        syncSingleProjectWithType(item.projectPath, selectedValue.syncType)
+                        SyncSettingsService.getInstance(project).syncProject(item.projectPath, selectedValue.syncType)
                 }
                 return FINAL_CHOICE
             }
@@ -210,51 +176,8 @@ private class RecentProjectPopupStep(
         when (item) {
             is RecentProjectItem -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
             is OpenFileChooserItem -> showFileChooserAndLaunch()
-            is SyncProjectsItem -> syncAllProjectsWithType(item.syncType)
+            is SyncProjectsItem -> SyncSettingsService.getInstance(project).syncAllProjects(item.syncType)
         }
-    }
-
-    private fun syncAllProjectsWithType(syncType: SyncType) {
-        if (isSyncingAllIncludingMe()) {
-            handleSelfShutdownSyncAll(syncType)
-            return
-        }
-
-        val allProjects = configRepository.loadAllProjects()
-        performSyncWithProgress(
-            projects = allProjects,
-            syncType = syncType,
-            taskTitle = ProjectJugglerBundle.message("progress.sync.all.projects.type", syncType.displayName),
-            successMessage = {
-                ProjectJugglerBundle.message(
-                    "notification.success.sync.all.projects.type",
-                    syncType.displayName,
-                    it.size
-                )
-            },
-            errorMessage = { e ->
-                ProjectJugglerBundle.message("notification.error.sync.projects.failed", e.message ?: "")
-            }
-        )
-    }
-
-    private fun isSyncingAllIncludingMe(): Boolean {
-        // Check if current project is in the list (self-shutdown case)
-        val allProjects = configRepository.loadAllProjects()
-        val currentProjectInList = allProjects.any { isCurrentProject(configRepository, it.path) }
-        return currentProjectInList
-    }
-
-    /**
-     * Handles syncing all projects when current project is in the list.
-     * Spawns CLI with --all-projects and shuts down.
-     */
-    private fun handleSelfShutdownSyncAll(syncType: SyncType) {
-        performSelfShutdownSync(
-            notificationMessage = "IntelliJ will close to sync all projects and reopen automatically...",
-            cliArgs = listOf("sync", "--all-projects"),
-            syncType = syncType
-        )
     }
 
     private fun showFileChooserAndLaunch() {
@@ -275,152 +198,6 @@ private class RecentProjectPopupStep(
         }
 
         ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
-    }
-
-    private fun syncSingleProjectWithType(projectPath: ProjectPath, syncType: SyncType) {
-        // Check if syncing current project (self-shutdown case)
-        if (isCurrentProject(configRepository, projectPath)) {
-            handleSelfShutdownSync(projectPath, syncType)
-            return
-        }
-
-        val metadata = ProjectManager.getInstance(configRepository).get(projectPath) ?: return
-        performSyncWithProgress(
-            projects = listOf(metadata),
-            syncType = syncType,
-            taskTitle = ProjectJugglerBundle.message("progress.sync.project.type", syncType.displayName, projectPath.name),
-            successMessage = { projects ->
-                ProjectJugglerBundle.message(
-                    "notification.success.sync.single.project.type",
-                    syncType.displayName,
-                    projects.first().path.name
-                )
-            },
-            errorMessage = { e ->
-                ProjectJugglerBundle.message("notification.error.sync.settings.failed", e.message ?: "")
-            }
-        )
-    }
-
-    /**
-     * Common sync logic with progress indicator.
-     * Performs sync for a list of projects with progress tracking and notifications.
-     */
-    private fun performSyncWithProgress(
-        projects: List<ProjectMetadata>,
-        syncType: SyncType,
-        taskTitle: String,
-        successMessage: (List<ProjectMetadata>) -> String,
-        errorMessage: (Exception) -> String
-    ) {
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, taskTitle) {
-            override fun run(indicator: ProgressIndicator) {
-                try {
-                    indicator.isIndeterminate = projects.size == 1
-                    val launcher = ProjectLauncher(configRepository)
-
-                    val syncOptions = SyncOptions(
-                        stopIfRunning = true,
-                        autoRestart = true,
-                        shutdownTimeout = 60,
-                        onProgress = { progress ->
-                            when (progress) {
-                                is SyncProgress.Stopping -> {
-                                    indicator.text = "Stopping IntelliJ..."
-                                }
-                                is SyncProgress.Syncing -> {
-                                    indicator.text = "Syncing ${syncType.displayName}..."
-                                }
-                                is SyncProgress.Restarting -> {
-                                    indicator.text = "Restarting IntelliJ..."
-                                }
-                                is SyncProgress.Error -> {
-                                    // Error handled in catch block
-                                }
-                            }
-                        }
-                    )
-
-                    projects.forEachIndexed { index, projectMetadata ->
-                        ProgressManager.checkCanceled()
-                        indicator.text = ProjectJugglerBundle.message(
-                            "progress.sync.project.type",
-                            syncType.displayName,
-                            projectMetadata.path.name
-                        )
-
-                        if (projects.size > 1) {
-                            indicator.fraction = index.toDouble() / projects.size
-                        }
-
-                        launcher.syncProject(
-                            projectMetadata,
-                            syncVmOptions = syncType.syncVmOptions,
-                            syncConfig = syncType.syncConfig,
-                            syncPlugins = syncType.syncPlugins,
-                            syncOptions
-                        )
-                    }
-
-                    showInfoNotification(successMessage(projects), project)
-                } catch (e: Exception) {
-                    showErrorNotification(errorMessage(e), project)
-                }
-            }
-        })
-    }
-
-    /**
-     * Handles syncing the current project by spawning CLI and shutting down.
-     */
-    private fun handleSelfShutdownSync(projectPath: ProjectPath, syncType: SyncType) {
-        performSelfShutdownSync(
-            notificationMessage = "IntelliJ will close to sync ${syncType.displayName} and reopen automatically...",
-            cliArgs = listOf("sync", "--path", projectPath.pathString),
-            syncType = syncType
-        )
-    }
-
-    /**
-     * Common logic for self-shutdown sync operations.
-     * Spawns CLI process and exits IntelliJ gracefully.
-     */
-    private fun performSelfShutdownSync(
-        notificationMessage: String,
-        cliArgs: List<String>,
-        syncType: SyncType
-    ) {
-        try {
-            showInfoNotification(notificationMessage, project)
-
-            // Get bundled CLI executable
-            val cliExecutable = BundledCliManager.getCliExecutable()
-
-            val arg = when(syncType) {
-                SyncType.All -> "--all"
-                SyncType.VmOptions -> "--vmoptions"
-                SyncType.Config -> "--config"
-                SyncType.Plugins -> "--plugins"
-            }
-
-            // Spawn CLI process
-            ProcessBuilder(cliExecutable.toString(), *(cliArgs + arg).toTypedArray())
-                .inheritIO()
-                .start()
-
-            // Wait briefly to ensure CLI started
-            Thread.sleep(100)
-
-            // Exit IntelliJ
-            ApplicationManager.getApplication().invokeLater {
-                ApplicationManager.getApplication().exit()
-            }
-        } catch (e: Exception) {
-            showErrorNotification(
-                "Failed to initiate self-shutdown sync: ${e.message}",
-                project
-            )
-        }
     }
 
     override fun hasSubstep(selectedValue: PopupListItem): Boolean =

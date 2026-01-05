@@ -196,7 +196,7 @@ class SyncCommand : Command(
                 }
                 echo()
 
-                projectLauncher.syncProject(
+                projectLauncher.syncProjectBlocking(
                     project,
                     shouldSyncVmOptions,
                     shouldSyncConfig,

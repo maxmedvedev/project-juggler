@@ -3,6 +3,9 @@ package com.projectjuggler.core
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.util.ProjectLockUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Waits for an IntelliJ instance to shut down by monitoring its lock file.
@@ -18,12 +21,12 @@ object ShutdownWaiter {
      * @param onProgress Callback for progress updates (seconds elapsed)
      * @return Result indicating success, timeout, or cancellation
      */
-    fun waitForShutdown(
+    suspend fun waitForShutdown(
         configRepository: ConfigRepository,
         projectPath: ProjectPath,
         timeoutSeconds: Int = 60,
         onProgress: (Int) -> Unit = {}
-    ): ShutdownResult {
+    ): ShutdownResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         val timeoutMillis = timeoutSeconds * 1000L
         var lastProgressUpdate = 0
@@ -31,7 +34,7 @@ object ShutdownWaiter {
         while (System.currentTimeMillis() - startTime < timeoutMillis) {
             // Check if lock file still exists
             if (!ProjectLockUtils.isProjectOpen(configRepository, projectPath)) {
-                return ShutdownResult.Success
+                return@withContext ShutdownResult.Success
             }
 
             // Report progress every second
@@ -42,11 +45,11 @@ object ShutdownWaiter {
             }
 
             // Poll every second
-            Thread.sleep(1000)
+            delay(1000)
         }
 
         // Timeout occurred - check if process is actually still running
-        return if (ProjectLockUtils.isProjectOpen(configRepository, projectPath)) {
+        return@withContext if (ProjectLockUtils.isProjectOpen(configRepository, projectPath)) {
             // Check if process is really alive or just stale lock file
             ShutdownResult.Timeout
         } else {
