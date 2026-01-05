@@ -27,6 +27,7 @@ import com.projectjuggler.plugin.ProjectLauncherHelper
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.util.BundledCliManager
+import com.projectjuggler.platform.WindowFocuser
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
 import java.awt.Component
@@ -186,7 +187,7 @@ private class RecentProjectPopupStep(
 
                 when (selectedValue) {
                     ProjectAction.OpenProject ->
-                        ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
+                        launchOrFocusProject(item.projectPath)
                     is ProjectAction.SyncSettings ->
                         syncSingleProjectWithType(item.projectPath, selectedValue.syncType)
                 }
@@ -208,10 +209,101 @@ private class RecentProjectPopupStep(
 
     private fun handleItemSelection(item: PopupListItem) {
         when (item) {
-            is RecentProjectItem -> ProjectLauncherHelper.launchProject(project, configRepository, item.projectPath)
+            is RecentProjectItem -> launchOrFocusProject(item.projectPath)
             is OpenFileChooserItem -> showFileChooserAndLaunch()
             is SyncProjectsItem -> syncAllProjectsWithType(item.syncType)
         }
+    }
+
+    /**
+     * Handles launching or focusing a project based on whether it's already open.
+     * If project is open, attempts to focus the window.
+     * If project is closed, launches it normally.
+     */
+    private fun launchOrFocusProject(projectPath: ProjectPath) {
+        val isOpen = ProjectLockUtils.isProjectOpen(configRepository, projectPath)
+
+        if (isOpen) {
+            // Try to focus the existing window
+            focusExistingProject(projectPath)
+        } else {
+            // Launch new instance
+            ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
+        }
+    }
+
+    /**
+     * Attempts to focus an already-open project window.
+     * Shows error notification if focus fails.
+     */
+    private fun focusExistingProject(projectPath: ProjectPath) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(
+            project,
+            ProjectJugglerBundle.message("progress.focusing.project", projectPath.name),
+            false
+        ) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    // Read PID from lock file
+                    val pid = ProjectLockUtils.readPidFromLock(configRepository, projectPath)
+                    if (pid == null) {
+                        showErrorNotification(
+                            ProjectJugglerBundle.message("notification.error.focus.no.pid", projectPath.name),
+                            project
+                        )
+                        return
+                    }
+
+                    // Verify process is still running
+                    if (!ProjectLockUtils.isProcessRunning(pid)) {
+                        showErrorNotification(
+                            ProjectJugglerBundle.message("notification.error.focus.process.not.found", projectPath.name, pid),
+                            project
+                        )
+                        return
+                    }
+
+                    // Attempt to focus window
+                    when (val result = WindowFocuser.focus(pid)) {
+                        is WindowFocuser.FocusResult.Success -> {
+                            showInfoNotification(
+                                ProjectJugglerBundle.message("notification.success.focused", projectPath.name),
+                                project
+                            )
+                        }
+                        is WindowFocuser.FocusResult.ProcessNotFound -> {
+                            showErrorNotification(
+                                ProjectJugglerBundle.message("notification.error.focus.process.not.found", projectPath.name, result.pid),
+                                project
+                            )
+                        }
+                        is WindowFocuser.FocusResult.WindowNotFound -> {
+                            showErrorNotification(
+                                ProjectJugglerBundle.message("notification.error.focus.window.not.found", projectPath.name),
+                                project
+                            )
+                        }
+                        is WindowFocuser.FocusResult.CommandFailed -> {
+                            showErrorNotification(
+                                ProjectJugglerBundle.message("notification.error.focus.failed", projectPath.name, result.error),
+                                project
+                            )
+                        }
+                        is WindowFocuser.FocusResult.ToolNotInstalled -> {
+                            showErrorNotification(
+                                ProjectJugglerBundle.message("notification.error.focus.tool.missing", result.toolName),
+                                project
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    showErrorNotification(
+                        ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, e.message ?: "Unknown error"),
+                        project
+                    )
+                }
+            }
+        })
     }
 
     private fun syncAllProjectsWithType(syncType: SyncType) {

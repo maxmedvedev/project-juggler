@@ -6,6 +6,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.io.path.exists
 import kotlin.io.path.isRegularFile
+import kotlin.io.path.readText
 
 object ProjectLockUtils {
     /**
@@ -52,5 +53,64 @@ object ProjectLockUtils {
             .resolve("projects")
             .resolve(projectPath.id.id)
             .resolve("config")
+    }
+
+    /**
+     * Reads the process ID (PID) from the project's lock file.
+     * IntelliJ stores the PID as plain text in the .lock file.
+     *
+     * @param configRepository The config repository
+     * @param projectPath The project to check
+     * @return The PID as an integer, or null if lock file doesn't exist or can't be read
+     */
+    fun readPidFromLock(configRepository: ConfigRepository, projectPath: ProjectPath): Int? {
+        try {
+            val configDir = if (isMainProject(configRepository, projectPath)) {
+                getBaseConfigPath(configRepository) ?: return null
+            } else {
+                getIsolatedConfigPath(configRepository, projectPath)
+            }
+
+            val lockFile = configDir.resolve(".lock")
+            if (!lockFile.exists() || !lockFile.isRegularFile()) {
+                return null
+            }
+
+            val content = lockFile.readText().trim()
+            return content.toIntOrNull()
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    /**
+     * Checks if a process with the given PID is currently running.
+     * Uses platform-specific commands to verify process existence.
+     *
+     * @param pid The process ID to check
+     * @return true if the process is running, false otherwise
+     */
+    fun isProcessRunning(pid: Int): Boolean {
+        return try {
+            val osName = System.getProperty("os.name").lowercase()
+            val isWindows = osName.contains("win")
+
+            val process = if (isWindows) {
+                // Windows: Use tasklist to check if PID exists
+                ProcessBuilder("tasklist", "/FI", "PID eq $pid", "/NH")
+                    .redirectErrorStream(true)
+                    .start()
+            } else {
+                // Unix-like (macOS, Linux): Use ps to check if PID exists
+                ProcessBuilder("ps", "-p", pid.toString())
+                    .redirectErrorStream(true)
+                    .start()
+            }
+
+            val exitCode = process.waitFor()
+            exitCode == 0
+        } catch (e: Exception) {
+            false
+        }
     }
 }
