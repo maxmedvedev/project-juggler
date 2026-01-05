@@ -23,11 +23,11 @@ import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.core.SyncProgress
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.ProjectLauncherHelper
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.util.BundledCliManager
 import com.projectjuggler.platform.WindowFocuser
+import com.projectjuggler.plugin.util.IdeJuggler
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
 import java.awt.Component
@@ -228,7 +228,7 @@ private class RecentProjectPopupStep(
             focusExistingProject(projectPath)
         } else {
             // Launch new instance
-            ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
+            IdeJuggler.launchProject(project, configRepository, projectPath)
         }
     }
 
@@ -366,7 +366,7 @@ private class RecentProjectPopupStep(
             return
         }
 
-        ProjectLauncherHelper.launchProject(project, configRepository, projectPath)
+        IdeJuggler.launchProject(project, configRepository, projectPath)
     }
 
     private fun syncSingleProjectWithType(projectPath: ProjectPath, syncType: SyncType) {

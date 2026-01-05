@@ -1,16 +1,18 @@
-package com.projectjuggler.plugin
+package com.projectjuggler.plugin.util
 
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
+import com.intellij.openapi.project.Project
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.MessageOutput
 import com.projectjuggler.core.ProjectLauncher
-import com.intellij.openapi.project.Project
-import com.intellij.util.application
+import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.showErrorNotification
+import com.projectjuggler.plugin.showInfoNotification
 
-internal object ProjectLauncherHelper {
+internal object IdeJuggler {
     /**
      * Launches a project with Project Juggler in a background thread and shows notifications.
      *
@@ -26,7 +28,7 @@ internal object ProjectLauncherHelper {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Launching ${projectPath.name}...") {
             override fun run(indicator: ProgressIndicator) {
                 try {
-                    val launcher = ProjectLauncher.getInstance(configRepository)
+                    val launcher = ProjectLauncher.Companion.getInstance(configRepository)
 
                     // Silent message output for plugin context
                     val messageOutput = object : MessageOutput {
