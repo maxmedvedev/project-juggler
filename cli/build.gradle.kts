@@ -87,15 +87,21 @@ val homebrewDist by tasks.registering(Tar::class) {
         into("bin") {
             from("src/main/resources/project-juggler.sh") {
                 rename { "project-juggler" }
-                fileMode = 0b111101101  // 0755 (executable)
+                filePermissions {
+                    unix(0b111101101)  // 0755 (executable)
+                }
             }
         }
     }
 
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
-    dirMode = 0b111101101  // 0755
-    fileMode = 0b110100100  // 0644 (except overridden for script)
+    dirPermissions {
+        unix(0b111101101)  // 0755
+    }
+    filePermissions {
+        unix(0b110100100)  // 0644 (except overridden for script)
+    }
 }
 
 // Checksum generation task
