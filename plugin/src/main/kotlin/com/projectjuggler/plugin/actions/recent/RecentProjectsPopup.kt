@@ -19,15 +19,11 @@ import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
-import com.projectjuggler.core.ProjectLauncher
-import com.projectjuggler.core.ProjectManager
-import com.projectjuggler.core.SyncOptions
-import com.projectjuggler.core.SyncProgress
+import com.projectjuggler.core.*
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.util.BundledCliManager
-import com.projectjuggler.platform.WindowFocuser
 import com.projectjuggler.plugin.util.IdeJuggler
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
@@ -179,7 +175,8 @@ private class RecentProjectPopupStep(
             ProjectAction.SyncSettings(SyncType.All),
             ProjectAction.SyncSettings(SyncType.VmOptions),
             ProjectAction.SyncSettings(SyncType.Config),
-            ProjectAction.SyncSettings(SyncType.Plugins)
+            ProjectAction.SyncSettings(SyncType.Plugins),
+            ProjectAction.RemoveProject
         )
 
         return object : BaseListPopupStep<ProjectAction>(null, actions) {
@@ -187,12 +184,21 @@ private class RecentProjectPopupStep(
                 if (!finalChoice) return FINAL_CHOICE
 
                 when (selectedValue) {
-                    ProjectAction.OpenProject ->
+                    ProjectAction.OpenProject -> {
                         launchOrFocusProject(item.projectPath)
-                    is ProjectAction.SyncSettings ->
+                        return FINAL_CHOICE
+                    }
+                    is ProjectAction.SyncSettings -> {
                         syncSingleProjectWithType(item.projectPath, selectedValue.syncType)
+                        return FINAL_CHOICE
+                    }
+                    ProjectAction.RemoveProject -> {
+                        removeProject(item.projectPath)
+                        return doFinalStep {
+                            RecentProjectsPopup(project).show()
+                        }
+                    }
                 }
-                return FINAL_CHOICE
             }
 
             override fun getTextFor(value: ProjectAction): String = when (value) {
@@ -204,6 +210,8 @@ private class RecentProjectPopupStep(
                     SyncType.Config -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.config")
                     SyncType.Plugins -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.plugins")
                 }
+                ProjectAction.RemoveProject ->
+                    ProjectJugglerBundle.message("popup.recent.projects.action.remove")
             }
         }
     }
@@ -319,6 +327,17 @@ private class RecentProjectPopupStep(
                 ProjectJugglerBundle.message("notification.error.sync.settings.failed", e.message ?: "")
             }
         )
+    }
+
+    private fun removeProject(projectPath: ProjectPath) {
+        val metadata = ProjectManager.getInstance(configRepository).get(projectPath) ?: return
+
+        // cleaning recent projects eagerly so that we can show a new recent popup right away
+        RecentProjectsIndex.getInstance(configRepository).remove(metadata.id)
+
+        application.executeOnPooledThread {
+            ProjectCleaner.getInstance(configRepository).cleanProject(metadata)
+        }
     }
 
     /**

@@ -23,6 +23,7 @@ sealed class SyncType(val displayName: String) {
 sealed interface ProjectAction {
     object OpenProject : ProjectAction
     data class SyncSettings(val syncType: SyncType) : ProjectAction
+    object RemoveProject : ProjectAction
 }
 
 sealed class PopupListItem

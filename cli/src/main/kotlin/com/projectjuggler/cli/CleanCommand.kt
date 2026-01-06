@@ -5,8 +5,7 @@ import com.projectjuggler.cli.framework.ExitException
 import com.projectjuggler.cli.framework.FlagOption
 import com.projectjuggler.cli.framework.StringOption
 import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.config.RecentProjectsIndex
-import com.projectjuggler.core.DirectoryManager
+import com.projectjuggler.core.ProjectCleaner
 
 class CleanCommand : Command(
     name = "clean",
@@ -52,8 +51,7 @@ class CleanCommand : Command(
         }
 
         // Clean project directories
-        DirectoryManager.getInstance(configRepository).cleanProject(project)
-        RecentProjectsIndex.getInstance(configRepository).remove(project.id)
+        ProjectCleaner.getInstance(configRepository).cleanProject(project)
 
         echo("Successfully cleaned project: ${project.name}")
     }
