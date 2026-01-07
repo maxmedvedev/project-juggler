@@ -42,13 +42,6 @@ internal object IdeJuggler {
                     }
 
                     launcher.launch(messageOutput, projectPath)
-
-                    showInfoNotification(
-                        ProjectJugglerBundle.message(
-                            "notification.success.launched",
-                            projectPath.name
-                        ), project
-                    )
                 } catch (ex: Exception) {
                     showErrorNotification(
                         ProjectJugglerBundle.message(
@@ -99,12 +92,7 @@ internal object IdeJuggler {
 
                     // Attempt to focus window
                     when (val result = WindowFocuser.focus(pid)) {
-                        is WindowFocuser.FocusResult.Success -> {
-                            showInfoNotification(
-                                ProjectJugglerBundle.message("notification.success.focused", projectPath.name),
-                                project
-                            )
-                        }
+                        is WindowFocuser.FocusResult.Success -> {}
                         is WindowFocuser.FocusResult.ProcessNotFound -> {
                             showErrorNotification(
                                 ProjectJugglerBundle.message("notification.error.focus.process.not.found", projectPath.name, result.pid),
