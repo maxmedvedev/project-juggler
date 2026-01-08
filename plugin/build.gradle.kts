@@ -17,14 +17,14 @@ repositories {
 dependencies {
     implementation(project(":core"))
     intellijPlatform {
-        intellijIdea("2025.3.1")
+        intellijIdea("2025.1.1")
     }
 }
 
 tasks {
     patchPluginXml {
         pluginVersion.set(project.version.toString())
-        sinceBuild.set("253")
+        sinceBuild.set("251")
         untilBuild.set("261.*")
     }
 

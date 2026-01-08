@@ -18,10 +18,9 @@ import java.awt.BorderLayout.WEST
 import java.awt.Component
 import java.io.File
 import javax.swing.*
-import javax.swing.BoxLayout
 import javax.swing.BoxLayout.Y_AXIS
-import javax.swing.SwingConstants
 import javax.swing.SwingConstants.TOP
+import kotlin.io.path.absolutePathString
 
 internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
     private val recentProjectsManager = RecentProjectsManager.getInstance() as RecentProjectsManagerBase
@@ -55,7 +54,7 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         panel.border = empty(4, 6)
 
         // Get project icon using IntelliJ's icon helper
-        var projectIcon = recentProjectsManager.getProjectIcon(path.path, true)
+        var projectIcon = recentProjectsManager.getProjectIcon(path.path.absolutePathString(), true)
 
         // Add green dot badge if project is currently open
         if (value.isOpen) {
