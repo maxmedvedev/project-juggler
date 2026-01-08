@@ -7,7 +7,7 @@
         Allows opening any project in a new IntelliJ IDEA instance with an isolated configuration.
         It helps keep your IDE caches clean and free of unnecessary stuff.<br>
         <br>
-        Use `Cmd+Shift+P`/`Ctrl+Shift+P` to open the Project Juggler dialog ("Recent Projects with Project Juggler" action).<br>
+        Use `Cmd+Shift+P`/`Ctrl+Shift+P` to open the Recent Juggled Projects ("Recent Juggled Projects" action).<br>
         Use "Browse..." to open a new project.<br>
         Use recent project items to reopen a project or switch to an already opened project.<br>
         <br>
