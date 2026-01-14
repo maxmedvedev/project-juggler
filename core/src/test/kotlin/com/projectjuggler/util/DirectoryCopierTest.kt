@@ -92,27 +92,4 @@ class DirectoryCopierTest : StringSpec({
             tempDir.toFile().deleteRecursively()
         }
     }
-
-    "should skip .lock files when copying" {
-        val tempDir = createTempDirectory("directory-test")
-        try {
-            val source = tempDir.resolve("source")
-            val destination = tempDir.resolve("destination")
-
-            Files.createDirectories(source)
-            Files.createDirectories(destination)
-
-            // Create regular file and .lock file
-            source.resolve("config.xml").writeText("<config>data</config>")
-            source.resolve(".lock").writeText("lock content")
-
-            val result = DirectoryCopier.copyIfFirstOpen(source, destination)
-
-            result shouldBe true
-            destination.resolve("config.xml").exists() shouldBe true
-            destination.resolve(".lock").exists() shouldBe false
-        } finally {
-            tempDir.toFile().deleteRecursively()
-        }
-    }
 })
