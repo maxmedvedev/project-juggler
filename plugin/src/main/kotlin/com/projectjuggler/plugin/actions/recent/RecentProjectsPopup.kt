@@ -8,6 +8,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.popup.list.ListPopupImpl
@@ -25,6 +26,7 @@ import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.util.BundledCliManager
 import com.projectjuggler.plugin.util.IdeJuggler
+import com.projectjuggler.plugin.services.MainProjectService
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
 import java.awt.Component
@@ -176,6 +178,7 @@ private class RecentProjectPopupStep(
             ProjectAction.SyncSettings(SyncType.VmOptions),
             ProjectAction.SyncSettings(SyncType.Config),
             ProjectAction.SyncSettings(SyncType.Plugins),
+            ProjectAction.ToggleMainProject,
             ProjectAction.RemoveProject
         )
 
@@ -190,6 +193,10 @@ private class RecentProjectPopupStep(
                     }
                     is ProjectAction.SyncSettings -> {
                         syncSingleProjectWithType(item.projectPath, selectedValue.syncType)
+                        return FINAL_CHOICE
+                    }
+                    ProjectAction.ToggleMainProject -> {
+                        toggleMainProject(item.projectPath)
                         return FINAL_CHOICE
                     }
                     ProjectAction.RemoveProject -> {
@@ -209,6 +216,11 @@ private class RecentProjectPopupStep(
                     SyncType.VmOptions -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.vmoptions")
                     SyncType.Config -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.config")
                     SyncType.Plugins -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.plugins")
+                }
+                ProjectAction.ToggleMainProject -> {
+                    val isMain = MainProjectService.isMainProject(configRepository, item.projectPath)
+                    if (isMain) ProjectJugglerBundle.message("popup.recent.projects.action.unset.main")
+                    else ProjectJugglerBundle.message("popup.recent.projects.action.set.main")
                 }
                 ProjectAction.RemoveProject ->
                     ProjectJugglerBundle.message("popup.recent.projects.action.remove")
@@ -337,6 +349,47 @@ private class RecentProjectPopupStep(
 
         application.executeOnPooledThread {
             ProjectCleaner.getInstance(configRepository).cleanProject(metadata)
+        }
+    }
+
+    private fun toggleMainProject(projectPath: ProjectPath) {
+        val isMain = MainProjectService.isMainProject(configRepository, projectPath)
+        application.invokeLater {
+            val message = if (isMain) {
+                ProjectJugglerBundle.message("dialog.confirm.unset.main.message", projectPath.name)
+            } else {
+                ProjectJugglerBundle.message("dialog.confirm.set.main.message", projectPath.name)
+            }
+            val title = if (isMain) {
+                ProjectJugglerBundle.message("dialog.confirm.unset.main.title")
+            } else {
+                ProjectJugglerBundle.message("dialog.confirm.set.main.title")
+            }
+
+            val result = Messages.showOkCancelDialog(
+                project,
+                message,
+                title,
+                Messages.getOkButton(),
+                Messages.getCancelButton(),
+                Messages.getQuestionIcon()
+            )
+
+            if (result == Messages.OK) {
+                if (isMain) {
+                    MainProjectService.clearMainProject(configRepository)
+                    showInfoNotification(
+                        ProjectJugglerBundle.message("notification.success.unset.main"),
+                        project
+                    )
+                } else {
+                    MainProjectService.setMainProject(configRepository, projectPath)
+                    showInfoNotification(
+                        ProjectJugglerBundle.message("notification.success.set.main", projectPath.name),
+                        project
+                    )
+                }
+            }
         }
     }
 

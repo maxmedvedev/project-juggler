@@ -24,6 +24,7 @@ sealed interface ProjectAction {
     object OpenProject : ProjectAction
     data class SyncSettings(val syncType: SyncType) : ProjectAction
     object RemoveProject : ProjectAction
+    object ToggleMainProject : ProjectAction
 }
 
 sealed class PopupListItem

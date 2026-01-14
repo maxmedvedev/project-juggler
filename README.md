@@ -9,8 +9,10 @@ A Kotlin-based CLI tool that manages separate IntelliJ IDEA instances per projec
 - **Auto-Detection**: Automatically detects VM options, IntelliJ config and plugins directories
 - **Sync Command**: Explicitly synchronize project settings (VM options, config, plugins) from base
 - **Recent Projects**: Quick access to recently opened projects with interactive selection
+- **Main Project**: Designate a project as "main" to open it with base settings (no isolation)
 - **Cross-Platform**: Supports macOS, Linux, and Windows
 - **Zero Dependencies**: Lightweight custom CLI framework with no external dependencies (except Kotlin stdlib)
+- **IntelliJ Plugin**: IDE integration with recent projects popup, sync actions, and main project management
 
 ## Installation
 
