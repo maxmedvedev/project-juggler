@@ -12,6 +12,7 @@ out/
 .intellijPlatform/
 # macOS
 .DS_Store
+.kotlin
 
 # Kotlin
 *.kotlin_module
