@@ -22,9 +22,9 @@ sealed class SyncType(val displayName: String) {
  */
 sealed interface ProjectAction {
     object OpenProject : ProjectAction
+    object ToggleMainProject : ProjectAction
     data class SyncSettings(val syncType: SyncType) : ProjectAction
     object RemoveProject : ProjectAction
-    object ToggleMainProject : ProjectAction
 }
 
 sealed class PopupListItem
@@ -33,6 +33,7 @@ data class RecentProjectItem(
     val projectPath: ProjectPath,
     val gitBranch: String?, // null if not a git repo or error occurred
     val isOpen: Boolean = false, // true if project has running instance
+    val isMainProject: Boolean = false, // true if this is the configured main project
 ) : PopupListItem()
 
 object OpenFileChooserItem : PopupListItem()

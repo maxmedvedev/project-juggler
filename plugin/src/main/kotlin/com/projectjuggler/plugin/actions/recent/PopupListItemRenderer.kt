@@ -12,6 +12,7 @@ import com.intellij.util.ui.JBUI.Borders.empty
 import com.intellij.util.ui.UIUtil
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.icons.ProjectJugglerIcons
 import java.awt.BorderLayout
 import java.awt.BorderLayout.CENTER
 import java.awt.BorderLayout.WEST
@@ -19,7 +20,6 @@ import java.awt.Component
 import java.io.File
 import javax.swing.*
 import javax.swing.BoxLayout.Y_AXIS
-import javax.swing.SwingConstants.TOP
 import kotlin.io.path.absolutePathString
 
 internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
@@ -62,10 +62,25 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
             projectIcon = IconManager.getInstance().withIconBadge(projectIcon, greenColor)
         }
 
-        val iconLabel = JLabel(projectIcon)
-        iconLabel.verticalAlignment = TOP
-        iconLabel.border = empty(2, 0, 0, 8)
-        panel.add(iconLabel, WEST)
+        // Icon panel containing project icon and optional star icon below
+        val iconPanel = JPanel()
+        iconPanel.layout = BoxLayout(iconPanel, Y_AXIS)
+        iconPanel.isOpaque = false
+        iconPanel.border = empty(2, 0, 0, 8)
+
+        val projectIconLabel = JLabel(projectIcon)
+        projectIconLabel.alignmentX = JLabel.CENTER_ALIGNMENT
+        iconPanel.add(projectIconLabel)
+
+        // Add star icon below project icon if this is the main project
+        if (value.isMainProject) {
+            val starLabel = JLabel(ProjectJugglerIcons.MainProjectStar)
+            starLabel.alignmentX = JLabel.CENTER_ALIGNMENT
+            starLabel.border = JBUI.Borders.emptyTop(2)
+            iconPanel.add(starLabel)
+        }
+
+        panel.add(iconPanel, WEST)
 
         // Content panel with multiple lines
         val contentPanel = JPanel()

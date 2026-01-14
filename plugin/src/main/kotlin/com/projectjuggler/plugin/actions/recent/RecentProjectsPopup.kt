@@ -90,7 +90,7 @@ internal class RecentProjectsPopup(
         val path = ProjectPath(mainProjectPathStr)
         val gitBranch = GitUtils.detectGitBranch(path.path)
         val isOpen = detectIfProjectOpen(configRepository, path)
-        return RecentProjectItem(path, gitBranch, isOpen)
+        return RecentProjectItem(path, gitBranch, isOpen, isMainProject = true)
     }
 
     private fun createRecentProjectItem(
@@ -99,7 +99,8 @@ internal class RecentProjectsPopup(
     ): RecentProjectItem {
         val gitBranch = GitUtils.detectGitBranch(metadata.path.path)
         val isOpen = detectIfProjectOpen(configRepository, metadata.path)
-        return RecentProjectItem(metadata.path, gitBranch, isOpen)
+        val isMainProject = MainProjectService.isMainProject(configRepository, metadata.path)
+        return RecentProjectItem(metadata.path, gitBranch, isOpen, isMainProject)
     }
 
     private fun detectIfProjectOpen(configRepository: ConfigRepository, projectPath: ProjectPath): Boolean {
@@ -174,11 +175,11 @@ private class RecentProjectPopupStep(
     private fun createProjectSubmenu(item: RecentProjectItem): PopupStep<ProjectAction> {
         val actions = listOf(
             ProjectAction.OpenProject,
+            ProjectAction.ToggleMainProject,
             ProjectAction.SyncSettings(SyncType.All),
             ProjectAction.SyncSettings(SyncType.VmOptions),
             ProjectAction.SyncSettings(SyncType.Config),
             ProjectAction.SyncSettings(SyncType.Plugins),
-            ProjectAction.ToggleMainProject,
             ProjectAction.RemoveProject
         )
 
