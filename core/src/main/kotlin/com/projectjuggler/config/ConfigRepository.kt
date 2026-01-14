@@ -41,6 +41,8 @@ class ConfigRepository(val baseDir: Path) {
         save(updated)
     }
 
+    fun getConfigFile(): Path = configFile
+
     fun saveProjectMetadata(metadata: ProjectMetadata) {
         val projectDir = projectsDir.resolve(metadata.id)
         val metadataFile = projectDir.resolve("metadata.json")
