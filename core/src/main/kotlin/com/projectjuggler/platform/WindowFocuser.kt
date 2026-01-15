@@ -107,7 +107,7 @@ object WindowFocuser {
             // First, find window ID for the given PID
             val findProcess = ProcessBuilder(
                 "sh", "-c",
-                "wmctrl -l -p | grep '\\s$pid\\s' | head -n 1 | awk '{print \$1}'"
+                "wmctrl -l -p | grep '\\s$pid\\s' | head -n 1 | awk '{print $1}'"
             )
                 .redirectErrorStream(true)
                 .start()
@@ -235,9 +235,7 @@ object WindowFocuser {
                     .start()
 
                 val output = process.inputStream.bufferedReader().readText()
-                val exitCode = process.waitFor()
-
-                when (exitCode) {
+                when (val exitCode = process.waitFor()) {
                     0 -> FocusResult.Success
                     1 -> FocusResult.WindowNotFound(pid)
                     else -> FocusResult.CommandFailed(output.trim().ifEmpty { "PowerShell failed with exit code $exitCode" })
