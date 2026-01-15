@@ -115,7 +115,7 @@ object BundledSyncHelper {
         val jarPath = resourceUrl.toString().substringAfter("jar:file:").substringBefore("!")
         val jarFile = java.util.jar.JarFile(jarPath)
 
-        try {
+        jarFile.use {
             val entries = jarFile.entries()
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
@@ -138,8 +138,6 @@ object BundledSyncHelper {
                     }
                 }
             }
-        } finally {
-            jarFile.close()
         }
     }
 
