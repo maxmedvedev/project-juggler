@@ -8,7 +8,6 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.application
 import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.core.MessageOutput
 import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
@@ -95,12 +94,7 @@ internal class OpenProjectCopyAction : AnAction() {
 
                 // Launch the worktree
                 val launcher = ProjectLauncher.getInstance(configRepository)
-                val messageOutput = object : MessageOutput {
-                    override fun echo(message: String) {
-                        // Suppress console output in plugin context
-                    }
-                }
-                launcher.launch(messageOutput, destPath)
+                launcher.launch(destPath)
 
                 showInfoNotification(ProjectJugglerBundle.message(
                         "notification.success.worktree.launched",

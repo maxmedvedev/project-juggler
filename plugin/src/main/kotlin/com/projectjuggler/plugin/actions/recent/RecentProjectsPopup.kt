@@ -24,7 +24,7 @@ import com.projectjuggler.core.*
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
-import com.projectjuggler.plugin.util.BundledCliManager
+import com.projectjuggler.plugin.util.BundledSyncHelper
 import com.projectjuggler.plugin.util.IdeJuggler
 import com.projectjuggler.plugin.services.MainProjectService
 import com.projectjuggler.util.GitUtils
@@ -287,12 +287,12 @@ private class RecentProjectPopupStep(
 
     /**
      * Handles syncing all projects when current project is in the list.
-     * Spawns CLI with --all-projects and shuts down.
+     * Spawns sync-helper with --all-projects and shuts down.
      */
     private fun handleSelfShutdownSyncAll(syncType: SyncType) {
         performSelfShutdownSync(
             notificationMessage = "IntelliJ will close to sync all projects and reopen automatically...",
-            cliArgs = listOf("sync", "--all-projects"),
+            helperArgs = listOf("--all-projects"),
             syncType = syncType
         )
     }
@@ -464,44 +464,44 @@ private class RecentProjectPopupStep(
     }
 
     /**
-     * Handles syncing the current project by spawning CLI and shutting down.
+     * Handles syncing the current project by spawning sync-helper and shutting down.
      */
     private fun handleSelfShutdownSync(projectPath: ProjectPath, syncType: SyncType) {
         performSelfShutdownSync(
             notificationMessage = "IntelliJ will close to sync ${syncType.displayName} and reopen automatically...",
-            cliArgs = listOf("sync", "--path", projectPath.pathString),
+            helperArgs = listOf("--path", projectPath.pathString),
             syncType = syncType
         )
     }
 
     /**
      * Common logic for self-shutdown sync operations.
-     * Spawns CLI process and exits IntelliJ gracefully.
+     * Spawns sync-helper process and exits IntelliJ gracefully.
      */
     private fun performSelfShutdownSync(
         notificationMessage: String,
-        cliArgs: List<String>,
+        helperArgs: List<String>,
         syncType: SyncType
     ) {
         try {
             showInfoNotification(notificationMessage, project)
 
-            // Get bundled CLI executable
-            val cliExecutable = BundledCliManager.getCliExecutable()
+            // Get bundled sync-helper executable
+            val executable = BundledSyncHelper.getExecutable()
 
-            val arg = when(syncType) {
+            val syncArg = when(syncType) {
                 SyncType.All -> "--all"
                 SyncType.VmOptions -> "--vmoptions"
                 SyncType.Config -> "--config"
                 SyncType.Plugins -> "--plugins"
             }
 
-            // Spawn CLI process
-            ProcessBuilder(cliExecutable.toString(), *(cliArgs + arg).toTypedArray())
+            // Spawn sync-helper process
+            ProcessBuilder(executable.toString(), *(helperArgs + syncArg).toTypedArray())
                 .inheritIO()
                 .start()
 
-            // Wait briefly to ensure CLI started
+            // Wait briefly to ensure sync-helper started
             Thread.sleep(100)
 
             // Exit IntelliJ

@@ -7,12 +7,10 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.core.MessageOutput
 import com.projectjuggler.core.ProjectLauncher
 import com.projectjuggler.platform.WindowFocuser
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.showErrorNotification
-import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.util.ProjectLockUtils
 
 internal object IdeJuggler {
@@ -32,16 +30,7 @@ internal object IdeJuggler {
             override fun run(indicator: ProgressIndicator) {
                 try {
                     val launcher = ProjectLauncher.getInstance(configRepository)
-
-                    // Silent message output for plugin context
-                    val messageOutput = object : MessageOutput {
-                        override fun echo(message: String) {
-                            // Suppress console output in plugin context
-                            // Notifications are handled separately
-                        }
-                    }
-
-                    launcher.launch(messageOutput, projectPath)
+                    launcher.launch(projectPath)
                 } catch (ex: Exception) {
                     showErrorNotification(
                         ProjectJugglerBundle.message(

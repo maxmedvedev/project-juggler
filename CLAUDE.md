@@ -8,8 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew build              # Build all modules
 ./gradlew test               # Run all tests
 ./gradlew :plugin:compileKotlin  # Quick compile check for plugin
-./gradlew :cli:homebrewDist  # Create Homebrew distribution tarball
-./gradlew :cli:homebrewChecksum  # Generate SHA256 for Homebrew formula
 ./gradlew :plugin:buildPlugin    # Build IntelliJ plugin
 ```
 
@@ -28,16 +26,15 @@ Run a single test class:
   - `platform/` - OS-specific code (IntelliJLocator, ConfigLocator, ProcessLauncher)
   - `util/` - Utilities (GitUtils, DirectoryCopier, PathUtils)
 
-- **cli/** - Command-line interface
-  - `framework/` - Custom lightweight CLI framework (~300 lines, no external deps)
-  - Commands: OpenCommand, MainCommand, SyncCommand, ConfigCommand, etc.
-  - Entry point: `Main.kt`
+- **sync-helper/** - Minimal sync utility for self-shutdown sync operations
+  - Called by the plugin when syncing the currently running IDE
+  - Single `Main.kt` entry point that calls `ProjectLauncher.syncProject()`
 
 - **plugin/** - IntelliJ IDEA plugin (targets 2025.1+)
   - `actions/recent/` - RecentProjectsPopup with custom renderer and submenu actions
   - `services/` - MainProjectService, ShutdownSignalService, AutoConfigPopulator
-  - `util/` - IdeJuggler (project launching), BundledCliManager
-  - Bundles CLI distribution in resources for self-shutdown sync operations
+  - `util/` - IdeJuggler (project launching), BundledSyncHelper
+  - Bundles sync-helper distribution in resources for self-shutdown sync operations
 
 **Key patterns:**
 - Constructor-based dependency injection (no DI framework)

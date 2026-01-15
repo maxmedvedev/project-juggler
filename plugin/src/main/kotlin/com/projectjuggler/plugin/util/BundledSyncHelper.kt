@@ -9,37 +9,37 @@ import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
 /**
- * Manages extraction and execution of the bundled CLI distribution.
+ * Manages extraction and execution of the bundled sync-helper distribution.
  */
-object BundledCliManager {
+object BundledSyncHelper {
 
-    private val log = logger<BundledCliManager>()
-    private var cachedCliPath: Path? = null
+    private val log = logger<BundledSyncHelper>()
+    private var cachedExecutablePath: Path? = null
 
     /**
-     * Gets the path to the CLI executable.
-     * Extracts the bundled CLI on first use and caches the location.
+     * Gets the path to the sync-helper executable.
+     * Extracts the bundled distribution on first use and caches the location.
      *
-     * @return Path to the project-juggler CLI executable
-     * @throws IllegalStateException if CLI cannot be extracted or found
+     * @return Path to the sync-helper executable
+     * @throws IllegalStateException if sync-helper cannot be extracted or found
      */
-    fun getCliExecutable(): Path {
+    fun getExecutable(): Path {
         // Return cached if available and still valid
-        cachedCliPath?.let {
+        cachedExecutablePath?.let {
             if (it.exists()) {
                 return it
             }
         }
 
-        // Extract bundled CLI to temp directory
-        val cliDir = extractBundledCli()
+        // Extract bundled sync-helper to temp directory
+        val helperDir = extractBundledSyncHelper()
         val executable = when (Platform.current()) {
-            Platform.WINDOWS -> cliDir.resolve("bin/project-juggler.bat")
-            else -> cliDir.resolve("bin/project-juggler")
+            Platform.WINDOWS -> helperDir.resolve("bin/sync-helper.bat")
+            else -> helperDir.resolve("bin/sync-helper")
         }
 
         if (!executable.exists()) {
-            throw IllegalStateException("CLI executable not found at: $executable")
+            throw IllegalStateException("sync-helper executable not found at: $executable")
         }
 
         // Make executable on Unix
@@ -47,32 +47,32 @@ object BundledCliManager {
             try {
                 executable.toFile().setExecutable(true)
             } catch (e: Exception) {
-                log.warn("Failed to make CLI executable", e)
+                log.warn("Failed to make sync-helper executable", e)
             }
         }
 
-        cachedCliPath = executable
-        log.info("CLI executable located at: $executable")
+        cachedExecutablePath = executable
+        log.info("sync-helper executable located at: $executable")
         return executable
     }
 
     /**
-     * Extracts the bundled CLI distribution from plugin resources to a temp directory.
+     * Extracts the bundled sync-helper distribution from plugin resources to a temp directory.
      *
-     * @return Path to the extracted CLI directory
+     * @return Path to the extracted sync-helper directory
      */
-    private fun extractBundledCli(): Path {
+    private fun extractBundledSyncHelper(): Path {
         // Create temp directory for extraction
-        val tempDir = Files.createTempDirectory("project-juggler-cli-")
-        log.info("Extracting bundled CLI to: $tempDir")
+        val tempDir = Files.createTempDirectory("sync-helper-")
+        log.info("Extracting bundled sync-helper to: $tempDir")
 
         try {
             // Get classloader to access bundled resources
             val classLoader = this.javaClass.classLoader
 
-            // The CLI distribution is bundled under project-juggler-cli/
-            // Structure: project-juggler-cli/bin/, project-juggler-cli/lib/
-            val resourceBasePath = "project-juggler-cli"
+            // The sync-helper distribution is bundled under sync-helper/
+            // Structure: sync-helper/bin/, sync-helper/lib/
+            val resourceBasePath = "sync-helper"
 
             // Extract bin directory
             extractDirectory(classLoader, "$resourceBasePath/bin", tempDir.resolve("bin"))
@@ -82,8 +82,8 @@ object BundledCliManager {
 
             return tempDir
         } catch (e: Exception) {
-            log.error("Failed to extract bundled CLI", e)
-            throw IllegalStateException("Failed to extract bundled CLI distribution", e)
+            log.error("Failed to extract bundled sync-helper", e)
+            throw IllegalStateException("Failed to extract bundled sync-helper distribution", e)
         }
     }
 

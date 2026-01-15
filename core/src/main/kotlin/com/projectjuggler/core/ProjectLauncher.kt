@@ -32,20 +32,15 @@ class ProjectLauncher(
     /**
      * Launch a project by ID and path (for when ID is already known)
      */
-    fun launch(
-        messageOutput: MessageOutput,
-        projectPath: ProjectPath,
-    ) {
+    fun launch(projectPath: ProjectPath) {
         // Check if this is the main project
         if (isMainProject(projectPath)) {
-            messageOutput.echo("Opening main project: ${projectPath.name}")
             intellijLauncher.launchMain(projectPath.path)
             return
         }
 
         // For isolated projects: check if base VM options changed
         if (baseVMOptionsTracker.hasChanged()) {
-            messageOutput.echo("Note: Base VM options have changed. Use 'project-juggler sync <project>' to update project settings.")
             baseVMOptionsTracker.updateHash()
         }
 

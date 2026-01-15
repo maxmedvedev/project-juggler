@@ -1,5 +1,5 @@
 rootProject.name = "project-juggler"
 
 include("core")
-include("cli")
+include("sync-helper")
 include("plugin")

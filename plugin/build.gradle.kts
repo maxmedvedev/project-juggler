@@ -28,13 +28,13 @@ tasks {
         untilBuild.set("261.*")
     }
 
-    // Bundle CLI distribution with the plugin
+    // Bundle sync-helper distribution with the plugin
     processResources {
-        dependsOn(":cli:installDist")
+        dependsOn(":sync-helper:installDist")
 
-        // Copy CLI distribution into plugin resources
-        from(project(":cli").layout.buildDirectory.dir("install/cli")) {
-            into("project-juggler-cli")
+        // Copy sync-helper distribution into plugin resources
+        from(project(":sync-helper").layout.buildDirectory.dir("install/sync-helper")) {
+            into("sync-helper")
         }
     }
 }
