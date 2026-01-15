@@ -28,17 +28,7 @@ object ConfigLocator {
             return emptyList()
         }
 
-        return try {
-            Files.list(baseDir).use { stream ->
-                stream
-                    .filter { it.fileName.toString().startsWith("IntelliJIdea") }
-                    .filter { Files.exists(it) && Files.isDirectory(it) }
-                    .toList()
-                    .sortedByDescending { it.fileName.toString() } // Latest version first
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return getCandidates(baseDir)
     }
 
     private fun getLinuxCandidates(): List<Path> {
@@ -49,17 +39,7 @@ object ConfigLocator {
             return emptyList()
         }
 
-        return try {
-            Files.list(baseDir).use { stream ->
-                stream
-                    .filter { it.fileName.toString().startsWith("IntelliJIdea") }
-                    .filter { Files.exists(it) && Files.isDirectory(it) }
-                    .toList()
-                    .sortedByDescending { it.fileName.toString() }
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return getCandidates(baseDir)
     }
 
     private fun getWindowsCandidates(): List<Path> {
@@ -71,6 +51,10 @@ object ConfigLocator {
             return emptyList()
         }
 
+        return getCandidates(baseDir)
+    }
+
+    private fun getCandidates(baseDir: Path): List<Path> {
         return try {
             Files.list(baseDir).use { stream ->
                 stream
