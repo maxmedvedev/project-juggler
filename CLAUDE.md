@@ -56,3 +56,9 @@ Uses Kotest + MockK. Tests are in `src/test/kotlin/` mirroring main structure. C
 - **Always deduplicate code** - Extract shared logic into reusable functions or classes
 - **Actions must not contain business logic** - Keep action/command classes thin; implement business logic in separate service objects (e.g., MainProjectService, IdeJuggler)
 - **Always use planning mode** - Work on all tasks in planning mode first before implementing
+
+## MCP
+
+**NEVER use these tools:** `Grep`, `Glob`, `Read`, `Edit`, `Write`, `Task(Explore)`.
+**ALWAYS use JetBrains MCP equivalents instead.**
+
