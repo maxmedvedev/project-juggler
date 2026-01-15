@@ -1,6 +1,6 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.util.PathUtils
@@ -8,12 +8,12 @@ import java.nio.file.Path
 import java.time.Instant
 import kotlin.io.path.exists
 
-class ProjectManager(
-    private val configRepository: ConfigRepository,
+class ProjectManager private constructor(
+    private val ideConfigRepository: IdeConfigRepository,
 ) {
 
     fun registerOrUpdate(projectPath: ProjectPath): ProjectMetadata {
-        val existing = configRepository.loadProjectMetadata(projectPath)
+        val existing = ideConfigRepository.loadProjectMetadata(projectPath)
 
         val metadata = ProjectMetadata(
             path = projectPath,
@@ -22,7 +22,7 @@ class ProjectManager(
             debugPort = existing?.debugPort  // Preserve existing debug port
         )
 
-        configRepository.saveProjectMetadata(metadata)
+        ideConfigRepository.saveProjectMetadata(metadata)
         return metadata
     }
 
@@ -44,22 +44,22 @@ class ProjectManager(
 
         // Update metadata with new port
         val updated = project.copy(debugPort = newPort)
-        configRepository.saveProjectMetadata(updated)
+        ideConfigRepository.saveProjectMetadata(updated)
 
         return newPort
     }
 
     fun listAll(): List<ProjectMetadata> {
-        return configRepository.loadAllProjects().sortedByDescending { it.lastOpened }
+        return ideConfigRepository.loadAllProjects().sortedByDescending { it.lastOpened }
     }
 
     fun remove(projectId: ProjectPath) {
-        configRepository.deleteProjectMetadata(projectId)
+        ideConfigRepository.deleteProjectMetadata(projectId)
     }
 
     // todo inline
     fun get(projectId: ProjectPath): ProjectMetadata? {
-        return configRepository.loadProjectMetadata(projectId)
+        return ideConfigRepository.loadProjectMetadata(projectId)
     }
 
     /**
@@ -91,6 +91,7 @@ class ProjectManager(
     }
 
     companion object {
-        fun getInstance(configRepository: ConfigRepository) = ProjectManager(configRepository)
+        fun getInstance(ideConfigRepository: IdeConfigRepository) = ProjectManager(ideConfigRepository)
+
     }
 }

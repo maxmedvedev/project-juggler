@@ -1,7 +1,8 @@
 package com.projectjuggler
 
-import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.config.GlobalConfig
+import com.projectjuggler.config.IdeConfig
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.core.*
@@ -27,21 +28,23 @@ class IntegrationTest : StringSpec({
             baseVmOptions.writeText("-Xms256m\n-Xmx2048m")
 
             // Initialize all components
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
-            val directoryManager = DirectoryManager.getInstance(configRepository)
-            val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(configRepository)
-            val recentProjectsIndex = RecentProjectsIndex.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
+            val directoryManager = DirectoryManager.getInstance(ideConfigRepository)
+            val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
+            val recentProjectsIndex = RecentProjectsIndex.getInstance(ideConfigRepository)
 
             // Step 1: Configure base VM options
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = baseVmOptions.toString()
                 )
             )
             baseVMOptionsTracker.updateHash()
 
-            val config = configRepository.load()
+            val config = ideConfigRepository.load()
             config.baseVmOptionsPath shouldBe baseVmOptions.toString()
             config.baseVmOptionsHash shouldNotBe null
 
@@ -122,13 +125,14 @@ class IntegrationTest : StringSpec({
         try {
             baseVmOptions.writeText("-Xms256m\n-Xmx2048m")
 
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
-            val directoryManager = DirectoryManager.getInstance(configRepository)
-            val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
+            val directoryManager = DirectoryManager.getInstance(ideConfigRepository)
+            val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // Configure and setup two projects
-            configRepository.save(GlobalConfig(baseVmOptionsPath = baseVmOptions.toString()))
+            ideConfigRepository.save(IdeConfig(installation = testInstallation, baseVmOptionsPath = baseVmOptions.toString()))
             baseVMOptionsTracker.updateHash()
 
             val projectPath1 = ProjectPath(projectDir1.toString())
@@ -215,9 +219,10 @@ class IntegrationTest : StringSpec({
         val projectDir3 = createTempDirectory("project-gamma")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
-            val directoryManager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
+            val directoryManager = DirectoryManager.getInstance(ideConfigRepository)
 
             // Create three projects
             val projectPath1 = ProjectPath(projectDir1.toString())

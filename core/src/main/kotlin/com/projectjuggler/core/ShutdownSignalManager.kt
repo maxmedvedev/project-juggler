@@ -1,6 +1,6 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -17,7 +17,7 @@ import kotlin.io.path.writeText
 /**
  * Manages shutdown signal files for coordinating IntelliJ instance shutdowns during sync.
  */
-class ShutdownSignalManager(private val configRepository: ConfigRepository) {
+class ShutdownSignalManager private constructor(private val configRepository: IdeConfigRepository) {
 
     private val json = Json {
         prettyPrint = true
@@ -146,6 +146,11 @@ class ShutdownSignalManager(private val configRepository: ConfigRepository) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    companion object {
+        fun getInstance(ideConfigRepository: IdeConfigRepository) =
+            ShutdownSignalManager(ideConfigRepository)
     }
 }
 

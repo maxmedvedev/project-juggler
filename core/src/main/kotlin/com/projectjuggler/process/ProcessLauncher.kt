@@ -1,5 +1,6 @@
-package com.projectjuggler.platform
+package com.projectjuggler.process
 
+import com.projectjuggler.platform.Platform
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 

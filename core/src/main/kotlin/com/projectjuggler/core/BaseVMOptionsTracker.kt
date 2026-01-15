@@ -1,14 +1,15 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.util.HashUtils
 import java.nio.file.Path
 import kotlin.io.path.exists
 
-class BaseVMOptionsTracker(private val configRepository: ConfigRepository) {
-
+class BaseVMOptionsTracker private constructor(
+    private val ideConfigRepository: IdeConfigRepository
+) {
     fun hasChanged(): Boolean {
-        val config = configRepository.load()
+        val config = ideConfigRepository.load()
         val baseVmOptionsPath = config.baseVmOptionsPath ?: return false
         val basePath = Path.of(baseVmOptionsPath)
 
@@ -23,7 +24,7 @@ class BaseVMOptionsTracker(private val configRepository: ConfigRepository) {
     }
 
     fun updateHash() {
-        val config = configRepository.load()
+        val config = ideConfigRepository.load()
         val baseVmOptionsPath = config.baseVmOptionsPath ?: return
         val basePath = Path.of(baseVmOptionsPath)
 
@@ -32,17 +33,20 @@ class BaseVMOptionsTracker(private val configRepository: ConfigRepository) {
         }
 
         val currentHash = HashUtils.calculateFileHash(basePath)
-        configRepository.update { it.copy(baseVmOptionsHash = currentHash) }
+        ideConfigRepository.update {
+            it.copy(baseVmOptionsHash = currentHash)
+        }
     }
 
     fun getBaseVmOptionsPath(): Path? {
-        val config = configRepository.load()
+        val config = ideConfigRepository.load()
         val pathString = config.baseVmOptionsPath ?: return null
         val path = Path.of(pathString)
         return if (path.exists()) path else null
     }
 
     companion object {
-        fun getInstance(configRepository: ConfigRepository) = BaseVMOptionsTracker(configRepository)
+        fun getInstance(ideConfigRepository: IdeConfigRepository) =
+            BaseVMOptionsTracker(ideConfigRepository)
     }
 }

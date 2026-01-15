@@ -1,11 +1,10 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
-import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 
-class ProjectCleaner(private val configRepository: ConfigRepository) {
+class ProjectCleaner(private val configRepository: IdeConfigRepository) {
 
     /**
      * Cleans a project by removing its config directories and recent entry.
@@ -17,6 +16,6 @@ class ProjectCleaner(private val configRepository: ConfigRepository) {
     }
 
     companion object {
-        fun getInstance(configRepository: ConfigRepository) = ProjectCleaner(configRepository)
+        fun getInstance(configRepository: IdeConfigRepository) = ProjectCleaner(configRepository)
     }
 }

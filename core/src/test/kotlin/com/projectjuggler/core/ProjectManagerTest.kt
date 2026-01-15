@@ -1,6 +1,7 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -14,8 +15,9 @@ class ProjectManagerTest : StringSpec({
         val projectDir = createTempDirectory("test-project")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
 
             // Test path resolution with tilde
             val homeDir = System.getProperty("user.home")
@@ -41,8 +43,9 @@ class ProjectManagerTest : StringSpec({
         val projectDir = createTempDirectory("test-project")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
 
             val resolvedProjectPath = projectManager.resolvePath(projectDir.toString())
             resolvedProjectPath shouldNotBe null
@@ -60,8 +63,9 @@ class ProjectManagerTest : StringSpec({
         val projectDir = createTempDirectory("test-project")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
 
             // Existing path should validate
             projectManager.validatePathExists(projectDir.toString()) shouldBe true
@@ -87,8 +91,9 @@ class ProjectManagerTest : StringSpec({
         val projectDir = createTempDirectory("test-project")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
 
             // Create a path relative to home
             val homeDir = System.getProperty("user.home")
@@ -113,8 +118,9 @@ class ProjectManagerTest : StringSpec({
         val baseDir = createTempDirectory("test-pm")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
 
             // Relative path (not starting with /)
             val relativePath = "some/relative/path"
@@ -133,8 +139,9 @@ class ProjectManagerTest : StringSpec({
         val projectDir = createTempDirectory("test-project")
 
         try {
-            val configRepository = ConfigRepository(baseDir)
-            val projectManager = ProjectManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(baseDir, testInstallation)
+            val projectManager = ProjectManager.getInstance(ideConfigRepository)
 
             // Create tilde path
             val homeDir = System.getProperty("user.home")

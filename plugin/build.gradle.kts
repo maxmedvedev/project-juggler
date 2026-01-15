@@ -42,3 +42,11 @@ tasks {
 kotlin {
     jvmToolchain(17)
 }
+
+tasks {
+    runIde {
+        jvmArgumentProviders += CommandLineArgumentProvider {
+            listOf("-Dproject.juggler.base.dir=/Users/max/.project-juggler-test")
+        }
+    }
+}

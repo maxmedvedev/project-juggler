@@ -6,11 +6,11 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
-import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
+import com.projectjuggler.plugin.actions.recent.currentIdeConfigRepository
 import kotlinx.coroutines.*
 import kotlin.io.path.Path
 
@@ -48,7 +48,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
         val configPathObj = Path(configPath)
 
         // Check if this is an isolated project:
-        // Path should be: ~/.project-juggler/projects/<project-id>/config
+        // Path should be: ~/.project-juggler/v2/<ide-dir>/projects/<project-id>/config
         val parts = configPathObj.toString().split("/").filter { it.isNotEmpty() }
         val projectsIndex = parts.indexOf("projects")
 
@@ -60,7 +60,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
 
         // Load the ProjectMetadata from the config repository
         return try {
-            ConfigRepository.create().loadProjectMetadata(ProjectId(projectId))
+            currentIdeConfigRepository.loadProjectMetadata(ProjectId(projectId))
         } catch (e: Exception) {
             log.error("Error loading project metadata for ID: $projectId", e)
             null
@@ -94,8 +94,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private suspend fun checkForStopSignal(project: ProjectMetadata) {
         try {
-            val configRepository = ConfigRepository.create()
-            val signalManager = ShutdownSignalManager(configRepository)
+            val signalManager = ShutdownSignalManager.getInstance(currentIdeConfigRepository)
 
             val signal = signalManager.readStopRequest(project) ?: return
 
@@ -156,8 +155,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private fun cleanupStaleSignals(project: ProjectMetadata) {
         try {
-            val configRepository = ConfigRepository.create()
-            val signalManager = ShutdownSignalManager(configRepository)
+            val signalManager = ShutdownSignalManager.getInstance(currentIdeConfigRepository)
             signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
         } catch (e: Exception) {
             log.error("Error cleaning up stale signals", e)

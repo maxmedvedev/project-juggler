@@ -1,6 +1,6 @@
 package com.projectjuggler.util
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -12,21 +12,22 @@ object ProjectLockUtils {
     /**
      * Checks if a project is currently open (running IntelliJ instance).
      *
-     * For regular projects: checks ~/.project-juggler/projects/<project-id>/config/.lock
+     * For regular projects: checks ~/.project-juggler/v2/<ide>/projects/<project-id>/config/.lock
      * For main project: checks the base-config directory's .lock file
      *
-     * @param configRepository The config repository
+     * @param ideConfigRepository The IDE-specific config repository
      * @param projectPath The project to check
      * @return true if project is currently open, false otherwise
      */
-    fun isProjectOpen(configRepository: ConfigRepository, projectPath: ProjectPath): Boolean {
+    fun isProjectOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
         try {
-            val configDir = if (isMainProject(configRepository, projectPath)) {
+            val config = ideConfigRepository.load()
+            val configDir = if (isMainProject(config.mainProjectPath, projectPath)) {
                 // Main project uses base-config directly
-                getBaseConfigPath(configRepository) ?: return false
+                config.baseConfigPath?.let { Paths.get(it) } ?: return false
             } else {
                 // Regular project uses isolated config
-                getIsolatedConfigPath(configRepository, projectPath)
+                getIsolatedConfigPath(ideConfigRepository.baseDir, projectPath)
             }
 
             val lockFile = configDir.resolve(".lock")
@@ -36,20 +37,14 @@ object ProjectLockUtils {
         }
     }
 
-    private fun isMainProject(configRepository: ConfigRepository, projectPath: ProjectPath): Boolean {
-        val config = configRepository.load()
-        val mainProjectPath = config.mainProjectPath ?: return false
+    private fun isMainProject(mainProjectPath: String?, projectPath: ProjectPath): Boolean {
+        mainProjectPath ?: return false
         // Simple comparison - both should be normalized by ProjectPath
         return projectPath.pathString == mainProjectPath
     }
 
-    private fun getBaseConfigPath(configRepository: ConfigRepository): Path? {
-        val config = configRepository.load()
-        return config.baseConfigPath?.let { Paths.get(it) }
-    }
-
-    private fun getIsolatedConfigPath(configRepository: ConfigRepository, projectPath: ProjectPath): Path {
-        return configRepository.baseDir
+    private fun getIsolatedConfigPath(baseDir: Path, projectPath: ProjectPath): Path {
+        return baseDir
             .resolve("projects")
             .resolve(projectPath.id.id)
             .resolve("config")
@@ -59,16 +54,17 @@ object ProjectLockUtils {
      * Reads the process ID (PID) from the project's lock file.
      * IntelliJ stores the PID as plain text in the .lock file.
      *
-     * @param configRepository The config repository
+     * @param ideConfigRepository The IDE-specific config repository
      * @param projectPath The project to check
      * @return The PID as an integer, or null if lock file doesn't exist or can't be read
      */
-    fun readPidFromLock(configRepository: ConfigRepository, projectPath: ProjectPath): Int? {
+    fun readPidFromLock(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Int? {
         try {
-            val configDir = if (isMainProject(configRepository, projectPath)) {
-                getBaseConfigPath(configRepository) ?: return null
+            val config = ideConfigRepository.load()
+            val configDir = if (isMainProject(config.mainProjectPath, projectPath)) {
+                config.baseConfigPath?.let { Paths.get(it) } ?: return null
             } else {
-                getIsolatedConfigPath(configRepository, projectPath)
+                getIsolatedConfigPath(ideConfigRepository.baseDir, projectPath)
             }
 
             val lockFile = configDir.resolve(".lock")

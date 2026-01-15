@@ -3,14 +3,15 @@ package com.projectjuggler.plugin.actions
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.application
-import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.core.ProjectLauncher
+import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.recent.currentIdeConfigRepository
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.util.GitWorktreeManager
@@ -54,8 +55,7 @@ internal class OpenProjectCopyAction : AnAction() {
         }
 
         // Validate paths before starting background operation
-        val configRepository = ConfigRepository.create()
-        val projectManager = ProjectManager.getInstance(configRepository)
+        val projectManager = ProjectManager.getInstance(currentIdeConfigRepository)
 
         val sourcePath = projectManager.resolvePath(sourceFile.path)
         val destPath = projectManager.resolvePath(destFile.path)
@@ -93,7 +93,7 @@ internal class OpenProjectCopyAction : AnAction() {
                 )
 
                 // Launch the worktree
-                val launcher = ProjectLauncher.getInstance(configRepository)
+                val launcher = ProjectLauncher.getInstance(currentIdeConfigRepository)
                 launcher.launch(destPath)
 
                 showInfoNotification(ProjectJugglerBundle.message(
@@ -102,11 +102,13 @@ internal class OpenProjectCopyAction : AnAction() {
                         branchName
                     ), project)
             } catch (ex: IllegalArgumentException) {
-                showErrorNotification(ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error"), project)
-                ex.printStackTrace()
+                val message = ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error")
+                showErrorNotification(message, project)
+                logger<OpenProjectCopyAction>().error(message, ex)
             } catch (ex: Exception) {
-                showErrorNotification(ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error"), project)
-                ex.printStackTrace()
+                val message = ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error")
+                showErrorNotification(message, project)
+                logger<OpenProjectCopyAction>().error(message, ex)
             }
         }
     }

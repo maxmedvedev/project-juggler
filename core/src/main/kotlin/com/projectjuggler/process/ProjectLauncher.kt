@@ -1,25 +1,34 @@
-package com.projectjuggler.core
+package com.projectjuggler.process
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
+import com.projectjuggler.core.BaseVMOptionsTracker
+import com.projectjuggler.core.DirectoryManager
+import com.projectjuggler.core.ProjectManager
+import com.projectjuggler.core.ShutdownResult
+import com.projectjuggler.core.ShutdownSignalManager
+import com.projectjuggler.core.ShutdownWaiter
+import com.projectjuggler.core.SyncOptions
+import com.projectjuggler.core.SyncProgress
+import com.projectjuggler.core.VMOptionsGenerator
 import com.projectjuggler.util.ProjectLockUtils
 
-class ProjectLauncher(
-    private val configRepository: ConfigRepository
+class ProjectLauncher private constructor(
+    private val ideConfigRepository: IdeConfigRepository,
 ) {
-    private val projectManager = ProjectManager.getInstance(configRepository)
-    private val directoryManager = DirectoryManager.getInstance(configRepository)
-    private val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(configRepository)
-    private val intellijLauncher = IntelliJLauncher.getInstance(configRepository)
-    private val recentProjectsIndex = RecentProjectsIndex.getInstance(configRepository)
+    private val projectManager = ProjectManager.getInstance(ideConfigRepository)
+    private val directoryManager = DirectoryManager.getInstance(ideConfigRepository)
+    private val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
+    private val intellijLauncher = IntelliJLauncher.getInstance(ideConfigRepository)
+    private val recentProjectsIndex = RecentProjectsIndex.getInstance(ideConfigRepository)
 
     /**
      * Checks if the given project path is the configured main project.
      */
     private fun isMainProject(projectPath: ProjectPath): Boolean {
-        val config = configRepository.load()
+        val config = ideConfigRepository.load()
         val mainProjectPath = config.mainProjectPath ?: return false
 
         // Resolve main project path to normalized form
@@ -81,7 +90,7 @@ class ProjectLauncher(
         options: SyncOptions = SyncOptions.DEFAULT,
         block: () -> Unit
     ) {
-        val signalManager = ShutdownSignalManager(configRepository)
+        val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
 
         // Try to acquire sync lock to prevent concurrent syncs
         val syncLock = signalManager.acquireSyncLock(project)
@@ -89,7 +98,7 @@ class ProjectLauncher(
 
         try {
             // Check if project is currently running
-            val wasRunning = ProjectLockUtils.isProjectOpen(configRepository, project.path)
+            val wasRunning = ProjectLockUtils.isProjectOpen(ideConfigRepository, project.path)
 
             // If running and should stop, request shutdown and wait
             if (wasRunning && options.stopIfRunning) {
@@ -171,13 +180,12 @@ class ProjectLauncher(
 
         // Wait for shutdown
         val result = ShutdownWaiter.waitForShutdown(
-            configRepository = configRepository,
+            ideConfigRepository = ideConfigRepository,
             projectPath = project.path,
-            timeoutSeconds = options.shutdownTimeout,
-            onProgress = { secondsElapsed ->
-                options.onProgress(SyncProgress.Stopping(secondsElapsed))
-            }
-        )
+            timeoutSeconds = options.shutdownTimeout
+        ) { secondsElapsed ->
+            options.onProgress(SyncProgress.Stopping(secondsElapsed))
+        }
 
         when (result) {
             is ShutdownResult.Success -> {
@@ -205,7 +213,8 @@ class ProjectLauncher(
     }
 
     companion object {
-        fun getInstance(configRepository: ConfigRepository): ProjectLauncher = ProjectLauncher(configRepository)
+        fun getInstance(ideConfigRepository: IdeConfigRepository): ProjectLauncher =
+            ProjectLauncher(ideConfigRepository)
     }
 }
 

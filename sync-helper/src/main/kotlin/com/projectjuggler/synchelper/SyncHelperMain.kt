@@ -1,8 +1,9 @@
 package com.projectjuggler.synchelper
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.ProjectMetadata
-import com.projectjuggler.core.ProjectLauncher
+import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
 
@@ -10,12 +11,13 @@ import com.projectjuggler.core.SyncOptions
  * Minimal sync helper for self-shutdown sync operations.
  * Called by the plugin when syncing the currently running IDE.
  *
- * Usage: sync-helper --path <project-path> [--all|--vmoptions|--config|--plugins]
- *    or: sync-helper --all-projects [--all|--vmoptions|--config|--plugins]
+ * Usage: sync-helper --ide <ide-path> --path <project-path> [--all|--vmoptions|--config|--plugins]
+ *    or: sync-helper --ide <ide-path> --all-projects [--all|--vmoptions|--config|--plugins]
  */
 fun main(args: Array<String>) {
     val argMap = parseArgs(args)
 
+    val idePath = argMap["ide"] ?: error("--ide <ide-path> is required")
     val allProjects = "all-projects" in argMap
     val pathString = argMap["path"]
 
@@ -31,8 +33,10 @@ fun main(args: Array<String>) {
     val syncConfig = syncAll || "config" in argMap
     val syncPlugins = syncAll || "plugins" in argMap
 
-    val configRepository = ConfigRepository.create()
-    val projectLauncher = ProjectLauncher.getInstance(configRepository)
+    val ideRegistry = IdeRegistry.create()
+    val installation = IdeInstallation(idePath, "IDE")
+    val ideConfigRepository = ideRegistry.getRepository(installation)
+    val projectLauncher = ProjectLauncher.getInstance(ideConfigRepository)
 
     val syncOptions = SyncOptions(
         stopIfRunning = true,
@@ -41,11 +45,11 @@ fun main(args: Array<String>) {
     )
 
     val projects: List<ProjectMetadata> = if (allProjects) {
-        configRepository.loadAllProjects().also {
+        ideConfigRepository.loadAllProjects().also {
             if (it.isEmpty()) error("No tracked projects found")
         }
     } else {
-        val projectManager = ProjectManager.getInstance(configRepository)
+        val projectManager = ProjectManager.getInstance(ideConfigRepository)
         val projectPath = projectManager.resolvePath(pathString!!)
         val project = projectManager.get(projectPath)
             ?: error("Project not found: $pathString")
@@ -68,6 +72,7 @@ private fun parseArgs(args: Array<String>): Map<String, String?> {
     var i = 0
     while (i < args.size) {
         when (val arg = args[i]) {
+            "--ide" -> if (i + 1 < args.size) result["ide"] = args[++i]
             "--path" -> if (i + 1 < args.size) result["path"] = args[++i]
             "--all-projects" -> result["all-projects"] = null
             "--all" -> result["all"] = null

@@ -22,12 +22,12 @@ import javax.swing.*
 import javax.swing.BoxLayout.Y_AXIS
 import kotlin.io.path.absolutePathString
 
-internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
+internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProjectPopupAction> {
     private val recentProjectsManager = RecentProjectsManager.getInstance() as RecentProjectsManagerBase
 
     override fun getListCellRendererComponent(
-        list: JList<out PopupListItem>,
-        value: PopupListItem?,
+        list: JList<out RecentProjectPopupAction>,
+        value: RecentProjectPopupAction?,
         index: Int,
         isSelected: Boolean,
         cellHasFocus: Boolean
@@ -37,14 +37,14 @@ internal class PopupListItemRenderer : ListCellRenderer<PopupListItem> {
         }
 
         return when (value) {
-            is RecentProjectItem -> renderRecentProject(value, isSelected, cellHasFocus, value.projectPath)
-            is OpenFileChooserItem -> renderOpenFileChooser(isSelected, cellHasFocus)
-            is SyncProjectsItem -> renderSyncProjects(value.syncType, isSelected, cellHasFocus)
+            is OpenRecentProjectAction -> renderRecentProject(value, isSelected, cellHasFocus, value.projectPath)
+            is OpenFileChooserAction -> renderOpenFileChooser(isSelected, cellHasFocus)
+            is SyncAllProjectsAction -> renderSyncProjects(value.syncType, isSelected, cellHasFocus)
         }
     }
 
     private fun renderRecentProject(
-        value: RecentProjectItem,
+        value: OpenRecentProjectAction,
         isSelected: Boolean,
         cellHasFocus: Boolean,
         path: ProjectPath

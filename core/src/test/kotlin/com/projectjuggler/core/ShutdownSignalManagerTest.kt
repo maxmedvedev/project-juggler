@@ -1,7 +1,7 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.config.ProjectId
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import io.kotest.core.spec.style.StringSpec
@@ -9,15 +9,15 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
-import kotlin.io.path.exists
 
 class ShutdownSignalManagerTest : StringSpec({
 
     "should create and read stop request signal" {
         val tempDir = Files.createTempDirectory("test")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val signalManager = ShutdownSignalManager(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
 
             val project = ProjectMetadata(
                 path = ProjectPath("/tmp/test-project"),
@@ -48,8 +48,9 @@ class ShutdownSignalManagerTest : StringSpec({
     "should cleanup signal files" {
         val tempDir = Files.createTempDirectory("test")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val signalManager = ShutdownSignalManager(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
 
             val project = ProjectMetadata(
                 path = ProjectPath("/tmp/test-project"),
@@ -79,8 +80,9 @@ class ShutdownSignalManagerTest : StringSpec({
     "should acquire and release sync lock" {
         val tempDir = Files.createTempDirectory("test")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val signalManager = ShutdownSignalManager(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
 
             val project = ProjectMetadata(
                 path = ProjectPath("/tmp/test-project"),
@@ -110,8 +112,9 @@ class ShutdownSignalManagerTest : StringSpec({
     "should cleanup stale signals older than specified age" {
         val tempDir = Files.createTempDirectory("test")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val signalManager = ShutdownSignalManager(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
 
             val project = ProjectMetadata(
                 path = ProjectPath("/tmp/test-project"),

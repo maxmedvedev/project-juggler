@@ -1,6 +1,6 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.platform.ConfigLocator
@@ -12,7 +12,7 @@ import java.nio.file.Paths
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
 
-class DirectoryManager(private val configRepository: ConfigRepository) {
+class DirectoryManager(private val configRepository: IdeConfigRepository) {
 
     fun ensureProjectDirectories(project: ProjectMetadata): ProjectDirectories {
         val root = getProjectRoot(project)
@@ -54,7 +54,6 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
     fun getBasePluginsPath(): Path? {
         val config = configRepository.load()
 
-        // Use configured path if available
         if (config.basePluginsPath != null) {
             return Paths.get(config.basePluginsPath)
         }
@@ -132,7 +131,8 @@ class DirectoryManager(private val configRepository: ConfigRepository) {
     }
 
     companion object {
-        fun getInstance(configRepository: ConfigRepository) = DirectoryManager(configRepository)
+        fun getInstance(configRepository: IdeConfigRepository) =
+            DirectoryManager(configRepository)
     }
 }
 

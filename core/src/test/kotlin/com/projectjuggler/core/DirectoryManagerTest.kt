@@ -1,6 +1,7 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import io.kotest.core.spec.style.StringSpec
@@ -14,8 +15,9 @@ class DirectoryManagerTest : StringSpec({
     "should create all project directories" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
                 path = projectPath,
@@ -38,8 +40,9 @@ class DirectoryManagerTest : StringSpec({
     "should create directories under correct base path" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
                 path = projectPath,
@@ -58,8 +61,9 @@ class DirectoryManagerTest : StringSpec({
     "should create nested directory structure correctly" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
                 path = projectPath,
@@ -81,8 +85,9 @@ class DirectoryManagerTest : StringSpec({
     "should not fail if directories already exist" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
                 path = projectPath,
@@ -109,8 +114,9 @@ class DirectoryManagerTest : StringSpec({
     "should clean project directories completely" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
                 path = projectPath,
@@ -143,8 +149,9 @@ class DirectoryManagerTest : StringSpec({
     "should not fail when cleaning non-existent project" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/non/existent/project")
             val project = ProjectMetadata(
                 path = projectPath,
@@ -162,8 +169,9 @@ class DirectoryManagerTest : StringSpec({
     "should get correct project root path" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
 
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
@@ -182,8 +190,9 @@ class DirectoryManagerTest : StringSpec({
     "should handle project IDs with special characters" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
 
             val projectPath = ProjectPath("/test/project/@#$/path")
             val project = ProjectMetadata(
@@ -207,8 +216,9 @@ class DirectoryManagerTest : StringSpec({
             // Delete the temp directory to test creation from scratch
             tempDir.toFile().deleteRecursively()
 
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
 
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
@@ -232,8 +242,9 @@ class DirectoryManagerTest : StringSpec({
     "should handle plugin copying on directory creation" {
         val tempDir = createTempDirectory("test-base")
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val manager = DirectoryManager.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val manager = DirectoryManager.getInstance(ideConfigRepository)
             val projectPath = ProjectPath("/test/project/path")
             val project = ProjectMetadata(
                 path = projectPath,

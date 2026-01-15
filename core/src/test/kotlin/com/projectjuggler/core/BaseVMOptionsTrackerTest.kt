@@ -1,7 +1,8 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
-import com.projectjuggler.config.GlobalConfig
+import com.projectjuggler.config.IdeConfig
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
@@ -18,12 +19,14 @@ class BaseVMOptionsTrackerTest : StringSpec({
         try {
             baseVmOptions.writeText("-Xms256m\n-Xmx2048m")
 
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // Set up initial config with matching hash
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = baseVmOptions.toString(),
                     baseVmOptionsHash = com.projectjuggler.util.HashUtils.calculateFileHash(baseVmOptions)
                 )
@@ -43,12 +46,14 @@ class BaseVMOptionsTrackerTest : StringSpec({
         try {
             baseVmOptions.writeText("-Xms256m\n-Xmx2048m")
 
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // Set up initial config with old hash
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = baseVmOptions.toString(),
                     baseVmOptionsHash = "old-hash-value"
                 )
@@ -68,12 +73,14 @@ class BaseVMOptionsTrackerTest : StringSpec({
         try {
             baseVmOptions.writeText("-Xms256m\n-Xmx2048m")
 
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // Configure base path first
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = baseVmOptions.toString()
                 )
             )
@@ -99,8 +106,9 @@ class BaseVMOptionsTrackerTest : StringSpec({
         val tempDir = createTempDirectory("test-config")
 
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // No base VM options configured
             tracker.hasChanged() shouldBe false
@@ -113,12 +121,14 @@ class BaseVMOptionsTrackerTest : StringSpec({
         val tempDir = createTempDirectory("test-config")
 
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // Configure with non-existent path
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = "/non/existent/path.vmoptions",
                     baseVmOptionsHash = "some-hash"
                 )
@@ -137,12 +147,14 @@ class BaseVMOptionsTrackerTest : StringSpec({
         try {
             baseVmOptions.writeText("-Xms256m\n-Xmx2048m")
 
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             // Configure base path
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = baseVmOptions.toString()
                 )
             )
@@ -151,7 +163,7 @@ class BaseVMOptionsTrackerTest : StringSpec({
             tracker.updateHash()
 
             // Load config and verify hash was stored
-            val config = configRepository.load()
+            val config = ideConfigRepository.load()
             config.baseVmOptionsHash shouldBe com.projectjuggler.util.HashUtils.calculateFileHash(baseVmOptions)
 
             // Should not detect changes after update
@@ -169,11 +181,13 @@ class BaseVMOptionsTrackerTest : StringSpec({
         try {
             baseVmOptions.writeText("-Xms256m")
 
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = baseVmOptions.toString()
                 )
             )
@@ -190,8 +204,9 @@ class BaseVMOptionsTrackerTest : StringSpec({
         val tempDir = createTempDirectory("test-config")
 
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
             val path = tracker.getBaseVmOptionsPath()
             path shouldBe null
@@ -204,11 +219,13 @@ class BaseVMOptionsTrackerTest : StringSpec({
         val tempDir = createTempDirectory("test-config")
 
         try {
-            val configRepository = ConfigRepository(tempDir)
-            val tracker = BaseVMOptionsTracker.getInstance(configRepository)
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val tracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
 
-            configRepository.save(
-                GlobalConfig(
+            ideConfigRepository.save(
+                IdeConfig(
+                    installation = testInstallation,
                     baseVmOptionsPath = "/non/existent/path.vmoptions"
                 )
             )

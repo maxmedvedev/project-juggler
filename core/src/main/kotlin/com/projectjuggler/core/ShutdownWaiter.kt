@@ -1,6 +1,6 @@
 package com.projectjuggler.core
 
-import com.projectjuggler.config.ConfigRepository
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.util.ProjectLockUtils
 
@@ -12,14 +12,14 @@ object ShutdownWaiter {
     /**
      * Waits for the specified project's IntelliJ instance to shut down.
      *
-     * @param configRepository Config repository for accessing project metadata
+     * @param ideConfigRepository IDE-specific config repository for accessing project metadata
      * @param projectPath Path to the project
      * @param timeoutSeconds Maximum time to wait in seconds
      * @param onProgress Callback for progress updates (seconds elapsed)
      * @return Result indicating success, timeout, or cancellation
      */
     fun waitForShutdown(
-        configRepository: ConfigRepository,
+        ideConfigRepository: IdeConfigRepository,
         projectPath: ProjectPath,
         timeoutSeconds: Int = 60,
         onProgress: (Int) -> Unit = {}
@@ -30,7 +30,7 @@ object ShutdownWaiter {
 
         while (System.currentTimeMillis() - startTime < timeoutMillis) {
             // Check if lock file still exists
-            if (!ProjectLockUtils.isProjectOpen(configRepository, projectPath)) {
+            if (!ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath)) {
                 return ShutdownResult.Success
             }
 
@@ -46,7 +46,7 @@ object ShutdownWaiter {
         }
 
         // Timeout occurred - check if process is actually still running
-        return if (ProjectLockUtils.isProjectOpen(configRepository, projectPath)) {
+        return if (ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath)) {
             // Check if process is really alive or just stale lock file
             ShutdownResult.Timeout
         } else {
