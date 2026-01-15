@@ -2,7 +2,10 @@ package com.projectjuggler.plugin.services
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.startup.ProjectActivity
 import com.projectjuggler.config.ConfigRepository
 import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
@@ -159,5 +162,11 @@ class ShutdownSignalService(scope: CoroutineScope) {
         } catch (e: Exception) {
             log.error("Error cleaning up stale signals", e)
         }
+    }
+}
+
+internal class ShutdownSignalServiceStartupActivity : ProjectActivity {
+    override suspend fun execute(project: Project) {
+        service<ShutdownSignalService>()
     }
 }
