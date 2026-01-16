@@ -11,31 +11,31 @@ object WindowFocuser {
     /**
      * Result of a window focus attempt.
      */
-    sealed class FocusResult {
+    sealed interface FocusResult {
         /**
          * Window was successfully focused.
          */
-        object Success : FocusResult()
+        object Success : FocusResult
 
         /**
          * Process with the given PID was not found.
          */
-        data class ProcessNotFound(val pid: Int) : FocusResult()
+        data class ProcessNotFound(val pid: Int) : FocusResult
 
         /**
          * Process exists but has no windows to focus.
          */
-        data class WindowNotFound(val pid: Int) : FocusResult()
+        data class WindowNotFound(val pid: Int) : FocusResult
 
         /**
          * Platform command failed with an error.
          */
-        data class CommandFailed(val error: String) : FocusResult()
+        data class CommandFailed(val error: String) : FocusResult
 
         /**
          * Required tool is not installed (Linux only).
          */
-        data class ToolNotInstalled(val toolName: String) : FocusResult()
+        data class ToolNotInstalled(val toolName: String) : FocusResult
     }
 
     /**
