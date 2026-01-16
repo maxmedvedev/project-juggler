@@ -8,7 +8,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.projectjuggler.synchelper.MainKt")
+    mainClass.set("com.projectjuggler.synchelper.SyncHelperMainKt")
     applicationName = "sync-helper"
 }
 
