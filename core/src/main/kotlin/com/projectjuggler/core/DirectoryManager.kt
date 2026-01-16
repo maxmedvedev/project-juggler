@@ -3,8 +3,8 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.platform.ConfigLocator
-import com.projectjuggler.platform.PluginLocator
+import com.projectjuggler.locators.ConfigLocator
+import com.projectjuggler.locators.PluginLocator
 import com.projectjuggler.util.DirectoryCopier
 import java.nio.file.Files
 import java.nio.file.Path

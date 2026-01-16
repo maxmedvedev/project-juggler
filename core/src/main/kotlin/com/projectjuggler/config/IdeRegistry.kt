@@ -1,6 +1,6 @@
 package com.projectjuggler.config
 
-import com.projectjuggler.platform.IntelliJLocator
+import com.projectjuggler.locators.IntelliJLocator
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths

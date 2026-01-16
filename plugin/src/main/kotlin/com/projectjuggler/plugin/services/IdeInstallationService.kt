@@ -10,7 +10,7 @@ import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.MigrationManager
 import com.projectjuggler.core.BaseVMOptionsTracker
-import com.projectjuggler.platform.IntelliJLocator
+import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
 import java.nio.file.Files
 import java.nio.file.Path

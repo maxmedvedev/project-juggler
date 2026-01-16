@@ -1,9 +1,11 @@
-package com.projectjuggler.platform
+package com.projectjuggler.locators
 
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.platform.Platform
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.collections.forEach
 
 object IntelliJLocator {
 
@@ -230,4 +232,3 @@ private data class ScanConfig(
     val execResolver: (Path) -> Path,
     val toolboxDir: Path
 )
-

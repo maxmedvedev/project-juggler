@@ -1,6 +1,6 @@
 package com.projectjuggler.config
 
-import com.projectjuggler.platform.IntelliJLocator
+import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.util.FileLockUtils
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

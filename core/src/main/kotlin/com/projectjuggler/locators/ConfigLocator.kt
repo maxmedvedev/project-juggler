@@ -1,5 +1,6 @@
-package com.projectjuggler.platform
+package com.projectjuggler.locators
 
+import com.projectjuggler.platform.Platform
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
