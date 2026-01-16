@@ -48,8 +48,10 @@ class IdeRegistry(baseDir: Path = getDefaultBaseDir()) {
     }
 
     companion object {
+        const val PROJECT_JUGGLER_BASE_DIR = "project.juggler.base.dir"
+
         fun getDefaultBaseDir(): Path {
-            val userSpecifiedDir = System.getProperty("project.juggler.base.dir")
+            val userSpecifiedDir = System.getProperty(PROJECT_JUGGLER_BASE_DIR)
             userSpecifiedDir?.let { return Paths.get(it) }
 
             return Paths.get(System.getProperty("user.home"), ".project-juggler")

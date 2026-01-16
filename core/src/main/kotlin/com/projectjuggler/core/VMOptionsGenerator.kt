@@ -1,5 +1,7 @@
 package com.projectjuggler.core
 
+import com.projectjuggler.config.IdeRegistry
+import com.projectjuggler.config.IdeRegistry.Companion.PROJECT_JUGGLER_BASE_DIR
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readLines
@@ -38,6 +40,7 @@ object VMOptionsGenerator {
             appendLine("-Didea.system.path=${projectDirectories.system}")
             appendLine("-Didea.log.path=${projectDirectories.logs}")
             appendLine("-Didea.plugins.path=${projectDirectories.plugins}")
+            appendLine("-D$PROJECT_JUGGLER_BASE_DIR=${IdeRegistry.getDefaultBaseDir()}")
         }
 
         vmOptionsFile.writeText(content)
