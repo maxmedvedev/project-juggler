@@ -2,8 +2,6 @@ package com.projectjuggler.plugin.services
 
 import com.intellij.diagnostic.VMOptions
 import com.intellij.openapi.application.PathManager
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
@@ -20,7 +18,6 @@ import java.nio.file.Paths
  * Central service for managing IDE installations and their configurations.
  * Provides access to the current IDE's repository and all available IDE installations.
  */
-@Service(Service.Level.APP)
 class IdeInstallationService {
     private val ideRegistry = IdeRegistry.create()
 
@@ -147,6 +144,8 @@ class IdeInstallationService {
     }
 
     companion object {
-        fun getInstance(): IdeInstallationService = service<IdeInstallationService>()
+        private val instance = IdeInstallationService()
+
+        fun getInstance(): IdeInstallationService = instance
     }
 }

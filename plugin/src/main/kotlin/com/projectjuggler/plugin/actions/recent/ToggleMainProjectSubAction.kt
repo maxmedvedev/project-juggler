@@ -8,7 +8,9 @@ import com.intellij.util.application
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.MainProjectService
-import com.projectjuggler.plugin.showInfoNotification
+import com.projectjuggler.plugin.services.clearMainProject
+import com.projectjuggler.plugin.services.setMainProject
+import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 
 /** Toggle whether this is the main project */
 object ToggleMainProjectSubAction : RecentProjectSubAction {
@@ -29,6 +31,7 @@ object ToggleMainProjectSubAction : RecentProjectSubAction {
             } else {
                 ProjectJugglerBundle.message("dialog.confirm.set.main.message", projectPath.name)
             }
+
             val title = if (isMain) {
                 ProjectJugglerBundle.message("dialog.confirm.unset.main.title")
             } else {
@@ -44,22 +47,13 @@ object ToggleMainProjectSubAction : RecentProjectSubAction {
                 Messages.getQuestionIcon()
             )
 
-            if (result == Messages.OK) {
-                if (isMain) {
-                    // todo move from EDT
-                    MainProjectService.clearMainProject(currentIdeConfigRepository)
-                    showInfoNotification(
-                        ProjectJugglerBundle.message("notification.success.unset.main"),
-                        project
-                    )
-                } else {
-                    // todo move from EDT
-                    MainProjectService.setMainProject(currentIdeConfigRepository, projectPath)
-                    showInfoNotification(
-                        ProjectJugglerBundle.message("notification.success.set.main", projectPath.name),
-                        project
-                    )
-                }
+            if (result != Messages.OK) return@invokeLater
+
+            // todo move from EDT
+            if (isMain) {
+                clearMainProject(IntelliJNotificationHandler(project), currentIdeConfigRepository)
+            } else {
+                setMainProject(projectPath, IntelliJNotificationHandler(project), currentIdeConfigRepository)
             }
         }
     }
