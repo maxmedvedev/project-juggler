@@ -46,12 +46,23 @@ internal class RecentProjectPopupBuilder(
             // Add browse button at the top
             itemsList.add(OpenFileChooserAction)
             // Add main project if configured
-            itemsList.addIfNotNull(createMainProjectItem(ideConfigRepository))
+            val mainProjectItem = createMainProjectItem(ideConfigRepository)
+            itemsList.addIfNotNull(mainProjectItem)
             itemsList.addAll(items.filterNot { it.isMainProject })
-            itemsList.add(SyncAllProjectsAction(SyncType.All))
-            itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
-            itemsList.add(SyncAllProjectsAction(SyncType.Config))
-            itemsList.add(SyncAllProjectsAction(SyncType.Plugins))
+
+            // Check if there are any projects (recent or main)
+            val hasProjects = items.isNotEmpty() || mainProjectItem != null
+
+            if (hasProjects) {
+                // Add sync actions when there are projects to sync
+                itemsList.add(SyncAllProjectsAction(SyncType.All))
+                itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
+                itemsList.add(SyncAllProjectsAction(SyncType.Config))
+                itemsList.add(SyncAllProjectsAction(SyncType.Plugins))
+            } else {
+                // Show import action when no projects
+                itemsList.add(ImportRecentProjectsAction)
+            }
 
             // Show popup on EDT
             application.invokeLater {

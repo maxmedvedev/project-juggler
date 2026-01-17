@@ -40,6 +40,7 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
             is OpenRecentProjectAction -> renderRecentProject(value, isSelected, cellHasFocus, value.projectPath)
             is OpenFileChooserAction -> renderOpenFileChooser(isSelected, cellHasFocus)
             is SyncAllProjectsAction -> renderSyncProjects(value.syncType, isSelected, cellHasFocus)
+            is ImportRecentProjectsAction -> renderImportProjects(isSelected, cellHasFocus)
         }
     }
 
@@ -159,6 +160,19 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
             isSelected = isSelected,
             cellHasFocus = cellHasFocus,
             showSeparator = showSeparator
+        )
+    }
+
+    private fun renderImportProjects(
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        return renderActionItem(
+            label = ProjectJugglerBundle.message("popup.import.recent.projects.label"),
+            icon = AllIcons.ToolbarDecorator.Import,
+            isSelected = isSelected,
+            cellHasFocus = cellHasFocus,
+            showSeparator = true
         )
     }
 
