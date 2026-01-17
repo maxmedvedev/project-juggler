@@ -1,6 +1,7 @@
 package com.projectjuggler.process
 
 import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
@@ -26,25 +27,10 @@ class ProjectLauncher internal constructor(
 ) {
 
     /**
-     * Checks if the given project path is the configured main project.
-     */
-    private fun isMainProject(projectPath: ProjectPath): Boolean {
-        val config = ideConfigRepository.load()
-        val mainProjectPath = config.mainProjectPath ?: return false
-
-        // Resolve main project path to normalized form
-        val normalizedMainPath = projectManager.resolvePath(mainProjectPath)
-
-        // Compare normalized path strings
-        return projectPath.pathString == normalizedMainPath.pathString
-    }
-
-    /**
      * Launch a project by ID and path (for when ID is already known)
      */
     fun launch(projectPath: ProjectPath) {
-        // Check if this is the main project
-        if (isMainProject(projectPath)) {
+        if (MainProjectService.isMainProject(ideConfigRepository, projectPath)) {
             intellijLauncher.launchMain(projectPath.path)
             return
         }

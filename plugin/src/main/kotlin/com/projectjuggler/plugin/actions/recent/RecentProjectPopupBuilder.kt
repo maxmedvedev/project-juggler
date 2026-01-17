@@ -12,7 +12,7 @@ import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
-import com.projectjuggler.plugin.services.MainProjectService
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils

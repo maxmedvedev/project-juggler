@@ -1,14 +1,11 @@
-package com.projectjuggler.plugin.services
-
-import com.projectjuggler.config.IdeConfigRepository
-import com.projectjuggler.config.ProjectPath
+package com.projectjuggler.config
 
 /**
  * Service for managing the main project configuration.
  * The main project is a special project that uses base VM options directly
  * instead of isolated configurations.
  */
-internal object MainProjectService {
+object MainProjectService {
 
     /**
      * Checks if the given project is currently set as the main project.

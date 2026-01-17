@@ -1,6 +1,7 @@
 package com.projectjuggler.plugin.services
 
 import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle

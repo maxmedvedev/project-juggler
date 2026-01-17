@@ -8,7 +8,7 @@ import com.intellij.util.application
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
-import com.projectjuggler.plugin.services.MainProjectService
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.plugin.services.clearMainProject
 import com.projectjuggler.plugin.services.setMainProject
 import com.projectjuggler.plugin.util.IntelliJNotificationHandler
