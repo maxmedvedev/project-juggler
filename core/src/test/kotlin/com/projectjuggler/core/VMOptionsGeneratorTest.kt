@@ -1,5 +1,6 @@
 package com.projectjuggler.core
 
+import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.test.createTempDir
 import com.projectjuggler.test.createTempFile
 import io.kotest.core.spec.style.StringSpec
@@ -344,6 +345,66 @@ class VMOptionsGeneratorTest : StringSpec({
         content shouldContain "-Xmx2048m"
         content shouldContain "-XX:ReservedCodeCacheSize=512m"
         content shouldContain "# This is a comment with address=5009 in it"
+    }
+
+    "should pass custom project juggler base dir to spawned instances via VM options" {
+        val customBaseDir = tempDir.resolve("custom-pj-base")
+        Files.createDirectories(customBaseDir)
+
+        val projectDirs = ProjectDirectories(
+            root = tempDir.resolve("t12"),
+            config = tempDir.resolve("t12/config"),
+            system = tempDir.resolve("t12/system"),
+            logs = tempDir.resolve("t12/logs"),
+            plugins = tempDir.resolve("t12/plugins")
+        )
+
+        // Set custom base dir via system property
+        val originalValue = System.getProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR)
+        try {
+            System.setProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR, customBaseDir.toString())
+
+            val vmFile = VMOptionsGenerator.generate(null, projectDirs, null)
+            val content = vmFile.readText()
+
+            // Should contain the custom base dir in project.juggler.base.dir property
+            content shouldContain "-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=$customBaseDir"
+        } finally {
+            // Restore original value
+            if (originalValue != null) {
+                System.setProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR, originalValue)
+            } else {
+                System.clearProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR)
+            }
+        }
+    }
+
+    "should use default base dir when no custom dir is set" {
+        val projectDirs = ProjectDirectories(
+            root = tempDir.resolve("t13"),
+            config = tempDir.resolve("t13/config"),
+            system = tempDir.resolve("t13/system"),
+            logs = tempDir.resolve("t13/logs"),
+            plugins = tempDir.resolve("t13/plugins")
+        )
+
+        // Ensure no custom base dir is set
+        val originalValue = System.getProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR)
+        try {
+            System.clearProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR)
+
+            val vmFile = VMOptionsGenerator.generate(null, projectDirs, null)
+            val content = vmFile.readText()
+
+            // Should contain the default base dir (user.home/.project-juggler)
+            val expectedDefaultDir = System.getProperty("user.home") + "/.project-juggler"
+            content shouldContain "-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=$expectedDefaultDir"
+        } finally {
+            // Restore original value
+            if (originalValue != null) {
+                System.setProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR, originalValue)
+            }
+        }
     }
 })
 
