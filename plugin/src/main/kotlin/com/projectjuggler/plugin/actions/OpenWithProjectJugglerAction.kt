@@ -7,7 +7,6 @@ import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.recent.currentIdeConfigRepository
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.util.IdeJuggler
 import kotlin.io.path.isDirectory

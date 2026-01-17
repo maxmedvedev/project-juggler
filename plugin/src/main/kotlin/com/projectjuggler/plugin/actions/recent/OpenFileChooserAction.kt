@@ -7,6 +7,7 @@ import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.util.IdeJuggler
 import kotlin.io.path.isDirectory

@@ -6,6 +6,10 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.actions.isCurrentProject
+import com.projectjuggler.plugin.actions.performSelfShutdownSync
+import com.projectjuggler.plugin.actions.performSyncWithProgress
 
 /** Sync settings from base config */
 data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubAction {
@@ -30,7 +34,11 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
             project = project,
             projects = listOf(metadata),
             syncType = syncType,
-            taskTitle = ProjectJugglerBundle.message("progress.sync.project.type", syncType.displayName, projectPath.name),
+            taskTitle = ProjectJugglerBundle.message(
+                "progress.sync.project.type",
+                syncType.displayName,
+                projectPath.name
+            ),
             successMessage = { projects ->
                 ProjectJugglerBundle.message(
                     "notification.success.sync.single.project.type",

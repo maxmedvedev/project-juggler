@@ -11,7 +11,6 @@ import com.intellij.util.application
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.recent.currentIdeConfigRepository
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.util.GitWorktreeManager

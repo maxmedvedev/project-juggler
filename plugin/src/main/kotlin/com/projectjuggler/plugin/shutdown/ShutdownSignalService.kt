@@ -7,7 +7,7 @@ import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
-import com.projectjuggler.plugin.actions.recent.currentIdeConfigRepository
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

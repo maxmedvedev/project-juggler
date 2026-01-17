@@ -4,6 +4,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.actions.launchOrFocusProject
 
 /** Open project with the current IDE */
 object OpenRecentProjectSubAction : RecentProjectSubAction {

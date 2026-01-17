@@ -11,6 +11,7 @@ import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import com.projectjuggler.plugin.services.MainProjectService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.util.GitUtils

@@ -4,6 +4,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.plugin.actions.launchOrFocusProject
 import com.projectjuggler.plugin.services.IdeInstallationService
 
 /** Open project with a specific IDE installation */

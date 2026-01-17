@@ -1,4 +1,4 @@
-package com.projectjuggler.plugin.actions.recent
+package com.projectjuggler.plugin.actions
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.ControlFlowException
@@ -13,38 +13,12 @@ import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.core.SyncProgress
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.actions.recent.SyncType
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.util.BundledSyncHelper
-import com.projectjuggler.plugin.util.IdeJuggler
 import com.projectjuggler.process.ProjectLauncher
-import com.projectjuggler.util.ProjectLockUtils
 import kotlin.io.path.Path
-
-val currentIdeConfigRepository: IdeConfigRepository
-    get() = IdeInstallationService.getInstance().currentRepository
-
-/**
- * Handles launching or focusing a project based on whether it's already open.
- * If project is open, attempts to focus the window.
- * If project is closed, launches it normally.
- */
-fun launchOrFocusProject(
-    project: Project?,
-    projectPath: ProjectPath,
-    repository: IdeConfigRepository
-) {
-    val isOpen = ProjectLockUtils.isProjectOpen(repository, projectPath)
-
-    if (isOpen) {
-        // Try to focus the existing window
-        IdeJuggler.focusExistingProject(project, repository, projectPath)
-    } else {
-        // Launch new instance
-        IdeJuggler.launchProject(project, repository, projectPath)
-    }
-}
 
 /**
  * Determines if the given project is the currently running project.
@@ -63,7 +37,7 @@ fun isCurrentProject(ideConfigRepository: IdeConfigRepository, projectPath: Proj
         val currentProjectId = parts[projectsIndex + 1]
 
         // Get the project ID for the target path
-        val targetMetadata = ProjectManager.getInstance(ideConfigRepository).get(projectPath)
+        val targetMetadata = ProjectManager.Companion.getInstance(ideConfigRepository).get(projectPath)
         return targetMetadata?.id?.id == currentProjectId
     }
 
@@ -129,7 +103,7 @@ fun performSyncWithProgress(
         override fun run(indicator: ProgressIndicator) {
             try {
                 indicator.isIndeterminate = projects.size == 1
-                val launcher = ProjectLauncher.getInstance(currentIdeConfigRepository)
+                val launcher = ProjectLauncher.Companion.getInstance(currentIdeConfigRepository)
 
                 val syncOptions = SyncOptions(
                     stopIfRunning = true,
@@ -140,12 +114,15 @@ fun performSyncWithProgress(
                             is SyncProgress.Stopping -> {
                                 indicator.text = "Stopping IntelliJ..."
                             }
+
                             is SyncProgress.Syncing -> {
                                 indicator.text = "Syncing ${syncType.displayName}..."
                             }
+
                             is SyncProgress.Restarting -> {
                                 indicator.text = "Restarting IntelliJ..."
                             }
+
                             is SyncProgress.Error -> {
                                 // Error handled in catch block
                             }

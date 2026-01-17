@@ -4,6 +4,10 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.actions.isCurrentProject
+import com.projectjuggler.plugin.actions.performSelfShutdownSync
+import com.projectjuggler.plugin.actions.performSyncWithProgress
 
 data class SyncAllProjectsAction(
     val syncType: SyncType

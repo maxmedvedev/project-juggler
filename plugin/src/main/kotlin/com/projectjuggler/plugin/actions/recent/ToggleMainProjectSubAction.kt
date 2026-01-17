@@ -7,6 +7,7 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import com.projectjuggler.plugin.services.MainProjectService
 import com.projectjuggler.plugin.services.clearMainProject
 import com.projectjuggler.plugin.services.setMainProject
