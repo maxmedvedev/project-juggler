@@ -1,17 +1,23 @@
-package com.projectjuggler.plugin.services
+package com.projectjuggler.plugin.shutdown
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.startup.ProjectActivity
 import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
 import com.projectjuggler.plugin.actions.recent.currentIdeConfigRepository
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
+import kotlinx.coroutines.withContext
+import java.time.Instant
 import kotlin.io.path.Path
 
 /**
@@ -94,7 +100,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private suspend fun checkForStopSignal(project: ProjectMetadata) {
         try {
-            val signalManager = ShutdownSignalManager.getInstance(currentIdeConfigRepository)
+            val signalManager = ShutdownSignalManager.Companion.getInstance(currentIdeConfigRepository)
 
             val signal = signalManager.readStopRequest(project) ?: return
 
@@ -129,8 +135,8 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private fun isSignalValid(signal: StopRequestSignal): Boolean {
         return try {
-            val signalTime = java.time.Instant.parse(signal.timestamp)
-            val now = java.time.Instant.now()
+            val signalTime = Instant.parse(signal.timestamp)
+            val now = Instant.now()
             val ageMinutes = (now.toEpochMilli() - signalTime.toEpochMilli()) / 1000 / 60
             ageMinutes <= 5
         } catch (e: Exception) {
@@ -155,16 +161,10 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private fun cleanupStaleSignals(project: ProjectMetadata) {
         try {
-            val signalManager = ShutdownSignalManager.getInstance(currentIdeConfigRepository)
+            val signalManager = ShutdownSignalManager.Companion.getInstance(currentIdeConfigRepository)
             signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
         } catch (e: Exception) {
             log.error("Error cleaning up stale signals", e)
         }
-    }
-}
-
-internal class ShutdownSignalServiceStartupActivity : ProjectActivity {
-    override suspend fun execute(project: Project) {
-        service<ShutdownSignalService>()
     }
 }

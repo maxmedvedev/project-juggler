@@ -25,7 +25,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="project-juggler.notifications" displayType="BALLOON" bundle="messages.ProjectJugglerBundle"
                            key="notification.group.project-juggler.notifications"/>
-        <postStartupActivity implementation="com.projectjuggler.plugin.services.ShutdownSignalServiceStartupActivity"/>
+        <postStartupActivity implementation="com.projectjuggler.plugin.shutdown.ShutdownSignalServiceStartupActivity"/>
     </extensions>
 
     <actions resource-bundle="messages.ProjectJugglerBundle">
