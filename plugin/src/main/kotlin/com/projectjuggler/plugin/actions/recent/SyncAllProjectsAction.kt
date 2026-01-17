@@ -4,10 +4,10 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import com.projectjuggler.plugin.actions.isCurrentProject
 import com.projectjuggler.plugin.actions.performSelfShutdownSync
 import com.projectjuggler.plugin.actions.performSyncWithProgress
+import com.projectjuggler.plugin.services.IdeInstallationService
 
 data class SyncAllProjectsAction(
     val syncType: SyncType
@@ -33,7 +33,7 @@ data class SyncAllProjectsAction(
             return
         }
 
-        val allProjects = currentIdeConfigRepository.loadAllProjects()
+        val allProjects = IdeInstallationService.currentIdeConfigRepository.loadAllProjects()
         performSyncWithProgress(
             project = project,
             projects = allProjects,
@@ -54,8 +54,8 @@ data class SyncAllProjectsAction(
 
     private fun isSyncingAllIncludingMe(): Boolean {
         // Check if current project is in the list (self-shutdown case)
-        val allProjects = currentIdeConfigRepository.loadAllProjects()
-        val currentProjectInList = allProjects.any { isCurrentProject(currentIdeConfigRepository, it.path) }
+        val allProjects = IdeInstallationService.currentIdeConfigRepository.loadAllProjects()
+        val currentProjectInList = allProjects.any { isCurrentProject(IdeInstallationService.currentIdeConfigRepository, it.path) }
         return currentProjectInList
     }
 
@@ -64,7 +64,7 @@ data class SyncAllProjectsAction(
      * Spawns sync-helper with --all-projects and shuts down.
      */
     private fun handleSelfShutdownSyncAll(syncType: SyncType, project: Project?) {
-        val idePath = currentIdeConfigRepository.installation.executablePath
+        val idePath = IdeInstallationService.currentIdeConfigRepository.installation.executablePath
         performSelfShutdownSync(
             project = project,
             notificationMessage = "IntelliJ will close to sync all projects and reopen automatically...",

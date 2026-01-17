@@ -11,6 +11,7 @@ import com.intellij.util.application
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.util.GitWorktreeManager
@@ -54,7 +55,7 @@ internal class OpenProjectCopyAction : AnAction() {
         }
 
         // Validate paths before starting background operation
-        val projectManager = ProjectManager.getInstance(currentIdeConfigRepository)
+        val projectManager = ProjectManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
 
         val sourcePath = projectManager.resolvePath(sourceFile.path)
         val destPath = projectManager.resolvePath(destFile.path)
@@ -92,7 +93,7 @@ internal class OpenProjectCopyAction : AnAction() {
                 )
 
                 // Launch the worktree
-                val launcher = ProjectLauncher.getInstance(currentIdeConfigRepository)
+                val launcher = ProjectLauncher.getInstance(IdeInstallationService.currentIdeConfigRepository)
                 launcher.launch(destPath)
 
                 showInfoNotification(ProjectJugglerBundle.message(

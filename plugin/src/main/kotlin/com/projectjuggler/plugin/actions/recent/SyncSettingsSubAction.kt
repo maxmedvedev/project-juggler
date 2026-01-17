@@ -6,10 +6,10 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import com.projectjuggler.plugin.actions.isCurrentProject
 import com.projectjuggler.plugin.actions.performSelfShutdownSync
 import com.projectjuggler.plugin.actions.performSyncWithProgress
+import com.projectjuggler.plugin.services.IdeInstallationService
 
 /** Sync settings from base config */
 data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubAction {
@@ -24,12 +24,12 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
 
     private fun syncSingleProjectWithType(project: Project?, projectPath: ProjectPath, syncType: SyncType) {
         // Check if syncing current project (self-shutdown case)
-        if (isCurrentProject(currentIdeConfigRepository, projectPath)) {
+        if (isCurrentProject(IdeInstallationService.currentIdeConfigRepository, projectPath)) {
             handleSelfShutdownSync(project, projectPath, syncType)
             return
         }
 
-        val metadata = ProjectManager.Companion.getInstance(currentIdeConfigRepository).get(projectPath) ?: return
+        val metadata = ProjectManager.Companion.getInstance(IdeInstallationService.currentIdeConfigRepository).get(projectPath) ?: return
         performSyncWithProgress(
             project = project,
             projects = listOf(metadata),
@@ -56,7 +56,7 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
      * Handles syncing the current project by spawning sync-helper and shutting down.
      */
     private fun handleSelfShutdownSync(project: Project?, projectPath: ProjectPath, syncType: SyncType) {
-        val idePath = currentIdeConfigRepository.installation.executablePath
+        val idePath = IdeInstallationService.currentIdeConfigRepository.installation.executablePath
         performSelfShutdownSync(
             project = project,
             notificationMessage = "IntelliJ will close to sync ${syncType.displayName} and reopen automatically...",

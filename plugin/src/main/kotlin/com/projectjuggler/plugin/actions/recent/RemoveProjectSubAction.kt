@@ -5,7 +5,7 @@ import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.removeRecentProject
 
 /** Remove project from tracking */
@@ -16,7 +16,7 @@ object RemoveProjectSubAction : RecentProjectSubAction {
         project: Project?
     ): PopupStep<*>? {
         application.executeOnPooledThread {
-            removeRecentProject(item.projectPath, currentIdeConfigRepository)
+            removeRecentProject(item.projectPath, IdeInstallationService.currentIdeConfigRepository)
         }
         return step.doFinalStep {
             RecentProjectPopupBuilder(project).show()

@@ -14,6 +14,7 @@ import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.core.SyncProgress
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.recent.SyncType
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.util.BundledSyncHelper
@@ -103,7 +104,7 @@ fun performSyncWithProgress(
         override fun run(indicator: ProgressIndicator) {
             try {
                 indicator.isIndeterminate = projects.size == 1
-                val launcher = ProjectLauncher.Companion.getInstance(currentIdeConfigRepository)
+                val launcher = ProjectLauncher.getInstance(IdeInstallationService.currentIdeConfigRepository)
 
                 val syncOptions = SyncOptions(
                     stopIfRunning = true,

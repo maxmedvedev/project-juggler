@@ -147,5 +147,8 @@ class IdeInstallationService {
         private val instance = IdeInstallationService()
 
         fun getInstance(): IdeInstallationService = instance
+
+        val currentIdeConfigRepository: IdeConfigRepository
+            get() = getInstance().currentRepository
     }
 }

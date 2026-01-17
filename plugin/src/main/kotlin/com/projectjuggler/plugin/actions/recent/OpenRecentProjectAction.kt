@@ -4,8 +4,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
 import com.projectjuggler.plugin.actions.launchOrFocusProject
+import com.projectjuggler.plugin.services.IdeInstallationService
 
 data class OpenRecentProjectAction(
     val projectPath: ProjectPath,
@@ -17,7 +17,7 @@ data class OpenRecentProjectAction(
         project: Project?,
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
-        launchOrFocusProject(project, projectPath, currentIdeConfigRepository)
+        launchOrFocusProject(project, projectPath, IdeInstallationService.currentIdeConfigRepository)
         return PopupStep.FINAL_CHOICE
     }
 

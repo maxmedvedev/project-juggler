@@ -7,7 +7,7 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.MainProjectService
 import com.projectjuggler.plugin.services.clearMainProject
 import com.projectjuggler.plugin.services.setMainProject
@@ -25,7 +25,7 @@ object ToggleMainProjectSubAction : RecentProjectSubAction {
     }
 
     private fun toggleMainProject(project: Project?, projectPath: ProjectPath) {
-        val isMain = MainProjectService.isMainProject(currentIdeConfigRepository, projectPath)
+        val isMain = MainProjectService.isMainProject(IdeInstallationService.currentIdeConfigRepository, projectPath)
         application.invokeLater {
             val message = if (isMain) {
                 ProjectJugglerBundle.message("dialog.confirm.unset.main.message", projectPath.name)
@@ -52,15 +52,21 @@ object ToggleMainProjectSubAction : RecentProjectSubAction {
 
             // todo move from EDT
             if (isMain) {
-                clearMainProject(IntelliJNotificationHandler(project), currentIdeConfigRepository)
+                clearMainProject(
+                    IntelliJNotificationHandler(project),
+                    IdeInstallationService.currentIdeConfigRepository
+                )
             } else {
-                setMainProject(projectPath, IntelliJNotificationHandler(project), currentIdeConfigRepository)
+                setMainProject(projectPath,
+                    IntelliJNotificationHandler(project),
+                    IdeInstallationService.currentIdeConfigRepository
+                )
             }
         }
     }
 
     override fun getTextFor(item: OpenRecentProjectAction): String {
-        val isMain = MainProjectService.isMainProject(currentIdeConfigRepository, item.projectPath)
+        val isMain = MainProjectService.isMainProject(IdeInstallationService.currentIdeConfigRepository, item.projectPath)
         return when {
             isMain -> ProjectJugglerBundle.message("popup.recent.projects.action.unset.main")
             else -> ProjectJugglerBundle.message("popup.recent.projects.action.set.main")

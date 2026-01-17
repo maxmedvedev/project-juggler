@@ -7,7 +7,7 @@ import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.services.IdeInstallationService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,7 +66,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
 
         // Load the ProjectMetadata from the config repository
         return try {
-            currentIdeConfigRepository.loadProjectMetadata(ProjectId(projectId))
+            IdeInstallationService.currentIdeConfigRepository.loadProjectMetadata(ProjectId(projectId))
         } catch (e: Exception) {
             log.error("Error loading project metadata for ID: $projectId", e)
             null
@@ -100,7 +100,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private suspend fun checkForStopSignal(project: ProjectMetadata) {
         try {
-            val signalManager = ShutdownSignalManager.Companion.getInstance(currentIdeConfigRepository)
+            val signalManager = ShutdownSignalManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
 
             val signal = signalManager.readStopRequest(project) ?: return
 
@@ -161,7 +161,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private fun cleanupStaleSignals(project: ProjectMetadata) {
         try {
-            val signalManager = ShutdownSignalManager.Companion.getInstance(currentIdeConfigRepository)
+            val signalManager = ShutdownSignalManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
             signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
         } catch (e: Exception) {
             log.error("Error cleaning up stale signals", e)

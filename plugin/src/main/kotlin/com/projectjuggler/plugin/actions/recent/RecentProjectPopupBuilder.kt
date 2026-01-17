@@ -11,7 +11,7 @@ import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.MainProjectService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.util.GitUtils
@@ -24,7 +24,7 @@ internal class RecentProjectPopupBuilder(
     @RequiresBackgroundThread
     fun show() {
         try {
-            val ideConfigRepository = currentIdeConfigRepository
+            val ideConfigRepository = IdeInstallationService.currentIdeConfigRepository
 
             // Load recent projects
             val recentIndex = RecentProjectsIndex.getInstance(ideConfigRepository)

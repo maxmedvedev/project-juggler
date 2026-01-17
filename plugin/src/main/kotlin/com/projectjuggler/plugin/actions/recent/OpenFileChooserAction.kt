@@ -7,7 +7,7 @@ import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.currentIdeConfigRepository
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.util.IdeJuggler
 import kotlin.io.path.isDirectory
@@ -32,7 +32,7 @@ object OpenFileChooserAction : RecentProjectPopupAction {
 
         val selectedFile = FileChooser.chooseFile(descriptor, project, null) ?: return
 
-        val projectPath = ProjectManager.Companion.getInstance(currentIdeConfigRepository).resolvePath(selectedFile.path)
+        val projectPath = ProjectManager.getInstance(IdeInstallationService.currentIdeConfigRepository).resolvePath(selectedFile.path)
         if (!projectPath.path.isDirectory()) {
             showErrorNotification(
                 ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path),
@@ -41,6 +41,6 @@ object OpenFileChooserAction : RecentProjectPopupAction {
             return
         }
 
-        IdeJuggler.launchProject(project, currentIdeConfigRepository, projectPath)
+        IdeJuggler.launchProject(project, IdeInstallationService.currentIdeConfigRepository, projectPath)
     }
 }

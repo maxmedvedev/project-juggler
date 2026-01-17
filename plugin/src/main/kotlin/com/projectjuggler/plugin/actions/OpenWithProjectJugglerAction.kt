@@ -7,6 +7,7 @@ import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.util.IdeJuggler
 import kotlin.io.path.isDirectory
@@ -25,7 +26,7 @@ internal class OpenWithProjectJugglerAction : AnAction() {
 
         val selectedFile = FileChooser.chooseFile(descriptor, project, null) ?: return
 
-        val ideConfigRepository = currentIdeConfigRepository
+        val ideConfigRepository = IdeInstallationService.currentIdeConfigRepository
         val projectPath = ProjectManager.getInstance(ideConfigRepository).resolvePath(selectedFile.path)
         if (!projectPath.path.isDirectory()) {
             showErrorNotification(ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path), project)
