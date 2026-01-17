@@ -7,6 +7,8 @@ import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
+import com.projectjuggler.di.KoinInit
+import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +37,8 @@ class ShutdownSignalService(scope: CoroutineScope) {
     private val processedRequestIds = mutableSetOf<String>()
 
     init {
+        KoinInit.init(pluginModule)
+
         // Only start monitoring if this is an isolated project
         val project = getCurrentProjectId()
         if (project != null) {
