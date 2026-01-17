@@ -1,95 +1,76 @@
 package com.projectjuggler.util
 
+import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
-import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
 import kotlin.io.path.writeText
 
 class DirectoryCopierTest : StringSpec({
+    val tempDir = createTempDir("directory-test")
 
     "should copy directory on first open when source exists" {
-        val tempDir = createTempDirectory("directory-test")
-        try {
-            val source = tempDir.resolve("source")
-            val destination = tempDir.resolve("destination")
+        val source = tempDir.resolve("source")
+        val destination = tempDir.resolve("destination")
 
-            Files.createDirectories(source)
-            Files.createDirectories(destination)
+        Files.createDirectories(source)
+        Files.createDirectories(destination)
 
-            // Create some files
-            val subDir = source.resolve("some-subdir")
-            Files.createDirectories(subDir)
-            subDir.resolve("file.txt").writeText("<content>data</content>")
+        // Create some files
+        val subDir = source.resolve("some-subdir")
+        Files.createDirectories(subDir)
+        subDir.resolve("file.txt").writeText("<content>data</content>")
 
-            val result = DirectoryCopier.copyIfFirstOpen(source, destination)
+        val result = DirectoryCopier.copyIfFirstOpen(source, destination)
 
-            result shouldBe true
-            destination.resolve("some-subdir/file.txt").exists() shouldBe true
-        } finally {
-            tempDir.toFile().deleteRecursively()
-        }
+        result shouldBe true
+        destination.resolve("some-subdir/file.txt").exists() shouldBe true
     }
 
     "should not copy if destination is not empty" {
-        val tempDir = createTempDirectory("directory-test")
-        try {
-            val source = tempDir.resolve("source")
-            val destination = tempDir.resolve("destination")
+        val source = tempDir.resolve("source2")
+        val destination = tempDir.resolve("destination2")
 
-            Files.createDirectories(source)
-            Files.createDirectories(destination)
+        Files.createDirectories(source)
+        Files.createDirectories(destination)
 
-            // Create file in destination
-            destination.resolve("existing.txt").writeText("existing")
+        // Create file in destination
+        destination.resolve("existing.txt").writeText("existing")
 
-            // Create source file
-            source.resolve("file.txt").writeText("data")
+        // Create source file
+        source.resolve("file.txt").writeText("data")
 
-            val result = DirectoryCopier.copyIfFirstOpen(source, destination)
+        val result = DirectoryCopier.copyIfFirstOpen(source, destination)
 
-            result shouldBe false
-            destination.resolve("file.txt").exists() shouldBe false
-        } finally {
-            tempDir.toFile().deleteRecursively()
-        }
+        result shouldBe false
+        destination.resolve("file.txt").exists() shouldBe false
     }
 
     "should silently skip if source does not exist" {
-        val tempDir = createTempDirectory("directory-test")
-        try {
-            val source = tempDir.resolve("non-existent")
-            val destination = tempDir.resolve("destination")
-            Files.createDirectories(destination)
+        val source = tempDir.resolve("non-existent")
+        val destination = tempDir.resolve("destination3")
+        Files.createDirectories(destination)
 
-            val result = DirectoryCopier.copyIfFirstOpen(source, destination)
+        val result = DirectoryCopier.copyIfFirstOpen(source, destination)
 
-            result shouldBe false
-        } finally {
-            tempDir.toFile().deleteRecursively()
-        }
+        result shouldBe false
     }
 
     "should copy nested directory structures" {
-        val tempDir = createTempDirectory("directory-test")
-        try {
-            val source = tempDir.resolve("source")
-            val destination = tempDir.resolve("destination")
+        val source = tempDir.resolve("source4")
+        val destination = tempDir.resolve("destination4")
 
-            Files.createDirectories(source)
-            Files.createDirectories(destination)
+        Files.createDirectories(source)
+        Files.createDirectories(destination)
 
-            // Create nested structure
-            val nestedDir = source.resolve("subdir/lib/resources")
-            Files.createDirectories(nestedDir)
-            nestedDir.resolve("data.json").writeText("{}")
+        // Create nested structure
+        val nestedDir = source.resolve("subdir/lib/resources")
+        Files.createDirectories(nestedDir)
+        nestedDir.resolve("data.json").writeText("{}")
 
-            DirectoryCopier.copyIfFirstOpen(source, destination)
+        DirectoryCopier.copyIfFirstOpen(source, destination)
 
-            destination.resolve("subdir/lib/resources/data.json").exists() shouldBe true
-        } finally {
-            tempDir.toFile().deleteRecursively()
-        }
+        destination.resolve("subdir/lib/resources/data.json").exists() shouldBe true
     }
 })

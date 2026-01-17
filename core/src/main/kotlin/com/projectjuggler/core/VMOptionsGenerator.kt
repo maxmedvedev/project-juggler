@@ -22,6 +22,9 @@ object VMOptionsGenerator {
             return vmOptionsFile
         }
 
+        // Ensure root directory exists
+        Files.createDirectories(projectDirectories.root)
+
         // Generate from scratch
         val content = buildString {
             // Include base VM options if provided
