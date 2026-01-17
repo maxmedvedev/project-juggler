@@ -73,4 +73,29 @@ class DirectoryCopierTest : StringSpec({
 
         destination.resolve("subdir/lib/resources/data.json").exists() shouldBe true
     }
+
+    "copy should delete existing files not in source" {
+        val source = tempDir.resolve("source5")
+        val destination = tempDir.resolve("destination5")
+
+        Files.createDirectories(source)
+        Files.createDirectories(destination)
+
+        // Create existing files in destination that don't exist in source
+        val existingDir = destination.resolve("old-dir")
+        Files.createDirectories(existingDir)
+        existingDir.resolve("old-file.txt").writeText("old content")
+        destination.resolve("another-old-file.txt").writeText("another old")
+
+        // Create source file
+        source.resolve("new-file.txt").writeText("new content")
+
+        DirectoryCopier.copy(source, destination)
+
+        // New file should exist
+        destination.resolve("new-file.txt").exists() shouldBe true
+        // Old files should be deleted
+        destination.resolve("old-dir").exists() shouldBe false
+        destination.resolve("another-old-file.txt").exists() shouldBe false
+    }
 })

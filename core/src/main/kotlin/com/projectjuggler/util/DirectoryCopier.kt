@@ -1,6 +1,7 @@
 package com.projectjuggler.util
 
 import java.io.File
+import java.io.IOException
 import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.exists
@@ -44,8 +45,8 @@ object DirectoryCopier {
     }
 
     /**
-     * Force copy directory contents from source to destination, even if destination is not empty.
-     * This will overwrite existing files.
+     * Force copy directory contents from source to destination.
+     * This will delete all existing files in the destination before copying.
      *
      * @param source Source directory
      * @param destination Destination directory
@@ -62,7 +63,35 @@ object DirectoryCopier {
             throw IllegalArgumentException("Source directory does not exist or is not a directory: $source")
         }
 
+        // Clear destination directory before copying
+        clearDirectory(destination)
+
         copyDirectoryRecursively(source, destination, excludedDirectories, excludedFiles, excludedPatterns)
+    }
+
+    /**
+     * Delete all contents of a directory while keeping the directory itself.
+     */
+    private fun clearDirectory(root: Path) {
+        if (!root.exists()) {
+            return
+        }
+
+        Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                Files.delete(file)
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                if (exc != null) throw exc
+                // Don't delete the root directory itself
+                if (dir != root) {
+                    Files.delete(dir)
+                }
+                return FileVisitResult.CONTINUE
+            }
+        })
     }
 
     /**
