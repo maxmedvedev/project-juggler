@@ -63,12 +63,13 @@ private class RecentProjectPopupStep(
             ToggleMainProjectSubAction,
         )
 
+        // todo not implemented yet
         // Add "Open with IDE X" for each available IDE (except current)
-        allInstallations
-            .filter { it.executablePath != currentInstallation.executablePath }
-            .forEach { installation ->
-                actions.add(OpenWithIdeSubAction(installation))
-            }
+//        allInstallations
+//            .filter { it.executablePath != currentInstallation.executablePath }
+//            .forEach { installation ->
+//                actions.add(OpenWithIdeSubAction(installation))
+//            }
 
         actions.addAll(listOf(
             SyncSettingsSubAction(SyncType.All),
