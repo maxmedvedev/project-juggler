@@ -1,6 +1,5 @@
 package com.projectjuggler.plugin.services
 
-import com.intellij.diagnostic.VMOptions
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.config.IdeConfigRepository
@@ -102,8 +101,8 @@ class IdeInstallationService internal constructor(
             }
 
             val configPath = PathManager.getConfigDir()
-            val vmOptionsPath = VMOptions.getUserOptionsFile()
-                ?: VMOptions.getPlatformOptionsFile() // todo detect when a user-options file appears
+            val vmOptionsPath = VMOptionsCopy.getUserOptionsFile()
+                ?: VMOptionsCopy.getPlatformOptionsFile() // todo detect when a user-options file appears
             val pluginsPath = PathManager.getPluginsDir()
 
             repository.update { currentConfig ->
