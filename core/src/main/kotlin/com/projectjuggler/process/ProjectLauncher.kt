@@ -28,10 +28,13 @@ class ProjectLauncher internal constructor(
 
     /**
      * Launch a project by ID and path (for when ID is already known)
+     *
+     * @param projectPath The project to launch
+     * @param onFailure Optional callback invoked if the process fails shortly after start
      */
-    fun launch(projectPath: ProjectPath) {
+    fun launch(projectPath: ProjectPath, onFailure: ((LaunchFailure) -> Unit)? = null) {
         if (MainProjectService.isMainProject(ideConfigRepository, projectPath)) {
-            intellijLauncher.launchMain(projectPath.path)
+            intellijLauncher.launchMain(projectPath.path, onFailure)
             return
         }
 
@@ -47,7 +50,7 @@ class ProjectLauncher internal constructor(
         recentProjectsIndex.recordOpen(projectPath)
 
         // Launch IntelliJ with isolated configuration
-        intellijLauncher.launch(project)
+        intellijLauncher.launch(project, onFailure)
     }
 
     /**

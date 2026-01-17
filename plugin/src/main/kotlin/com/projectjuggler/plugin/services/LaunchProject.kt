@@ -12,7 +12,16 @@ internal fun launchProject(
     notificationHandler: NotificationHandler,
 ) {
     try {
-        ProjectLauncher.getInstance(ideConfigRepository).launch(projectPath)
+        ProjectLauncher.getInstance(ideConfigRepository).launch(projectPath) { failure ->
+            val errorOutput = failure.stderr.takeIf { it.isNotBlank() } ?: failure.stdout.takeIf { it.isNotBlank() } ?: "&lt;No output&gt;"
+            val message = ProjectJugglerBundle.message(
+                "notification.error.launch.crashed",
+                projectPath.name,
+                failure.exitCode,
+                errorOutput.take(500) // Limit error message length
+            )
+            notificationHandler.showErrorNotification(message)
+        }
     } catch (ex: Throwable) {
         val message =
             ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error")

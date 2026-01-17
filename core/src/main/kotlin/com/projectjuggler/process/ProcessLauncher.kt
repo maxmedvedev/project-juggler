@@ -4,13 +4,32 @@ import com.projectjuggler.platform.Platform
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 
+/**
+ * Contains details about a process launch failure.
+ */
+data class LaunchFailure(
+    val exitCode: Int,
+    val stdout: String,
+    val stderr: String
+)
+
 interface ProcessLauncher {
-    fun launch(executable: Path, args: List<String>, environment: Map<String, String> = emptyMap())
+    fun launch(
+        executable: Path,
+        args: List<String>,
+        environment: Map<String, String> = emptyMap(),
+        onFailure: ((LaunchFailure) -> Unit)? = null
+    )
 }
 
 class ProcessLauncherImpl : ProcessLauncher {
 
-    override fun launch(executable: Path, args: List<String>, environment: Map<String, String>) {
+    override fun launch(
+        executable: Path,
+        args: List<String>,
+        environment: Map<String, String>,
+        onFailure: ((LaunchFailure) -> Unit)?
+    ) {
         // Log launch diagnostics
         System.err.println("[ProcessLauncher] Starting process:")
         System.err.println("  Executable: $executable")
@@ -42,14 +61,21 @@ class ProcessLauncherImpl : ProcessLauncher {
                     if (!process.isAlive) {
                         val exitCode = process.exitValue()
                         if (exitCode != 0) {
+                            val stdout = stdoutBuffer.toString(Charsets.UTF_8)
+                            val stderr = stderrBuffer.toString(Charsets.UTF_8)
+
+                            // Log to stderr
                             System.err.println("[ProcessLauncher] Process failed:")
                             System.err.println("  Exit code: $exitCode")
-                            if (stdoutBuffer.size() > 0) {
-                                System.err.println("  Stdout: ${stdoutBuffer.toString(Charsets.UTF_8)}")
+                            if (stdout.isNotBlank()) {
+                                System.err.println("  Stdout: $stdout")
                             }
-                            if (stderrBuffer.size() > 0) {
-                                System.err.println("  Stderr: ${stderrBuffer.toString(Charsets.UTF_8)}")
+                            if (stderr.isNotBlank()) {
+                                System.err.println("  Stderr: $stderr")
                             }
+
+                            // Invoke failure callback
+                            onFailure?.invoke(LaunchFailure(exitCode, stdout, stderr))
                         }
                         break
                     }

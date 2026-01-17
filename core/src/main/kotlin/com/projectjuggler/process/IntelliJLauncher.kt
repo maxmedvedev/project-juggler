@@ -15,7 +15,7 @@ class IntelliJLauncher internal constructor(
     private val processLauncher: ProcessLauncher
 ) {
 
-    fun launch(project: ProjectMetadata) {
+    fun launch(project: ProjectMetadata, onFailure: ((LaunchFailure) -> Unit)? = null) {
         // 1. Ensure project directories exist
         val projectDirs = DirectoryManager.getInstance(ideConfigRepository).ensureProjectDirectories(project)
 
@@ -37,14 +37,14 @@ class IntelliJLauncher internal constructor(
 
         // 5. Launch IntelliJ with custom VM options
         val environment = mapOf("IDEA_VM_OPTIONS" to vmOptionsFile.toString())
-        processLauncher.launch(intellijPath, listOf(project.path.pathString), environment)
+        processLauncher.launch(intellijPath, listOf(project.path.pathString), environment, onFailure)
 
         println("Launched IntelliJ IDEA for project: ${project.name}")
         println("Project ID: ${project.id}")
         println("VM options file: $vmOptionsFile")
     }
 
-    fun launchMain(projectPath: Path) {
+    fun launchMain(projectPath: Path, onFailure: ((LaunchFailure) -> Unit)? = null) {
         // Get IntelliJ executable path
         // For IdeConfigRepository, IDE path comes from the installation
         val intellijPath = Paths.get(ideConfigRepository.installation.executablePath)
@@ -63,7 +63,7 @@ class IntelliJLauncher internal constructor(
         }
 
         // Launch IntelliJ with the project path
-        processLauncher.launch(intellijPath, listOf(projectPath.toString()), environment)
+        processLauncher.launch(intellijPath, listOf(projectPath.toString()), environment, onFailure)
 
         // Get project name for display
         val projectName = projectPath.fileName.toString()
