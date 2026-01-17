@@ -10,7 +10,9 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.util.application
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
+import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
@@ -53,6 +55,8 @@ internal class OpenProjectCopyAction : AnAction() {
         if (branchName.isNullOrBlank()) {
             return // User cancelled or entered empty branch name
         }
+
+        KoinInit.init(pluginModule) // todo move to BGT
 
         // Validate paths before starting background operation
         val projectManager = ProjectManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
