@@ -4,6 +4,8 @@ import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.core.*
 import com.projectjuggler.process.IntelliJLauncher
+import com.projectjuggler.process.ProcessLauncher
+import com.projectjuggler.process.ProcessLauncherImpl
 import com.projectjuggler.process.ProjectLauncher
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -20,6 +22,8 @@ val IDE_SCOPE = named("IDE_SCOPE")
 val coreModule = module {
     // IdeRegistry is a true singleton (manages all IDE installations)
     single { IdeRegistry() }
+    // ProcessLauncher is a singleton (stateless, shared across all scopes)
+    single<ProcessLauncher> { ProcessLauncherImpl() }
 }
 
 /**
@@ -36,7 +40,7 @@ val ideScopedModule = module {
         scoped { BaseVMOptionsTracker(get()) }
         scoped { ShutdownSignalManager(get()) }
         scoped { RecentProjectsIndex(get()) }
-        scoped { IntelliJLauncher(get()) }
+        scoped { IntelliJLauncher(get(), get()) }
         scoped { ProjectLauncher(get()) }
         scoped { ProjectCleaner(get()) }
     }

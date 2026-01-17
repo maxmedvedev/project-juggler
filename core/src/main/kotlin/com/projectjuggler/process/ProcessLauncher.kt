@@ -4,9 +4,13 @@ import com.projectjuggler.platform.Platform
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 
-object ProcessLauncher {
+interface ProcessLauncher {
+    fun launch(executable: Path, args: List<String>, environment: Map<String, String> = emptyMap())
+}
 
-    fun launch(executable: Path, args: List<String>, environment: Map<String, String> = emptyMap()) {
+class ProcessLauncherImpl : ProcessLauncher {
+
+    override fun launch(executable: Path, args: List<String>, environment: Map<String, String>) {
         // Log launch diagnostics
         System.err.println("[ProcessLauncher] Starting process:")
         System.err.println("  Executable: $executable")

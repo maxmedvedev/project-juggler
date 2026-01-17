@@ -11,7 +11,8 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 class IntelliJLauncher internal constructor(
-    private val ideConfigRepository: IdeConfigRepository
+    private val ideConfigRepository: IdeConfigRepository,
+    private val processLauncher: ProcessLauncher
 ) {
 
     fun launch(project: ProjectMetadata) {
@@ -36,7 +37,7 @@ class IntelliJLauncher internal constructor(
 
         // 5. Launch IntelliJ with custom VM options
         val environment = mapOf("IDEA_VM_OPTIONS" to vmOptionsFile.toString())
-        ProcessLauncher.launch(intellijPath, listOf(project.path.pathString), environment)
+        processLauncher.launch(intellijPath, listOf(project.path.pathString), environment)
 
         println("Launched IntelliJ IDEA for project: ${project.name}")
         println("Project ID: ${project.id}")
@@ -62,7 +63,7 @@ class IntelliJLauncher internal constructor(
         }
 
         // Launch IntelliJ with the project path
-        ProcessLauncher.launch(intellijPath, listOf(projectPath.toString()), environment)
+        processLauncher.launch(intellijPath, listOf(projectPath.toString()), environment)
 
         // Get project name for display
         val projectName = projectPath.fileName.toString()
