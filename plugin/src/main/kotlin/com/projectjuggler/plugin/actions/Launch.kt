@@ -1,9 +1,14 @@
 package com.projectjuggler.plugin.actions
 
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.plugin.util.IdeJuggler
+import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.focusExistingProject
+import com.projectjuggler.plugin.services.launchProject
+import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 import com.projectjuggler.util.ProjectLockUtils
 
 /**
@@ -13,16 +18,34 @@ import com.projectjuggler.util.ProjectLockUtils
  */
 fun launchOrFocusProject(
     project: Project?,
-    projectPath: ProjectPath,
-    repository: IdeConfigRepository
+    projectPath: ProjectPath
 ) {
+    val task = object : Task.Backgroundable(
+        project,
+        ProjectJugglerBundle.message("progress.opening.project", projectPath.name),
+        false
+    ) {
+        override fun run(indicator: ProgressIndicator) = launchOrFocusUnderProgress(project, projectPath)
+    }
+    task.queue()
+}
+
+private fun launchOrFocusUnderProgress(project: Project?, projectPath: ProjectPath) {
+    val repository = IdeInstallationService.currentIdeConfigRepository
     val isOpen = ProjectLockUtils.isProjectOpen(repository, projectPath)
 
+    val notificationHandler = IntelliJNotificationHandler(project)
     if (isOpen) {
-        // Try to focus the existing window
-        IdeJuggler.focusExistingProject(project, repository, projectPath)
+        focusExistingProject(
+            projectPath = projectPath,
+            ideConfigRepository = repository,
+            notificationHandler = notificationHandler
+        )
     } else {
-        // Launch new instance
-        IdeJuggler.launchProject(project, repository, projectPath)
+        launchProject(
+            projectPath = projectPath,
+            ideConfigRepository = repository,
+            notificationHandler = notificationHandler
+        )
     }
 }
