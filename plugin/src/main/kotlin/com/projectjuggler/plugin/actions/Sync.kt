@@ -113,15 +113,18 @@ fun performSyncWithProgress(
                     onProgress = { progress ->
                         when (progress) {
                             is SyncProgress.Stopping -> {
-                                indicator.text = "Stopping IntelliJ..."
+                                indicator.text = ProjectJugglerBundle.message("progress.sync.stopping.ide")
                             }
 
                             is SyncProgress.Syncing -> {
-                                indicator.text = "Syncing ${syncType.displayName}..."
+                                indicator.text = ProjectJugglerBundle.message(
+                                    "progress.sync.syncing.type",
+                                    syncType.displayName
+                                )
                             }
 
                             is SyncProgress.Restarting -> {
-                                indicator.text = "Restarting IntelliJ..."
+                                indicator.text = ProjectJugglerBundle.message("progress.sync.restarting.ide")
                             }
 
                             is SyncProgress.Error -> {
