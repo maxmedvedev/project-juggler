@@ -47,7 +47,7 @@ internal class RecentProjectPopupBuilder(
             itemsList.add(OpenFileChooserAction)
             // Add main project if configured
             itemsList.addIfNotNull(createMainProjectItem(ideConfigRepository))
-            itemsList.addAll(items)
+            itemsList.addAll(items.filterNot { it.isMainProject })
             itemsList.add(SyncAllProjectsAction(SyncType.All))
             itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
             itemsList.add(SyncAllProjectsAction(SyncType.Config))
