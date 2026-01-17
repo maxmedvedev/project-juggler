@@ -3,6 +3,7 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeConfig
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.di.KoinTestExtension
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
@@ -11,6 +12,7 @@ import kotlin.io.path.createTempFile
 import kotlin.io.path.writeText
 
 class BaseVMOptionsTrackerTest : StringSpec({
+    extensions(KoinTestExtension())
 
     "should detect no changes when hash matches" {
         val tempDir = createTempDirectory("test-config")

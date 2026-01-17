@@ -6,10 +6,11 @@ import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.core.DirectoryManager
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.VMOptionsGenerator
+import com.projectjuggler.di.getScope
 import java.nio.file.Path
 import java.nio.file.Paths
 
-class IntelliJLauncher private constructor(
+class IntelliJLauncher internal constructor(
     private val ideConfigRepository: IdeConfigRepository
 ) {
 
@@ -75,7 +76,7 @@ class IntelliJLauncher private constructor(
     }
 
     companion object {
-        fun getInstance(ideConfigRepository: IdeConfigRepository) =
-            IntelliJLauncher(ideConfigRepository)
+        fun getInstance(ideConfigRepository: IdeConfigRepository): IntelliJLauncher =
+            ideConfigRepository.getScope().get()
     }
 }

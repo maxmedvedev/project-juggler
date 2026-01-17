@@ -3,8 +3,11 @@ plugins {
     application
 }
 
+val koinVersion: String by rootProject.extra
+
 dependencies {
     implementation(project(":core"))
+    implementation("io.insert-koin:koin-core:$koinVersion")
 }
 
 application {

@@ -10,6 +10,7 @@ import com.projectjuggler.config.MigrationManager
 import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
+import org.koin.core.context.GlobalContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -18,9 +19,9 @@ import java.nio.file.Paths
  * Central service for managing IDE installations and their configurations.
  * Provides access to the current IDE's repository and all available IDE installations.
  */
-class IdeInstallationService {
-    private val ideRegistry = IdeRegistry.create()
-
+class IdeInstallationService internal constructor(
+    private val ideRegistry: IdeRegistry
+) {
     /**
      * The current IDE installation (the one running this plugin).
      */
@@ -144,9 +145,8 @@ class IdeInstallationService {
     }
 
     companion object {
-        private val instance = IdeInstallationService()
-
-        fun getInstance(): IdeInstallationService = instance
+        fun getInstance(): IdeInstallationService =
+            GlobalContext.get().get()
 
         val currentIdeConfigRepository: IdeConfigRepository
             get() = getInstance().currentRepository

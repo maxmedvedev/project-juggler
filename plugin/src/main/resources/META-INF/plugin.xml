@@ -22,6 +22,11 @@
 
     <resource-bundle>messages.ProjectJugglerBundle</resource-bundle>
 
+    <applicationListeners>
+        <listener class="com.projectjuggler.plugin.PluginStartup"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="project-juggler.notifications" displayType="BALLOON" bundle="messages.ProjectJugglerBundle"
                            key="notification.group.project-juggler.notifications"/>

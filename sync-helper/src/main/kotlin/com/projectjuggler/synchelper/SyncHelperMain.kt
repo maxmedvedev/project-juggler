@@ -3,9 +3,10 @@ package com.projectjuggler.synchelper
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.ProjectMetadata
-import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
+import com.projectjuggler.di.KoinInit
+import com.projectjuggler.process.ProjectLauncher
 
 /**
  * Minimal sync helper for self-shutdown sync operations.
@@ -15,6 +16,9 @@ import com.projectjuggler.core.SyncOptions
  *    or: sync-helper --ide <ide-path> --all-projects [--all|--vmoptions|--config|--plugins]
  */
 fun main(args: Array<String>) {
+    // Initialize Koin DI
+    KoinInit.init()
+
     val argMap = parseArgs(args)
 
     val idePath = argMap["ide"] ?: error("--ide <ide-path> is required")
@@ -33,7 +37,7 @@ fun main(args: Array<String>) {
     val syncConfig = syncAll || "config" in argMap
     val syncPlugins = syncAll || "plugins" in argMap
 
-    val ideRegistry = IdeRegistry.create()
+    val ideRegistry = IdeRegistry.getInstance()
     val installation = IdeInstallation(idePath, "IDE")
     val ideConfigRepository = ideRegistry.getRepository(installation)
     val projectLauncher = ProjectLauncher.getInstance(ideConfigRepository)

@@ -1,11 +1,12 @@
 package com.projectjuggler.core
 
 import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.di.getScope
 import com.projectjuggler.util.HashUtils
 import java.nio.file.Path
 import kotlin.io.path.exists
 
-class BaseVMOptionsTracker private constructor(
+class BaseVMOptionsTracker internal constructor(
     private val ideConfigRepository: IdeConfigRepository
 ) {
     fun hasChanged(): Boolean {
@@ -46,7 +47,7 @@ class BaseVMOptionsTracker private constructor(
     }
 
     companion object {
-        fun getInstance(ideConfigRepository: IdeConfigRepository) =
-            BaseVMOptionsTracker(ideConfigRepository)
+        fun getInstance(ideConfigRepository: IdeConfigRepository): BaseVMOptionsTracker =
+            ideConfigRepository.getScope().get()
     }
 }

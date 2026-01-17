@@ -17,7 +17,7 @@ fun launchProject(
         IdeInstallationService.getInstance().autoPopulateIfNeeded(ideConfigRepository)
         val launcher = ProjectLauncher.getInstance(ideConfigRepository)
         launcher.launch(projectPath)
-    } catch (ex: Exception) {
+    } catch (ex: Throwable) {
         val message = ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error")
         notificationHandler.showErrorNotification(message)
         logger<IdeJuggler>().error(message, ex)

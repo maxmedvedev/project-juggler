@@ -13,16 +13,17 @@ import com.projectjuggler.core.ShutdownWaiter
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.core.SyncProgress
 import com.projectjuggler.core.VMOptionsGenerator
+import com.projectjuggler.di.getScope
 import com.projectjuggler.util.ProjectLockUtils
 
-class ProjectLauncher private constructor(
+class ProjectLauncher internal constructor(
     private val ideConfigRepository: IdeConfigRepository,
+    private val projectManager: ProjectManager = ProjectManager.getInstance(ideConfigRepository),
+    private val directoryManager: DirectoryManager = DirectoryManager.getInstance(ideConfigRepository),
+    private val baseVMOptionsTracker: BaseVMOptionsTracker = BaseVMOptionsTracker.getInstance(ideConfigRepository),
+    private val intellijLauncher: IntelliJLauncher = IntelliJLauncher.getInstance(ideConfigRepository),
+    private val recentProjectsIndex: RecentProjectsIndex = RecentProjectsIndex.getInstance(ideConfigRepository),
 ) {
-    private val projectManager = ProjectManager.getInstance(ideConfigRepository)
-    private val directoryManager = DirectoryManager.getInstance(ideConfigRepository)
-    private val baseVMOptionsTracker = BaseVMOptionsTracker.getInstance(ideConfigRepository)
-    private val intellijLauncher = IntelliJLauncher.getInstance(ideConfigRepository)
-    private val recentProjectsIndex = RecentProjectsIndex.getInstance(ideConfigRepository)
 
     /**
      * Checks if the given project path is the configured main project.
@@ -214,7 +215,7 @@ class ProjectLauncher private constructor(
 
     companion object {
         fun getInstance(ideConfigRepository: IdeConfigRepository): ProjectLauncher =
-            ProjectLauncher(ideConfigRepository)
+            ideConfigRepository.getScope().get()
     }
 }
 

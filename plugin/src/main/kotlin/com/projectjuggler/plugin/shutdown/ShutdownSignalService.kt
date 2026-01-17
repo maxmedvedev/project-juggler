@@ -163,7 +163,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
         try {
             val signalManager = ShutdownSignalManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
             signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             log.error("Error cleaning up stale signals", e)
         }
     }

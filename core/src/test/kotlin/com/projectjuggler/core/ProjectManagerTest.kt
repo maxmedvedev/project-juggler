@@ -2,6 +2,7 @@ package com.projectjuggler.core
 
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.di.KoinTestExtension
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -9,6 +10,7 @@ import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 
 class ProjectManagerTest : StringSpec({
+    extensions(KoinTestExtension())
 
     "should expand tilde in path strings" {
         val baseDir = createTempDirectory("test-pm")

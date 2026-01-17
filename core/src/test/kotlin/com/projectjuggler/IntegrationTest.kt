@@ -6,6 +6,7 @@ import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.core.*
+import com.projectjuggler.di.KoinTestExtension
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
@@ -18,6 +19,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.writeText
 
 class IntegrationTest : StringSpec({
+    extensions(KoinTestExtension())
 
     "should complete full workflow: configure, open, list, clean" {
         val baseDir = createTempDirectory("test-project-juggler")

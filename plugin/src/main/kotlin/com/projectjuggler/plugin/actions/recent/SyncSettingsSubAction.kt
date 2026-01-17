@@ -29,7 +29,7 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
             return
         }
 
-        val metadata = ProjectManager.Companion.getInstance(IdeInstallationService.currentIdeConfigRepository).get(projectPath) ?: return
+        val metadata = ProjectManager.getInstance(IdeInstallationService.currentIdeConfigRepository).get(projectPath) ?: return
         performSyncWithProgress(
             project = project,
             projects = listOf(metadata),

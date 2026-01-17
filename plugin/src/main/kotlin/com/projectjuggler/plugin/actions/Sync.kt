@@ -38,7 +38,7 @@ fun isCurrentProject(ideConfigRepository: IdeConfigRepository, projectPath: Proj
         val currentProjectId = parts[projectsIndex + 1]
 
         // Get the project ID for the target path
-        val targetMetadata = ProjectManager.Companion.getInstance(ideConfigRepository).get(projectPath)
+        val targetMetadata = ProjectManager.getInstance(ideConfigRepository).get(projectPath)
         return targetMetadata?.id?.id == currentProjectId
     }
 

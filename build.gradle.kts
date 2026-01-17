@@ -6,6 +6,8 @@ plugins {
 
 group = "com.projectjuggler"
 
+val koinVersion by extra("4.1.1")
+
 subprojects {
     group = rootProject.group
 

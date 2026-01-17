@@ -3,6 +3,7 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.di.getScope
 import com.projectjuggler.locators.ConfigLocator
 import com.projectjuggler.locators.PluginLocator
 import com.projectjuggler.util.DirectoryCopier
@@ -12,7 +13,7 @@ import java.nio.file.Paths
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
 
-class DirectoryManager(private val configRepository: IdeConfigRepository) {
+class DirectoryManager internal constructor(private val configRepository: IdeConfigRepository) {
 
     fun ensureProjectDirectories(project: ProjectMetadata): ProjectDirectories {
         val root = getProjectRoot(project)
@@ -131,8 +132,8 @@ class DirectoryManager(private val configRepository: IdeConfigRepository) {
     }
 
     companion object {
-        fun getInstance(configRepository: IdeConfigRepository) =
-            DirectoryManager(configRepository)
+        fun getInstance(configRepository: IdeConfigRepository): DirectoryManager =
+            configRepository.getScope().get()
     }
 }
 

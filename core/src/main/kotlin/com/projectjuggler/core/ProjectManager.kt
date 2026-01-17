@@ -3,12 +3,13 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.di.getScope
 import com.projectjuggler.util.PathUtils
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.io.path.exists
 
-class ProjectManager private constructor(
+class ProjectManager internal constructor(
     private val ideConfigRepository: IdeConfigRepository,
 ) {
 
@@ -91,7 +92,7 @@ class ProjectManager private constructor(
     }
 
     companion object {
-        fun getInstance(ideConfigRepository: IdeConfigRepository) = ProjectManager(ideConfigRepository)
-
+        fun getInstance(ideConfigRepository: IdeConfigRepository): ProjectManager =
+            ideConfigRepository.getScope().get()
     }
 }

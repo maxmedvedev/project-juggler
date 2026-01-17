@@ -4,6 +4,7 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.di.KoinTestExtension
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -11,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import java.nio.file.Files
 
 class ShutdownSignalManagerTest : StringSpec({
+    extensions(KoinTestExtension())
 
     "should create and read stop request signal" {
         val tempDir = Files.createTempDirectory("test")

@@ -6,6 +6,8 @@ plugins {
 
 version = "0.0.2"
 
+val koinVersion: String by rootProject.extra
+
 repositories {
     mavenCentral()
 
@@ -16,6 +18,7 @@ repositories {
 
 dependencies {
     implementation(project(":core"))
+    implementation("io.insert-koin:koin-core:$koinVersion")
     intellijPlatform {
         intellijIdea("2025.1.1")
     }

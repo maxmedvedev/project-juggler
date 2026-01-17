@@ -1,6 +1,7 @@
 package com.projectjuggler.config
 
 import com.projectjuggler.locators.IntelliJLocator
+import org.koin.core.context.GlobalContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -12,7 +13,7 @@ import kotlin.streams.asSequence
  * Central registry for managing multiple IDE installations.
  * Provides discovery of available IDEs and access to their repositories.
  */
-class IdeRegistry(baseDir: Path = getDefaultBaseDir()) {
+class IdeRegistry internal constructor(baseDir: Path = getDefaultBaseDir()) {
     private val v2Dir = baseDir.resolve("v2")
 
     /**
@@ -57,6 +58,7 @@ class IdeRegistry(baseDir: Path = getDefaultBaseDir()) {
             return Paths.get(System.getProperty("user.home"), ".project-juggler")
         }
 
-        fun create() = IdeRegistry(getDefaultBaseDir())
+        fun getInstance(): IdeRegistry =
+            GlobalContext.get().get()
     }
 }

@@ -4,6 +4,7 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.di.KoinTestExtension
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
@@ -11,6 +12,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
 
 class DirectoryManagerTest : StringSpec({
+    extensions(KoinTestExtension())
 
     "should create all project directories" {
         val tempDir = createTempDirectory("test-base")

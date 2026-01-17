@@ -3,8 +3,9 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.RecentProjectsIndex
+import com.projectjuggler.di.getScope
 
-class ProjectCleaner(private val configRepository: IdeConfigRepository) {
+class ProjectCleaner internal constructor(private val configRepository: IdeConfigRepository) {
 
     /**
      * Cleans a project by removing its config directories and recent entry.
@@ -16,6 +17,7 @@ class ProjectCleaner(private val configRepository: IdeConfigRepository) {
     }
 
     companion object {
-        fun getInstance(configRepository: IdeConfigRepository) = ProjectCleaner(configRepository)
+        fun getInstance(configRepository: IdeConfigRepository): ProjectCleaner =
+            configRepository.getScope().get()
     }
 }

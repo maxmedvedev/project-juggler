@@ -1,5 +1,6 @@
 package com.projectjuggler.config
 
+import com.projectjuggler.di.getScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -9,7 +10,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
-class RecentProjectsIndex private constructor(
+class RecentProjectsIndex internal constructor(
     private val ideConfigRepository: IdeConfigRepository
 ) {
     private val recentFile = ideConfigRepository.baseDir.resolve("recent.json")
@@ -57,7 +58,8 @@ class RecentProjectsIndex private constructor(
     }
 
     companion object {
-        fun getInstance(ideConfigRepository: IdeConfigRepository) = RecentProjectsIndex(ideConfigRepository)
+        fun getInstance(ideConfigRepository: IdeConfigRepository): RecentProjectsIndex =
+            ideConfigRepository.getScope().get()
     }
 }
 
