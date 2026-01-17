@@ -11,7 +11,9 @@ object OpenFileChooserAction : RecentProjectPopupAction {
         project: Project?,
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
-        showFileChooserAndLaunch(project)
+        step.doFinalStep {
+            showFileChooserAndLaunch(project)
+        }
         return PopupStep.FINAL_CHOICE
     }
 

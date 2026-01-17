@@ -13,7 +13,9 @@ object OpenRecentProjectSubAction : RecentProjectSubAction {
         step: BaseListPopupStep<RecentProjectSubAction>,
         project: Project?
     ): PopupStep<*>? {
-        launchOrFocusProject(project, item.projectPath)
+        step.doFinalStep {
+            launchOrFocusProject(project, item.projectPath)
+        }
         return PopupStep.FINAL_CHOICE
     }
 

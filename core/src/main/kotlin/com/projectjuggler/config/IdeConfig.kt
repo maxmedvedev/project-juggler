@@ -15,6 +15,7 @@ data class IdeConfig(
     val basePluginsPath: String? = null,
     val baseConfigPath: String? = null,
     val mainProjectPath: String? = null,
+    val dontAskAboutMainProject: Boolean = false,
 ) {
     companion object {
         fun default(installation: IdeInstallation) = IdeConfig(installation = installation)

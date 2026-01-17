@@ -16,7 +16,9 @@ data class OpenRecentProjectAction(
         project: Project?,
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
-        launchOrFocusProject(project, projectPath)
+        step.doFinalStep {
+            launchOrFocusProject(project, projectPath)
+        }
         return PopupStep.FINAL_CHOICE
     }
 
