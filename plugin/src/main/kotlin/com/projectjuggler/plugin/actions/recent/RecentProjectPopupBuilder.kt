@@ -12,6 +12,7 @@ import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.IdePathSyncDetector
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.util.GitUtils
@@ -42,6 +43,12 @@ internal class RecentProjectPopupBuilder(
 
             // Create popup using ListPopupImpl with custom renderer and submenu support
             val itemsList = mutableListOf<RecentProjectPopupAction>()
+
+            // Add path sync warning if paths are out of sync (only in main instance)
+            val mismatches = IdePathSyncDetector.detectMismatches(ideConfigRepository)
+            if (mismatches.isNotEmpty()) {
+                itemsList.add(UpdatePathsAction(mismatches))
+            }
 
             // Add browse button at the top
             itemsList.add(OpenFileChooserAction)

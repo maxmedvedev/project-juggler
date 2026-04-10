@@ -38,6 +38,7 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
 
         return when (value) {
             is OpenRecentProjectAction -> renderRecentProject(value, isSelected, cellHasFocus, value.projectPath)
+            is UpdatePathsAction -> renderUpdatePaths(value, isSelected, cellHasFocus)
             is OpenFileChooserAction -> renderOpenFileChooser(isSelected, cellHasFocus)
             is SyncAllProjectsAction -> renderSyncProjects(value.syncType, isSelected, cellHasFocus)
             is ImportRecentProjectsAction -> renderImportProjects(isSelected, cellHasFocus)
@@ -173,6 +174,20 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
             isSelected = isSelected,
             cellHasFocus = cellHasFocus,
             showSeparator = true
+        )
+    }
+
+    private fun renderUpdatePaths(
+        action: UpdatePathsAction,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        return renderActionItem(
+            label = action.getTextFor(),
+            icon = AllIcons.General.Warning,
+            isSelected = isSelected,
+            cellHasFocus = cellHasFocus,
+            showSeparator = false
         )
     }
 
