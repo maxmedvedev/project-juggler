@@ -28,7 +28,7 @@ tasks {
     patchPluginXml {
         pluginVersion.set(project.version.toString())
         sinceBuild.set("251")
-        untilBuild.set("261.*")
+        untilBuild.set("262.*")
     }
 
     // Bundle sync-helper distribution with the plugin
