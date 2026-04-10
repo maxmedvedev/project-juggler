@@ -17,6 +17,7 @@ object KoinInit {
      *
      * @param additionalModules optional modules to load (e.g., plugin-specific modules)
      */
+    @Synchronized
     fun init(vararg additionalModules: Module) {
         if (GlobalContext.getOrNull() != null) {
             // Already initialized, just load additional modules if any
