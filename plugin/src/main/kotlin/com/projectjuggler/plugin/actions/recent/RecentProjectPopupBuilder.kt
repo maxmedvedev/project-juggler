@@ -66,6 +66,7 @@ internal class RecentProjectPopupBuilder(
                 itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
                 itemsList.add(SyncAllProjectsAction(SyncType.Config))
                 itemsList.add(SyncAllProjectsAction(SyncType.Plugins))
+                itemsList.add(ToggleSyncOnUpdateAction(ideConfigRepository.load().syncPluginsOnIdeUpdate))
             } else {
                 // Show import action when no projects
                 itemsList.add(ImportRecentProjectsAction)

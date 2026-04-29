@@ -41,6 +41,7 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
             is UpdatePathsAction -> renderUpdatePaths(value, isSelected, cellHasFocus)
             is OpenFileChooserAction -> renderOpenFileChooser(isSelected, cellHasFocus)
             is SyncAllProjectsAction -> renderSyncProjects(value.syncType, isSelected, cellHasFocus)
+            is ToggleSyncOnUpdateAction -> renderToggleSyncOnUpdate(value, isSelected, cellHasFocus)
             is ImportRecentProjectsAction -> renderImportProjects(isSelected, cellHasFocus)
         }
     }
@@ -161,6 +162,20 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
             isSelected = isSelected,
             cellHasFocus = cellHasFocus,
             showSeparator = showSeparator
+        )
+    }
+
+    private fun renderToggleSyncOnUpdate(
+        action: ToggleSyncOnUpdateAction,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        return renderActionItem(
+            label = action.getTextFor(),
+            icon = AllIcons.Actions.Refresh,
+            isSelected = isSelected,
+            cellHasFocus = cellHasFocus,
+            showSeparator = false
         )
     }
 
