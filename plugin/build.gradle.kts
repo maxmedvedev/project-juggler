@@ -21,6 +21,7 @@ dependencies {
     implementation("io.insert-koin:koin-core:$koinVersion")
     intellijPlatform {
         intellijIdea("2025.1.1")
+        pluginVerifier()
     }
 }
 
@@ -38,6 +39,14 @@ tasks {
         // Copy sync-helper distribution into plugin resources
         from(project(":sync-helper").layout.buildDirectory.dir("install/sync-helper")) {
             into("sync-helper")
+        }
+    }
+}
+
+intellijPlatform {
+    pluginVerification {
+        ides {
+            recommended()
         }
     }
 }
