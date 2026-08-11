@@ -12,7 +12,7 @@ import com.projectjuggler.plugin.showErrorNotification
 import kotlin.io.path.isDirectory
 
 internal fun showFileChooserAndLaunch(project: Project?) {
-    val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor().apply {
+    val descriptor = FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().apply {
         title = ProjectJugglerBundle.message("file.chooser.title")
         description = ProjectJugglerBundle.message("file.chooser.description")
     }
