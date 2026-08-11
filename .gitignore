@@ -20,3 +20,4 @@ out/
 # GraalVM Native Image
 graal_isolate.h
 graal_isolate_dynamic.h
+/.mcp.json
