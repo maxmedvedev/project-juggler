@@ -8,8 +8,6 @@ import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
-import com.projectjuggler.plugin.showErrorNotification
-import kotlin.io.path.isDirectory
 
 internal fun showFileChooserAndLaunch(project: Project?) {
     val descriptor = FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor().apply {
@@ -23,13 +21,6 @@ internal fun showFileChooserAndLaunch(project: Project?) {
 
     val repository = IdeInstallationService.currentIdeConfigRepository
     val projectPath = ProjectManager.getInstance(repository).resolvePath(selectedFile.path)
-    if (!projectPath.path.isDirectory()) {
-        showErrorNotification(
-            ProjectJugglerBundle.message("notification.error.not.directory", selectedFile.path),
-            project
-        )
-        return
-    }
 
     launchOrFocusProject(project, projectPath)
 }
