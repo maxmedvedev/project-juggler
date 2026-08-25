@@ -22,6 +22,7 @@ import io.mockk.verify
 import org.koin.core.context.loadKoinModules
 import org.koin.dsl.module
 import java.nio.file.Path
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createDirectory
 import kotlin.io.path.createFile
 import kotlin.io.path.exists
@@ -50,7 +51,33 @@ class FileBasedProjectTest : StringSpec({
         val projectPath = projectManager.resolvePath(moduleFile.toString())
 
         projectPath.pathString shouldBe moduleFile.toAbsolutePath().normalize().toString()
-        projectPath.name shouldBe "module.bazel"
+        // The name is inferred from the enclosing directory, not from the selected file
+        projectPath.name shouldBe repoDir.fileName.toString()
+        projectPath.fileName shouldBe "module.bazel"
+    }
+
+    "should infer the name from the enclosing directory for a nested file" {
+        val projectManager = ProjectManager.getInstance(repository())
+
+        val nestedDir = repoDir.resolve("nested-module").createDirectories()
+        val nestedFile = nestedDir.resolve("MODULE.bazel").apply { writeText("module(name = \"nested\")") }
+
+        projectManager.resolvePath(nestedFile.toString()).name shouldBe "nested-module"
+    }
+
+    "should infer the name from the enclosing directory for a path that no longer exists" {
+        val projectManager = ProjectManager.getInstance(repository())
+
+        // Stale recent-projects entries point at files that may have been deleted
+        val missing = repoDir.resolve("gone").resolve("MODULE.bazel")
+
+        projectManager.resolvePath(missing.toString()).name shouldBe "gone"
+    }
+
+    "should use the directory itself as the name for a directory-based project" {
+        val projectManager = ProjectManager.getInstance(repository())
+
+        projectManager.resolvePath(repoDir.toString()).name shouldBe repoDir.fileName.toString()
     }
 
     "should expand tilde in a file path" {
@@ -80,7 +107,9 @@ class FileBasedProjectTest : StringSpec({
         val dirProjectPath = projectManager.resolvePath(repoDir.toString())
 
         fileProjectPath.id shouldNotBe dirProjectPath.id
-        // ID format is projectname-hash16chars, so the file name (with extension) is preserved
+        // ID format is name-hash16chars. The raw file name (with extension) is used deliberately,
+        // not the inferred display name: the ID names the isolated config/system/plugins directory
+        // and must stay stable for projects registered before name inference was added.
         fileProjectPath.id.id.substringBeforeLast("-") shouldBe "module.bazel"
         fileProjectPath.id.id.substringAfterLast("-").length shouldBe 16
     }
@@ -103,7 +132,7 @@ class FileBasedProjectTest : StringSpec({
         val metadata = projectManager.registerOrUpdate(projectPath)
 
         metadata.path shouldBe projectPath
-        metadata.name shouldBe "module.bazel"
+        metadata.name shouldBe repoDir.fileName.toString()
         metadata.openCount shouldBe 1
 
         val reloaded = ideConfigRepository.loadProjectMetadata(projectPath)
@@ -147,7 +176,7 @@ class FileBasedProjectTest : StringSpec({
         argsSlot.captured shouldHaveSize 1
         argsSlot.captured[0] shouldBe moduleFile.toString()
 
-        // Isolated directories are created under an ID derived from the file name
+        // Isolated directories are created under an ID derived from the raw file name
         val projectRoot = launchBaseDir.resolve("projects").resolve(projectPath.id.id)
         projectRoot.exists() shouldBe true
         projectRoot.resolve("config").exists() shouldBe true
@@ -159,6 +188,6 @@ class FileBasedProjectTest : StringSpec({
         val recentProjects = RecentProjectsIndex.getInstance(ideConfigRepository).getRecent(10)
         recentProjects shouldHaveSize 1
         recentProjects[0].path shouldBe projectPath
-        recentProjects[0].name shouldBe "module.bazel"
+        recentProjects[0].name shouldBe repoDir.fileName.toString()
     }
 })

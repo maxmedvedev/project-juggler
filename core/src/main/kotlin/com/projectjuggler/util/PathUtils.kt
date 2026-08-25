@@ -3,6 +3,7 @@ package com.projectjuggler.util
 import com.projectjuggler.platform.Platform
 import java.nio.file.Path
 import kotlin.io.path.Path
+import kotlin.io.path.isDirectory
 
 object PathUtils {
     /**
@@ -39,4 +40,15 @@ object PathUtils {
             acc.resolve(component)
         }
     }
+
+    /**
+     * The directory a project is rooted at.
+     *
+     * Projects can be opened by selecting a file (e.g. `MODULE.bazel`) instead of a directory; in
+     * that case the enclosing directory is the project root. A path that does not exist is treated
+     * as a file, so a remembered `.../my-repo/MODULE.bazel` still resolves to `.../my-repo`.
+     *
+     * @return The root directory, or null for a parentless path (e.g. a filesystem root)
+     */
+    fun projectRoot(path: Path): Path? = if (path.isDirectory()) path else path.parent
 }
