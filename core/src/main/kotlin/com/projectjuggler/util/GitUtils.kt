@@ -20,7 +20,7 @@ object GitUtils {
      */
     fun detectGitBranch(projectPath: Path): String? {
         try {
-            val startDir = if (projectPath.isDirectory()) projectPath else projectPath.parent ?: return null
+            val startDir = PathUtils.projectRoot(projectPath) ?: return null
 
             val gitDir = findGitDir(startDir) ?: return null
 

@@ -1,10 +1,16 @@
 package com.projectjuggler.util
 
+import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import kotlin.io.path.Path
+import kotlin.io.path.createDirectory
+import kotlin.io.path.writeText
 
 class PathUtilsTest : StringSpec({
+
+    val rootDir = createTempDir("path-utils-root")
 
     "should expand tilde with forward slash" {
         val homeDir = Path(System.getProperty("user.home"))
@@ -68,5 +74,32 @@ class PathUtilsTest : StringSpec({
         val result = PathUtils.expandTilde(Path("~user/path"))
 
         result shouldBe Path("~user/path")
+    }
+
+    "projectRoot should return a directory path unchanged" {
+        PathUtils.projectRoot(rootDir) shouldBe rootDir
+    }
+
+    "projectRoot should return the enclosing directory of a file" {
+        val file = rootDir.resolve("MODULE.bazel").apply { writeText("module(name = \"test\")") }
+
+        PathUtils.projectRoot(file) shouldBe rootDir
+    }
+
+    "projectRoot should return the parent of a path that does not exist" {
+        val missing = rootDir.resolve("no-such-file.bazel")
+
+        PathUtils.projectRoot(missing) shouldBe rootDir
+    }
+
+    "projectRoot should return the nested directory for a nested file" {
+        val nested = rootDir.resolve("nested").createDirectory()
+        val file = nested.resolve("MODULE.bazel").apply { writeText("") }
+
+        PathUtils.projectRoot(file) shouldBe nested
+    }
+
+    "projectRoot should return null for a parentless path" {
+        PathUtils.projectRoot(Path("MODULE.bazel")).shouldBeNull()
     }
 })

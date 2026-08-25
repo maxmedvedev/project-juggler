@@ -2,6 +2,7 @@ package com.projectjuggler.process
 
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
+import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.core.DirectoryManager
 import com.projectjuggler.core.ProjectManager
@@ -66,7 +67,7 @@ class IntelliJLauncher internal constructor(
         processLauncher.launch(intellijPath, listOf(projectPath.toString()), environment, onFailure)
 
         // Get project name for display
-        val projectName = projectPath.fileName.toString()
+        val projectName = ProjectPath(projectPath.toString()).name
 
         // Print status message
         if (baseVmOptionsPath != null) {
