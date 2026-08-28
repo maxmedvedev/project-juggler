@@ -20,8 +20,17 @@ value class ProjectPath(
     val fileName: String get() = path.fileName?.toString() ?: pathString
 
     /**
-     * The human-readable project name: the enclosing directory for file-based projects
-     * (`~/work/my-repo/MODULE.bazel` -> `my-repo`), the directory itself otherwise.
+     * The human-readable project name: the enclosing directory, plus the selected file for
+     * file-based projects (`~/work/my-repo/MODULE.bazel` -> `my-repo [MODULE.bazel]`), the
+     * directory itself otherwise.
+     *
+     * The same directory can be opened by different build systems (Bazel via `MODULE.bazel`, plain
+     * JPS via the directory), so the file has to be part of the name to tell those setups apart.
      */
-    val name: String get() = PathUtils.projectRoot(path)?.fileName?.toString() ?: fileName
+    val name: String
+        get() {
+            val root = PathUtils.projectRoot(path) ?: return fileName
+            val dirName = root.fileName?.toString() ?: root.toString()
+            return if (root == path) dirName else "$dirName [$fileName]"
+        }
 }

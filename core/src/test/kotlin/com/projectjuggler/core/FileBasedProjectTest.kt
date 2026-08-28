@@ -51,32 +51,34 @@ class FileBasedProjectTest : StringSpec({
         val projectPath = projectManager.resolvePath(moduleFile.toString())
 
         projectPath.pathString shouldBe moduleFile.toAbsolutePath().normalize().toString()
-        // The name is inferred from the enclosing directory, not from the selected file
-        projectPath.name shouldBe repoDir.fileName.toString()
+        // The name is the enclosing directory plus the selected file, so the same directory
+        // opened by a different build system is distinguishable
+        projectPath.name shouldBe "${repoDir.fileName} [module.bazel]"
         projectPath.fileName shouldBe "module.bazel"
     }
 
-    "should infer the name from the enclosing directory for a nested file" {
+    "should build the name from the enclosing directory for a nested file" {
         val projectManager = ProjectManager.getInstance(repository())
 
         val nestedDir = repoDir.resolve("nested-module").createDirectories()
         val nestedFile = nestedDir.resolve("MODULE.bazel").apply { writeText("module(name = \"nested\")") }
 
-        projectManager.resolvePath(nestedFile.toString()).name shouldBe "nested-module"
+        projectManager.resolvePath(nestedFile.toString()).name shouldBe "nested-module [MODULE.bazel]"
     }
 
-    "should infer the name from the enclosing directory for a path that no longer exists" {
+    "should build the name from the enclosing directory for a path that no longer exists" {
         val projectManager = ProjectManager.getInstance(repository())
 
         // Stale recent-projects entries point at files that may have been deleted
         val missing = repoDir.resolve("gone").resolve("MODULE.bazel")
 
-        projectManager.resolvePath(missing.toString()).name shouldBe "gone"
+        projectManager.resolvePath(missing.toString()).name shouldBe "gone [MODULE.bazel]"
     }
 
     "should use the directory itself as the name for a directory-based project" {
         val projectManager = ProjectManager.getInstance(repository())
 
+        // A directory-based project deliberately gets no `[...]` suffix - there is no opening file
         projectManager.resolvePath(repoDir.toString()).name shouldBe repoDir.fileName.toString()
     }
 
@@ -114,6 +116,17 @@ class FileBasedProjectTest : StringSpec({
         fileProjectPath.id.id.substringAfterLast("-").length shouldBe 16
     }
 
+    "should give the same directory distinct names when opened as a directory and by file" {
+        val projectManager = ProjectManager.getInstance(repository())
+
+        // The same folder can have two setups - Bazel via module.bazel, plain JPS via the directory
+        val fileProjectPath = projectManager.resolvePath(moduleFile.toString())
+        val dirProjectPath = projectManager.resolvePath(repoDir.toString())
+
+        fileProjectPath.name shouldNotBe dirProjectPath.name
+        fileProjectPath.name shouldBe "${dirProjectPath.name} [module.bazel]"
+    }
+
     "should generate distinct ids for same-named files in different directories" {
         val projectManager = ProjectManager.getInstance(repository())
 
@@ -132,7 +145,7 @@ class FileBasedProjectTest : StringSpec({
         val metadata = projectManager.registerOrUpdate(projectPath)
 
         metadata.path shouldBe projectPath
-        metadata.name shouldBe repoDir.fileName.toString()
+        metadata.name shouldBe "${repoDir.fileName} [module.bazel]"
         metadata.openCount shouldBe 1
 
         val reloaded = ideConfigRepository.loadProjectMetadata(projectPath)
@@ -188,6 +201,6 @@ class FileBasedProjectTest : StringSpec({
         val recentProjects = RecentProjectsIndex.getInstance(ideConfigRepository).getRecent(10)
         recentProjects shouldHaveSize 1
         recentProjects[0].path shouldBe projectPath
-        recentProjects[0].name shouldBe repoDir.fileName.toString()
+        recentProjects[0].name shouldBe "${repoDir.fileName} [module.bazel]"
     }
 })
