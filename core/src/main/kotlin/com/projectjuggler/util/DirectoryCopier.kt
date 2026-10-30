@@ -13,10 +13,11 @@ object DirectoryCopier {
      * Copy directory contents from source to destination.
      * Only copies if destination is empty (first open detection).
      * Silently skips if source doesn't exist or isn't readable.
+     * A failed copy is rolled back (destination emptied) so the next call retries.
      *
      * @param source Source directory
      * @param destination Destination directory
-     * @return true if directory was copied, false if skipped
+     * @return true if directory was copied, false if skipped or failed
      */
     fun copyIfFirstOpen(
         source: Path,
@@ -35,18 +36,22 @@ object DirectoryCopier {
             return false // Already has content, skip copying
         }
 
+        val exclusions = Exclusions(excludedDirectories, excludedFiles, excludedPatterns)
         try {
-            copyDirectoryRecursively(source, destination, excludedDirectories, excludedFiles, excludedPatterns)
+            copyDirectoryRecursively(source, destination, exclusions)
             return true
-        } catch (e: Exception) {
-            // Silently fail - don't break project opening
+        } catch (e: Throwable) {
+            // The destination was empty before, so everything in it is our partial copy
+            runCatching { clearDirectory(destination, Exclusions.NONE) }
+            System.err.println("[DirectoryCopier] copy from $source to $destination failed: $e")
             return false
         }
     }
 
     /**
      * Force copy directory contents from source to destination.
-     * This will delete all existing files in the destination before copying.
+     * This deletes the existing destination contents before copying; excluded entries already present
+     * in the destination are preserved.
      *
      * @param source Source directory
      * @param destination Destination directory
@@ -63,30 +68,38 @@ object DirectoryCopier {
             throw IllegalArgumentException("Source directory does not exist or is not a directory: $source")
         }
 
-        // Clear destination directory before copying
-        clearDirectory(destination)
-
-        copyDirectoryRecursively(source, destination, excludedDirectories, excludedFiles, excludedPatterns)
+        val exclusions = Exclusions(excludedDirectories, excludedFiles, excludedPatterns)
+        clearDirectory(destination, exclusions)
+        copyDirectoryRecursively(source, destination, exclusions)
     }
 
     /**
-     * Delete all contents of a directory while keeping the directory itself.
+     * Delete all contents of a directory except excluded entries, keeping the directory itself.
      */
-    private fun clearDirectory(root: Path) {
+    private fun clearDirectory(root: Path, exclusions: Exclusions) {
         if (!root.exists()) {
             return
         }
 
         Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+            override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                if (dir != root && exclusions.excludesDirectory(dir)) {
+                    return FileVisitResult.SKIP_SUBTREE
+                }
+                return FileVisitResult.CONTINUE
+            }
+
             override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                Files.delete(file)
+                if (!exclusions.excludesFile(root, file)) {
+                    Files.delete(file)
+                }
                 return FileVisitResult.CONTINUE
             }
 
             override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
                 if (exc != null) throw exc
-                // Don't delete the root directory itself
-                if (dir != root) {
+                // Keep the root, and any directory still holding excluded entries
+                if (dir != root && isEmptyDirectory(dir)) {
                     Files.delete(dir)
                 }
                 return FileVisitResult.CONTINUE
@@ -114,20 +127,14 @@ object DirectoryCopier {
     /**
      * Recursively copy directory contents.
      */
-    private fun copyDirectoryRecursively(source: Path,
-                                         destination: Path,
-                                         excludedDirectories: Set<String> = emptySet(),
-                                         excludedFiles: Set<String> = emptySet(),
-                                         excludedPatterns: Set<String> = emptySet(),
-    ) {
+    private fun copyDirectoryRecursively(source: Path, destination: Path, exclusions: Exclusions) {
         Files.walkFileTree(source, object : SimpleFileVisitor<Path>() {
             override fun preVisitDirectory(
                 dir: Path,
                 attrs: BasicFileAttributes
             ): FileVisitResult {
                 // Skip excluded directories (like plugins, which are stored separately)
-                val dirName = dir.fileName?.toString()
-                if (dirName != null && dirName in excludedDirectories) {
+                if (exclusions.excludesDirectory(dir)) {
                     return FileVisitResult.SKIP_SUBTREE
                 }
 
@@ -140,17 +147,7 @@ object DirectoryCopier {
                 file: Path,
                 attrs: BasicFileAttributes
             ): FileVisitResult {
-                val fileName = file.fileName.toString()
-
-                // Check filename exclusions
-                if (fileName in excludedFiles) {
-                    return FileVisitResult.CONTINUE
-                }
-
-                // Check path pattern exclusions
-                val relativePath = source.relativize(file).toString()
-                    .replace(File.separator, "/")  // Normalize to forward slashes
-                if (relativePath in excludedPatterns) {
+                if (exclusions.excludesFile(source, file)) {
                     return FileVisitResult.CONTINUE
                 }
 
@@ -159,5 +156,25 @@ object DirectoryCopier {
                 return FileVisitResult.CONTINUE
             }
         })
+    }
+
+    /**
+     * Entries skipped by both the copy and the clear: directory names, file names,
+     * and file paths relative to the walked root (forward slashes).
+     */
+    private data class Exclusions(
+        val directories: Set<String>,
+        val files: Set<String>,
+        val patterns: Set<String>,
+    ) {
+        fun excludesDirectory(dir: Path): Boolean = dir.fileName?.toString() in directories
+
+        fun excludesFile(root: Path, file: Path): Boolean =
+            file.fileName.toString() in files ||
+                root.relativize(file).toString().replace(File.separator, "/") in patterns
+
+        companion object {
+            val NONE = Exclusions(emptySet(), emptySet(), emptySet())
+        }
     }
 }

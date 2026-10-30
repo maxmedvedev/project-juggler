@@ -140,7 +140,7 @@ Update (file exists, not forced): only the marker block is refreshed. The marker
    - `generate(base, dirs, port, forceRegenerate = computeBaseHash(base) != project.baseVmOptionsHash)`: update mode if the file exists and the base is unchanged since the project's last write; otherwise a fresh write, after which `updateBaseVmOptionsHash` persists the new hash (null when no base).
    - Start `<installation.executablePath> <project path>` with env `IDEA_VM_OPTIONS=<projRoot>/idea.vmoptions`.
 
-Base config copy exclusions: any directory named `plugins`; files named `.lock`, `recentProjects.xml`, `recentProjectDirectories.xml`; relative path `options/recentProjects.xml`. Plugin copies have no exclusions.
+Base config copy exclusions: any directory named `plugins`; files named `.lock`, `recentProjects.xml`, `recentProjectDirectories.xml`; relative path `options/recentProjects.xml`. Plugin copies have no exclusions. A failed first-open copy is rolled back (destination emptied) so the next launch retries.
 
 Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected (§10). Unset and undetectable means the copy is skipped on launch and throws `IllegalStateException` on sync.
 
@@ -181,7 +181,7 @@ Sequence:
    then poll `isProjectOpen` once per second up to `shutdownTimeout`, emitting `SyncProgress.Stopping(seconds)`. On success sleep 500 ms; on timeout throw `SyncException` (the request file is left for cleanup in step 6). `syncTypes` lists the requested parts in the order vmoptions, config, plugins; `timeoutSeconds` is `SyncOptions.shutdownTimeout`.
 4. Emit `Syncing`, then `ensureProjectDirectories` and:
    - vmoptions: require an existing base vmoptions file (else `IllegalStateException`); `debugPortFor` (allocates only when the base contains `-agentlib:jdwp=`); `generate(..., forceRegenerate = true)`; persist `computeBaseHash(base)` via `updateBaseVmOptionsHash`.
-   - config: wipe `<projRoot>/config/` contents and recopy base config with the §7.1 exclusions.
+   - config: wipe `<projRoot>/config/` contents **except the excluded entries** and recopy base config with the §7.1 exclusions. A running isolated IDE therefore keeps its `.lock` and its own recent projects lists.
    - plugins: wipe `<projRoot>/plugins/` and recopy base plugins.
 5. If `wasRunning && stopIfRunning && autoRestart`: emit `Restarting` and call `ProjectLauncher.launch(project.path, onFailure)` (metadata, recents and vmoptions-hash bookkeeping as in §7.1). A crash within 10 s is reported as `SyncProgress.Error("IntelliJ exited with code <n> after restart of '<name>': <output>")`, possibly after `syncProject` has returned, so `onProgress` consumers must tolerate a late `Error`; exceptions from `launch` become `SyncProgress.Error("Failed to restart IntelliJ: ...")` as well. Neither fails the sync.
 6. Always: delete every file in `signals/` except `sync-in-progress.lock`, then release the sync lock. The lock file is never deleted.
@@ -227,7 +227,7 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 - `GitUtils.detectGitBranch(path)`: walk up from `projectRoot(path)` to the first `.git` (directory, or file with `gitdir:` resolved relative to its location). Read `HEAD`: `ref: refs/heads/X` -> `X`; 40- or 64-hex SHA -> `"HEAD (detached)"`; else `git rev-parse --abbrev-ref HEAD` with a 2 s timeout. Any error -> null.
 - `GitWorktreeManager.createWorktree(src, dst, branch, out?)`: validates (src exists, is a dir, has `.git`; dst absent; branch non-blank; `IllegalArgumentException` otherwise), runs `git worktree add -b <branch> <dst>` in `src` with a 30 s timeout, throws a single `IOException("Failed to create git worktree: <output>")` on non-zero exit (stdout and stderr are merged into the error message), `IOException("git worktree timed out after 30 s")` on timeout, and lets the `IOException` from a missing `git` propagate unwrapped.
 - `GitCommandRunner` (internal) runs `git` with merged output and a timeout; used by both. On timeout it destroys the process and its descendants. The timeout path is covered by the runner's `waitFor(timeout)` contract, not by a unit test.
-- `DirectoryCopier.copyIfFirstOpen(src, dst, ...)` copies only when `dst` is missing or empty, returns whether it copied, swallows errors. `copy(src, dst, ...)` clears `dst` contents then copies; throws if `src` is invalid. Files are copied with `REPLACE_EXISTING`, attributes not preserved, symlinks followed.
+- `DirectoryCopier.copyIfFirstOpen(src, dst, ...)` copies only when `dst` is missing or empty, returns whether it copied; on error it logs to stderr, rolls back (empties `dst`) and returns false. `copy(src, dst, ...)` clears `dst` except entries matching the exclusions (they are kept in place), then copies; throws if `src` is invalid. Files are copied with `REPLACE_EXISTING`, attributes not preserved, symlinks followed.
 - `HashUtils`: SHA-256 as 64 lowercase hex chars for files and UTF-8 strings.
 - `PortAllocator.allocatePort()`: first port in 5001..14999 not used by a project of this IDE, else null.
 
@@ -246,7 +246,6 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
-12. `copyIfFirstOpen` can leave a partial copy that is never retried. A forced config sync wipes the project's own `.lock` and `recentProjects.xml`.
 13. `ProcessLauncherImpl` captures no output on Unix (inherited IO), reports the exit code of `cmd start` on Windows, and keeps a CLI JVM alive up to 10 s via a non-daemon thread.
 14. `isRunningInMainInstance` compares paths as raw strings and assumes "main" when `baseConfigPath` is unset.
 15. Untested: `WindowFocuser`, `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
