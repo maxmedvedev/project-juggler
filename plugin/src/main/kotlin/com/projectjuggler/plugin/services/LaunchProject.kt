@@ -5,6 +5,7 @@ import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.process.ProjectLauncher
+import com.projectjuggler.process.describe
 
 internal fun launchProject(
     projectPath: ProjectPath,
@@ -13,12 +14,11 @@ internal fun launchProject(
 ) {
     try {
         ProjectLauncher.getInstance(ideConfigRepository).launch(projectPath) { failure ->
-            val errorOutput = failure.stderr.takeIf { it.isNotBlank() } ?: failure.stdout.takeIf { it.isNotBlank() } ?: "&lt;No output&gt;"
             val message = ProjectJugglerBundle.message(
                 "notification.error.launch.crashed",
                 projectPath.name,
                 failure.exitCode,
-                errorOutput.take(500) // Limit error message length
+                failure.describe().ifBlank { "&lt;No output&gt;" }
             )
             notificationHandler.showErrorNotification(message)
         }

@@ -118,9 +118,16 @@ class ProjectLauncher internal constructor(
             if (wasRunning && options.stopIfRunning && options.autoRestart) {
                 options.onProgress(SyncProgress.Restarting)
                 try {
-                    intellijLauncher.launch(project)
-                } catch (e: Exception) {
-                    // Log warning but don't fail the sync
+                    // May run on the process watch thread after syncProject has returned
+                    launch(project.path) { failure ->
+                        val output = failure.describe()
+                        options.onProgress(SyncProgress.Error(
+                            "IntelliJ exited with code ${failure.exitCode} after restart of '${project.name}'" +
+                                if (output.isBlank()) "" else ": $output"
+                        ))
+                    }
+                } catch (e: Throwable) {
+                    // Report but don't fail the sync
                     options.onProgress(SyncProgress.Error("Failed to restart IntelliJ: ${e.message}"))
                 }
             }

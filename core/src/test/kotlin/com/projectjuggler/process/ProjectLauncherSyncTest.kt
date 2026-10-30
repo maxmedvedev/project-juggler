@@ -5,6 +5,7 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.core.*
 import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.test.createTempDir
@@ -118,7 +119,7 @@ class ProjectLauncherSyncTest : StringSpec({
         content shouldContain "-XX:NewOption=true"
 
         // Verify no restart (project wasn't running)
-        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should sync config only" {
@@ -142,7 +143,7 @@ class ProjectLauncherSyncTest : StringSpec({
         projectConfig.readText() shouldContain "<new>content</new>"
 
         // Verify no restart
-        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should sync plugins only" {
@@ -167,7 +168,7 @@ class ProjectLauncherSyncTest : StringSpec({
         projectPlugin.readText() shouldContain "<plugin>new</plugin>"
 
         // Verify no restart
-        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should sync all settings" {
@@ -232,7 +233,7 @@ class ProjectLauncherSyncTest : StringSpec({
         verify { ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any()) }
 
         // Verify restart was called
-        verify(exactly = 1) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 1) { mockProcessLauncher.launch(any(), any(), any(), any()) }
 
         // Verify progress events
         progressEvents.any { it is SyncProgress.Syncing } shouldBe true
@@ -268,7 +269,7 @@ class ProjectLauncherSyncTest : StringSpec({
 
         // Verify both were stopped and restarted
         verify(exactly = 2) { ShutdownWaiter.waitForShutdown(ideConfigRepository, any(), any(), any()) }
-        verify(exactly = 2) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 2) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should write sync types and timeout into the stop request" {
@@ -361,7 +362,7 @@ class ProjectLauncherSyncTest : StringSpec({
         verify(exactly = 0) { ShutdownWaiter.waitForShutdown(any(), any(), any(), any()) }
 
         // Verify no restart
-        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should not restart when autoRestart is false" {
@@ -393,7 +394,7 @@ class ProjectLauncherSyncTest : StringSpec({
         verify { ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any()) }
 
         // Verify NO restart
-        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should report progress events" {
@@ -518,7 +519,7 @@ class ProjectLauncherSyncTest : StringSpec({
         } returns ShutdownResult.Success
 
         val argsSlot = slot<List<String>>()
-        every { mockProcessLauncher.launch(any(), capture(argsSlot), any()) } returns Unit
+        every { mockProcessLauncher.launch(any(), capture(argsSlot), any(), any()) } returns Unit
 
         val options = SyncOptions(
             stopIfRunning = true,
@@ -578,7 +579,7 @@ class ProjectLauncherSyncTest : StringSpec({
 
         val progressEvents = mutableListOf<SyncProgress>()
         val launchedProjects = mutableListOf<String>()
-        every { mockProcessLauncher.launch(any(), any(), any()) } answers {
+        every { mockProcessLauncher.launch(any(), any(), any(), any()) } answers {
             launchedProjects.add(secondArg<List<String>>().first())
         }
 
@@ -639,7 +640,7 @@ class ProjectLauncherSyncTest : StringSpec({
         } returns ShutdownResult.Success
 
         val launchedProjects = mutableListOf<String>()
-        every { mockProcessLauncher.launch(any(), any(), any()) } answers {
+        every { mockProcessLauncher.launch(any(), any(), any(), any()) } answers {
             launchedProjects.add(secondArg<List<String>>().first())
         }
 
@@ -672,6 +673,66 @@ class ProjectLauncherSyncTest : StringSpec({
         launchedProjects shouldContainExactly listOf(projectDir.toString(), projectDir2.toString())
     }
 
+    "restart after sync records the open" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+        projectManager.ensureDebugPort(project)
+        val openCountBefore = projectManager.get(projectPath)!!.openCount
+
+        // Another project was opened later, so the target is not at the head of recents
+        val recentProjectsIndex = RecentProjectsIndex.getInstance(ideConfigRepository)
+        val otherPath = ProjectPath(projectDir2.toString())
+        projectManager.registerOrUpdate(otherPath)
+        recentProjectsIndex.recordOpen(projectPath)
+        recentProjectsIndex.recordOpen(otherPath)
+
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true andThen false
+        every {
+            ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any())
+        } returns ShutdownResult.Success
+
+        projectLauncher.syncProject(
+            project = project,
+            syncVmOptions = true,
+            syncConfig = false,
+            syncPlugins = false,
+            options = SyncOptions(stopIfRunning = true, autoRestart = true)
+        )
+
+        projectManager.get(projectPath)!!.openCount shouldBe openCountBefore + 1
+        recentProjectsIndex.getRecent(10).first().path shouldBe projectPath
+    }
+
+    "restart crash is reported as a progress error" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+        projectManager.ensureDebugPort(project)
+
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true andThen false
+        every {
+            ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any())
+        } returns ShutdownResult.Success
+        every { mockProcessLauncher.launch(any(), any(), any(), captureLambda()) } answers {
+            lambda<(LaunchFailure) -> Unit>().invoke(LaunchFailure(3, "", "boom"))
+        }
+
+        val progressEvents = mutableListOf<SyncProgress>()
+        projectLauncher.syncProject(
+            project = project,
+            syncVmOptions = true,
+            syncConfig = false,
+            syncPlugins = false,
+            options = SyncOptions(stopIfRunning = true, autoRestart = true, onProgress = { progressEvents.add(it) })
+        )
+
+        val errors = progressEvents.filterIsInstance<SyncProgress.Error>()
+        errors.size shouldBe 1
+        errors.single().message shouldContain "code 3"
+        errors.single().message shouldContain "boom"
+    }
+
     "should refuse to sync the main project without stopping it" {
         val projectPath = ProjectPath(projectDir.toString())
         val project = projectManager.registerOrUpdate(projectPath)
@@ -694,6 +755,6 @@ class ProjectLauncherSyncTest : StringSpec({
         exception.message shouldContain "main project"
         // Main instance must never receive a stop request or be relaunched
         verify(exactly = 0) { ShutdownWaiter.waitForShutdown(any(), any(), any(), any()) }
-        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 })

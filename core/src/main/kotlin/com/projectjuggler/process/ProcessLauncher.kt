@@ -13,6 +13,12 @@ data class LaunchFailure(
     val stderr: String
 )
 
+/**
+ * Process output to show for a failure: stderr, else stdout, limited to 500 characters; blank if there was none.
+ */
+fun LaunchFailure.describe(): String =
+    stderr.ifBlank { stdout }.trim().take(500)
+
 interface ProcessLauncher {
     fun launch(
         executable: Path,

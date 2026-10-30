@@ -179,7 +179,7 @@ Sequence:
    - vmoptions: require an existing base vmoptions file (else `IllegalStateException`); `ensureDebugPort`; `generate(..., forceRegenerate = true)`.
    - config: wipe `<projRoot>/config/` contents and recopy base config with the §7.1 exclusions.
    - plugins: wipe `<projRoot>/plugins/` and recopy base plugins.
-5. If `wasRunning && stopIfRunning && autoRestart`: emit `Restarting` and `IntelliJLauncher.launch(project)`. Failures become `SyncProgress.Error(msg)` and do not fail the sync.
+5. If `wasRunning && stopIfRunning && autoRestart`: emit `Restarting` and call `ProjectLauncher.launch(project.path, onFailure)` (metadata, recents and vmoptions-hash bookkeeping as in §7.1). A crash within 10 s is reported as `SyncProgress.Error("IntelliJ exited with code <n> after restart of '<name>': <output>")`, possibly after `syncProject` has returned, so `onProgress` consumers must tolerate a late `Error`; exceptions from `launch` become `SyncProgress.Error("Failed to restart IntelliJ: ...")` as well. Neither fails the sync.
 6. Always: delete every file in `signals/` except `sync-in-progress.lock`, then release the sync lock. The lock file is never deleted.
 
 If the project is running and `stopIfRunning` is false, the sync proceeds against a live IDE.
@@ -233,12 +233,12 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 - `IllegalArgumentException` for invalid inputs (worktree creation, copy source).
 - Readers of config and recents degrade to defaults on corruption; readers of project metadata throw.
 - Launch crashes within 10 s are reported only through `onFailure`; later crashes are not observed.
+- Restart crashes after a sync surface as `SyncProgress.Error` through `onFailure`.
 
 ## Known gaps
 
 Behavior above that is likely unintended, kept here so the spec stays honest. Not fixed by this document.
 
-3. Post-sync restart always uses the isolated launcher and skips recents/metadata/`onFailure`. (The main project is rejected by `syncProject`, so it can no longer be restarted this way.)
 4. Changed base vmoptions only update the hash on launch; the file is refreshed only by a vmoptions sync. Update mode never adds `-Dproject.juggler.base.dir` to a file lacking it.
 5. Debug ports are allocated even without JDWP in base options; uniqueness is per IDE, not global; the documented lower bound (5000) differs from the code (5001).
 6. `launchMain` inherits the parent's `IDEA_VM_OPTIONS` when no base vmoptions is configured, so a main project launched from an isolated IDE may get isolated options.
