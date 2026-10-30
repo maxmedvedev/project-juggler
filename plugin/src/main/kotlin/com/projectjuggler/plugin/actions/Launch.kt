@@ -9,12 +9,9 @@ import com.intellij.util.application
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.core.DirectoryManager
-import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.*
 import com.projectjuggler.plugin.util.IntelliJNotificationHandler
-import com.projectjuggler.util.ProjectLockUtils
 
 /**
  * Handles launching or focusing a project based on whether it's already open.
@@ -76,41 +73,24 @@ private fun launchOrFocusProjectImpl(project: Project?, projectPath: ProjectPath
 
 private fun launchOrFocusUnderProgress(project: Project?, projectPath: ProjectPath) {
     val repository = IdeInstallationService.currentIdeConfigRepository
-
-    if (isSameIdeInstance(repository, projectPath)) {
-        openProjectInCurrentIde(projectPath, project)
-    }
-
-    val isOpen = ProjectLockUtils.isProjectOpen(repository, projectPath)
-
     val notificationHandler = IntelliJNotificationHandler(project)
-    if (isOpen) {
-        focusExistingProject(
-            projectPath = projectPath,
-            ideConfigRepository = repository,
-            notificationHandler = notificationHandler
-        )
-    } else {
-        launchProject(
-            projectPath = projectPath,
-            ideConfigRepository = repository,
-            notificationHandler = notificationHandler
-        )
-    }
-}
 
-/**
- * Checks if the project corresponds to the current IDE instance.
- * This can happen if the project was closed and now user wants to reopen it.
- */
-private fun isSameIdeInstance(
-    repository: IdeConfigRepository,
-    projectPath: ProjectPath
-): Boolean {
-    val currentConfigDir = PathManager.getConfigDir()
-    val projectMetadata = ProjectManager.getInstance(repository).get(projectPath) ?: return false
-    val directories = DirectoryManager.getInstance(repository).ensureProjectDirectories(projectMetadata)
-    return directories.config == currentConfigDir
+    for (step in planLaunch(repository, projectPath, PathManager.getConfigDir())) {
+        when (step) {
+            LaunchStep.OPEN_IN_CURRENT_IDE -> openProjectInCurrentIde(projectPath, project)
+            LaunchStep.FOCUS -> focusExistingProject(
+                projectPath = projectPath,
+                ideConfigRepository = repository,
+                notificationHandler = notificationHandler
+            )
+
+            LaunchStep.LAUNCH -> launchProject(
+                projectPath = projectPath,
+                ideConfigRepository = repository,
+                notificationHandler = notificationHandler
+            )
+        }
+    }
 }
 
 /**

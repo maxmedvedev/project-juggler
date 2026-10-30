@@ -7,13 +7,10 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
-import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.config.RecentProjectsIndex
-import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
-import java.nio.file.Files
-import java.nio.file.Paths
+import com.projectjuggler.plugin.services.importProjects
+import com.projectjuggler.plugin.services.importableProjects
 
 object ImportRecentProjectsAction : RecentProjectPopupAction {
     override fun onChosen(
@@ -32,15 +29,9 @@ object ImportRecentProjectsAction : RecentProjectPopupAction {
     private fun importRecentProjects(project: Project?) {
         // Get IntelliJ's recent projects
         val manager = RecentProjectsManager.getInstance() as RecentProjectsManagerBase
-        val recentPaths = manager.getRecentPaths()
+        val projects = importableProjects(manager.getRecentPaths())
 
-        // Filter to valid existing directories
-        val validPaths = recentPaths.mapNotNull { pathStr ->
-            val path = Paths.get(pathStr)
-            if (Files.isDirectory(path)) pathStr else null
-        }
-
-        if (validPaths.isEmpty()) {
+        if (projects.isEmpty()) {
             Messages.showInfoMessage(
                 project,
                 ProjectJugglerBundle.message("dialog.import.projects.no.projects"),
@@ -52,7 +43,7 @@ object ImportRecentProjectsAction : RecentProjectPopupAction {
         // Ask for confirmation
         val result = Messages.showYesNoDialog(
             project,
-            ProjectJugglerBundle.message("dialog.import.projects.confirm", validPaths.size),
+            ProjectJugglerBundle.message("dialog.import.projects.confirm", projects.size),
             ProjectJugglerBundle.message("dialog.import.projects.title"),
             Messages.getQuestionIcon()
         )
@@ -62,18 +53,7 @@ object ImportRecentProjectsAction : RecentProjectPopupAction {
         }
 
         application.executeOnPooledThread {
-            // Import all projects
-            val ideConfigRepository = IdeInstallationService.currentIdeConfigRepository
-            val projectManager = ProjectManager.getInstance(ideConfigRepository)
-            val recentIndex = RecentProjectsIndex.getInstance(ideConfigRepository)
-
-            validPaths.forEach { pathStr ->
-                val projectPath = ProjectPath(pathStr)
-                // Register project metadata (creates ProjectMetadata with directories)
-                projectManager.registerOrUpdate(projectPath)
-                // Record in recent projects index
-                recentIndex.recordOpen(projectPath)
-            }
+            importProjects(IdeInstallationService.currentIdeConfigRepository, projects)
 
             RecentProjectPopupBuilder(project).show()
         }

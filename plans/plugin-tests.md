@@ -452,6 +452,16 @@ uses `CurrentIdePaths` from 4 and does the Finishing).
    `actions/recent/ImportRecentProjectsAction.kt`, core `ProjectLockUtils.kt`, spec §4 and §5.4-5.5. Does: D, E;
    `LaunchPlanTest`, `LaunchProjectTest`, `FocusExistingProjectTest`, `MainProjectActionsTest`, `RemoveProjectTest`,
    `RecentProjectsImportTest`.
+   **Done** in `extract launch planning and recent project import into services`. Deviations: `launchProject`
+   resolves `ProjectLauncher.getInstance(...)` in its default argument, i.e. before the `try`, so a failure to build
+   the launcher now propagates instead of becoming `notification.error.launch.failed` (the plan's signature). In
+   `launchOrFocusUnderProgress` the lock check (`planLaunch`) now runs before `openProjectInCurrentIde` is called;
+   the open was already asynchronous on a pooled thread, so the observable order is unchanged.
+   `importableProjects`/`importProjects` are `internal` like the other new declarations. `LaunchProjectTest` is pure
+   and does not register `KoinTestExtension` (the mocked launcher is passed in). `FocusExistingProjectTest` covers each
+   `FocusResult` in its own test (8 tests). `setMainProject`, `clearMainProject`, `removeRecentProject` and
+   `focusExistingProject` were not modified. Spec §4.2 (`planLaunch`) and §5.4 (`importableProjects`/`importProjects`)
+   are left to session 5's Docs pass as planned.
 4. **Popup items and IDE paths** (~20%). Reads: `RecentProjectPopupBuilder.kt`, `RecentProjectPopup.kt`,
    `RecentProjectPopupActionRenderer.kt`, `OpenRecentProjectAction.kt`, `UpdatePathsAction.kt`,
    `services/IdePathSyncDetector.kt`, `IdeInstallationService.kt`, `VMOptionsCopy.kt`, spec §5 and §7. Does: F, G;
