@@ -75,7 +75,7 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
     }
 
     private fun getSignalFile(project: ProjectMetadata): Path =
-        getSignalsDirectory(project).resolve("stop-request.json")
+        getSignalsDirectory(project).resolve(STOP_REQUEST_FILE_NAME)
 
     /**
      * Cleans up all signal files for the specified project.
@@ -132,7 +132,7 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
     fun acquireSyncLock(project: ProjectMetadata): SyncLock? {
         val signalsDir = getSignalsDirectory(project)
         Files.createDirectories(signalsDir)
-        val lockFile = signalsDir.resolve("sync-in-progress.lock")
+        val lockFile = signalsDir.resolve(SYNC_LOCK_FILE_NAME)
 
         return try {
             val raf = java.io.RandomAccessFile(lockFile.toFile(), "rw")
@@ -150,6 +150,9 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
     }
 
     companion object {
+        const val SYNC_LOCK_FILE_NAME = "sync-in-progress.lock"
+        const val STOP_REQUEST_FILE_NAME = "stop-request.json"
+
         fun getInstance(ideConfigRepository: IdeConfigRepository): ShutdownSignalManager =
             ideConfigRepository.getScope().get()
     }
