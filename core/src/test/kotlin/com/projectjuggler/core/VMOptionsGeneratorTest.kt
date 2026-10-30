@@ -3,12 +3,15 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.test.createTempDir
 import com.projectjuggler.test.createTempFile
+import com.projectjuggler.util.HashUtils
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import java.nio.file.Files
+import kotlin.io.path.appendText
+import kotlin.io.path.readLines
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
@@ -405,6 +408,57 @@ class VMOptionsGeneratorTest : StringSpec({
                 System.setProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR, originalValue)
             }
         }
+    }
+
+    "update mode adds the base dir line when missing" {
+        val projectDirs = ProjectDirectories(
+            root = tempDir.resolve("t14"),
+            config = tempDir.resolve("t14/config"),
+            system = tempDir.resolve("t14/system"),
+            logs = tempDir.resolve("t14/logs"),
+            plugins = tempDir.resolve("t14/plugins")
+        )
+        Files.createDirectories(projectDirs.root)
+        val pathLines = listOf(
+            "-Didea.config.path=${projectDirs.config}",
+            "-Didea.system.path=${projectDirs.system}",
+            "-Didea.log.path=${projectDirs.logs}",
+            "-Didea.plugins.path=${projectDirs.plugins}",
+        )
+        val userLines = listOf("-Xms256m", "-Xmx2048m", "")
+        projectDirs.root.resolve("idea.vmoptions")
+            .writeText((userLines + VMOptionsGenerator.OVERRIDES_MARKER + pathLines).joinToString("\n") + "\n")
+
+        val lines = VMOptionsGenerator.generate(null, projectDirs, null).readLines()
+
+        lines shouldBe userLines + VMOptionsGenerator.OVERRIDES_MARKER + pathLines +
+            "-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=${IdeRegistry.getDefaultBaseDir()}"
+    }
+
+    "update mode does not duplicate the base dir line" {
+        val projectDirs = ProjectDirectories(
+            root = tempDir.resolve("t15"),
+            config = tempDir.resolve("t15/config"),
+            system = tempDir.resolve("t15/system"),
+            logs = tempDir.resolve("t15/logs"),
+            plugins = tempDir.resolve("t15/plugins")
+        )
+        val vmFile = VMOptionsGenerator.generate(null, projectDirs, null)
+        vmFile.appendText("-Xmx1g\n")
+
+        val lines = VMOptionsGenerator.generate(null, projectDirs, null).readLines()
+
+        lines.count { it.startsWith("-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=") } shouldBe 1
+        lines.last() shouldBe "-Xmx1g"
+    }
+
+    "computeBaseHash returns null for missing path and the file hash otherwise" {
+        val base = createTempFile("base16", ".vmoptions")
+        base.writeText("-Xmx1g")
+
+        VMOptionsGenerator.computeBaseHash(null) shouldBe null
+        VMOptionsGenerator.computeBaseHash(tempDir.resolve("missing.vmoptions")) shouldBe null
+        VMOptionsGenerator.computeBaseHash(base) shouldBe HashUtils.calculateFileHash(base)
     }
 })
 

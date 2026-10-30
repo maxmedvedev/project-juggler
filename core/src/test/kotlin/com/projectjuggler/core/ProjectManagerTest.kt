@@ -153,6 +153,29 @@ class ProjectManagerTest : StringSpec({
         repository.loadProjectMetadata(path) shouldBe updated
     }
 
+    "registerOrUpdate preserves baseVmOptionsHash" {
+        val repository = newRepository()
+        val projectManager = ProjectManager.getInstance(repository)
+        val path = ProjectPath(projectDir.toString())
+
+        projectManager.updateBaseVmOptionsHash(projectManager.registerOrUpdate(path), "abc123")
+
+        projectManager.registerOrUpdate(path).baseVmOptionsHash shouldBe "abc123"
+    }
+
+    "updateBaseVmOptionsHash keeps a debugPort saved after the project was loaded" {
+        val repository = newRepository()
+        val projectManager = ProjectManager.getInstance(repository)
+        val loaded = projectManager.registerOrUpdate(ProjectPath("/work/repo"))
+        repository.saveProjectMetadata(loaded.copy(debugPort = 7001))
+
+        val updated = projectManager.updateBaseVmOptionsHash(loaded, "abc123")
+
+        updated.debugPort shouldBe 7001
+        updated.baseVmOptionsHash shouldBe "abc123"
+        repository.loadProjectMetadata(loaded.path) shouldBe updated
+    }
+
     "listAll sorts by lastOpened descending" {
         val repository = newRepository()
         val old = ProjectMetadata(ProjectPath("/work/old"), "2026-01-01T00:00:00Z")

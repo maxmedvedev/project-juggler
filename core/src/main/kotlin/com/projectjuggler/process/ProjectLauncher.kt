@@ -157,6 +157,7 @@ class ProjectLauncher internal constructor(
                 debugPort,
                 forceRegenerate = true
             )
+            projectManager.updateBaseVmOptionsHash(project, VMOptionsGenerator.computeBaseHash(baseVmOptionsPath))
         }
 
         if (syncConfig) {

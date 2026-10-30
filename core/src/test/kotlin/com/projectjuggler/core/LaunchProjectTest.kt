@@ -10,10 +10,13 @@ import com.projectjuggler.process.ProcessLauncher
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.test.createTempDir
 import com.projectjuggler.test.createTempFile
+import com.projectjuggler.util.HashUtils
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -21,7 +24,9 @@ import io.mockk.verify
 import org.koin.core.context.loadKoinModules
 import org.koin.dsl.module
 import java.nio.file.Path
+import kotlin.io.path.appendText
 import kotlin.io.path.exists
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
 class LaunchProjectTest : StringSpec({
@@ -114,5 +119,51 @@ class LaunchProjectTest : StringSpec({
         vmOptionsContent.contains("-Didea.system.path=") shouldBe true
         vmOptionsContent.contains("-Didea.log.path=") shouldBe true
         vmOptionsContent.contains("-Didea.plugins.path=") shouldBe true
+    }
+
+    fun setUpRepository(): IdeConfigRepository {
+        loadKoinModules(module {
+            single<ProcessLauncher> { mockk<ProcessLauncher>(relaxed = true) }
+        })
+        val testInstallation = IdeInstallation("/test/ide/bin/idea", "Test IDE")
+        val ideConfigRepository = IdeConfigRepository(createTempDir("test-relaunch"), testInstallation)
+        ideConfigRepository.save(
+            IdeConfig(installation = testInstallation, baseVmOptionsPath = baseVmOptions.toString())
+        )
+        return ideConfigRepository
+    }
+
+    "relaunch regenerates vmoptions when the base file changed" {
+        baseVmOptions.writeText("-Xmx2048m")
+        val ideConfigRepository = setUpRepository()
+        val projectPath = ProjectPath(createTempDir("test-relaunch-project").toString())
+        val launcher = ProjectLauncher.getInstance(ideConfigRepository)
+
+        launcher.launch(projectPath)
+        baseVmOptions.writeText("-Xmx4096m")
+        launcher.launch(projectPath)
+
+        val vmOptionsFile = ideConfigRepository.baseDir.resolve("projects").resolve(projectPath.id.id)
+            .resolve("idea.vmoptions")
+        val content = vmOptionsFile.readText()
+        content shouldContain "-Xmx4096m"
+        content shouldNotContain "-Xmx2048m"
+        ideConfigRepository.loadProjectMetadata(projectPath)!!.baseVmOptionsHash shouldBe
+            HashUtils.calculateFileHash(baseVmOptions)
+    }
+
+    "relaunch keeps a user edit when the base file is unchanged" {
+        baseVmOptions.writeText("-Xmx2048m")
+        val ideConfigRepository = setUpRepository()
+        val projectPath = ProjectPath(createTempDir("test-relaunch-project").toString())
+        val launcher = ProjectLauncher.getInstance(ideConfigRepository)
+
+        launcher.launch(projectPath)
+        val vmOptionsFile = ideConfigRepository.baseDir.resolve("projects").resolve(projectPath.id.id)
+            .resolve("idea.vmoptions")
+        vmOptionsFile.appendText("-Dmy.user.edit=true\n")
+        launcher.launch(projectPath)
+
+        vmOptionsFile.readText() shouldContain "-Dmy.user.edit=true"
     }
 })

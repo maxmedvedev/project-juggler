@@ -24,10 +24,15 @@ class IntelliJLauncher internal constructor(
         val baseVmOptionsPath = BaseVMOptionsTracker.getInstance(ideConfigRepository).getBaseVmOptionsPath()
 
         // 3. Ensure debug port is allocated (if base VM options contains JDWP)
-        val debugPort = ProjectManager.getInstance(ideConfigRepository).ensureDebugPort(project)
+        val projectManager = ProjectManager.getInstance(ideConfigRepository)
+        val debugPort = projectManager.ensureDebugPort(project)
 
-        // 4. Generate or update VM options file
-        val vmOptionsFile = VMOptionsGenerator.generate(baseVmOptionsPath, projectDirs, debugPort)
+        // 4. Generate or update VM options file; regenerate fully if the base changed since the last write
+        val baseHash = VMOptionsGenerator.computeBaseHash(baseVmOptionsPath)
+        val baseChanged = baseHash != project.baseVmOptionsHash
+        val vmOptionsFile =
+            VMOptionsGenerator.generate(baseVmOptionsPath, projectDirs, debugPort, forceRegenerate = baseChanged)
+        if (baseChanged) projectManager.updateBaseVmOptionsHash(project, baseHash)
 
         // 4. Find IntelliJ executable
         // For IdeConfigRepository, IDE path comes from the installation

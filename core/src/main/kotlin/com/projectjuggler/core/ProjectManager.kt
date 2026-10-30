@@ -20,7 +20,8 @@ class ProjectManager internal constructor(
             path = projectPath,
             lastOpened = Instant.now().toString(),
             openCount = (existing?.openCount ?: 0) + 1,
-            debugPort = existing?.debugPort  // Preserve existing debug port
+            debugPort = existing?.debugPort,  // Preserve existing debug port
+            baseVmOptionsHash = existing?.baseVmOptionsHash,
         )
 
         ideConfigRepository.saveProjectMetadata(metadata)
@@ -48,6 +49,17 @@ class ProjectManager internal constructor(
         ideConfigRepository.saveProjectMetadata(updated)
 
         return newPort
+    }
+
+    /**
+     * Records the hash of the base vmoptions the project's `idea.vmoptions` was written from.
+     * Reloads the stored metadata first so fields saved after [project] was loaded (e.g. the debug port) are kept.
+     */
+    fun updateBaseVmOptionsHash(project: ProjectMetadata, hash: String?): ProjectMetadata {
+        val latest = ideConfigRepository.loadProjectMetadata(project.path) ?: project
+        val updated = latest.copy(baseVmOptionsHash = hash)
+        ideConfigRepository.saveProjectMetadata(updated)
+        return updated
     }
 
     fun listAll(): List<ProjectMetadata> {

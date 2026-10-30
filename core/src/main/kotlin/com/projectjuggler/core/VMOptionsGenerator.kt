@@ -2,12 +2,21 @@ package com.projectjuggler.core
 
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.IdeRegistry.Companion.PROJECT_JUGGLER_BASE_DIR
+import com.projectjuggler.util.HashUtils
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readLines
 import kotlin.io.path.writeText
 
 object VMOptionsGenerator {
+    const val OVERRIDES_MARKER = "# project-juggler overrides (auto-generated)"
+
+    /**
+     * SHA-256 of the base vmoptions file, or null when no base file is configured or it does not exist.
+     */
+    fun computeBaseHash(baseVmOptionsPath: Path?): String? =
+        baseVmOptionsPath?.takeIf { Files.exists(it) }?.let(HashUtils::calculateFileHash)
+
     fun generate(
         baseVmOptionsPath: Path?,
         projectDirectories: ProjectDirectories,
@@ -38,12 +47,7 @@ object VMOptionsGenerator {
             }
 
             // Add project-juggler overrides
-            appendLine("# project-juggler overrides (auto-generated)")
-            appendLine("-Didea.config.path=${projectDirectories.config}")
-            appendLine("-Didea.system.path=${projectDirectories.system}")
-            appendLine("-Didea.log.path=${projectDirectories.logs}")
-            appendLine("-Didea.plugins.path=${projectDirectories.plugins}")
-            appendLine("-D$PROJECT_JUGGLER_BASE_DIR=${IdeRegistry.getDefaultBaseDir()}")
+            overrideLines(projectDirectories).forEach(::appendLine)
         }
 
         vmOptionsFile.writeText(content)
@@ -56,7 +60,7 @@ object VMOptionsGenerator {
 
         // Find the start of the override section
         for (i in lines.indices) {
-            if (lines[i].trim() == "# project-juggler overrides (auto-generated)") {
+            if (lines[i].trim() == OVERRIDES_MARKER) {
                 overrideStartIndex = i
                 break
             }
@@ -65,34 +69,33 @@ object VMOptionsGenerator {
         if (overrideStartIndex == -1) {
             // Override section doesn't exist, append it
             lines.add("")
-            lines.add("# project-juggler overrides (auto-generated)")
-            lines.add("-Didea.config.path=${projectDirectories.config}")
-            lines.add("-Didea.system.path=${projectDirectories.system}")
-            lines.add("-Didea.log.path=${projectDirectories.logs}")
-            lines.add("-Didea.plugins.path=${projectDirectories.plugins}")
+            lines.addAll(overrideLines(projectDirectories))
         } else {
-            // Update the override section
-            val newOverrides = listOf(
-                "# project-juggler overrides (auto-generated)",
-                "-Didea.config.path=${projectDirectories.config}",
-                "-Didea.system.path=${projectDirectories.system}",
-                "-Didea.log.path=${projectDirectories.logs}",
-                "-Didea.plugins.path=${projectDirectories.plugins}"
-            )
-
             // Remove old override lines
             var endIndex = overrideStartIndex + 1
-            while (endIndex < lines.size && lines[endIndex].trim().startsWith("-Didea.")) {
+            while (endIndex < lines.size && isOverrideLine(lines[endIndex].trim())) {
                 endIndex++
             }
 
             // Replace with new overrides
             lines.subList(overrideStartIndex, endIndex).clear()
-            lines.addAll(overrideStartIndex, newOverrides)
+            lines.addAll(overrideStartIndex, overrideLines(projectDirectories))
         }
 
         vmOptionsFile.writeText(lines.joinToString("\n") + "\n")
     }
+
+    private fun overrideLines(projectDirectories: ProjectDirectories): List<String> = listOf(
+        OVERRIDES_MARKER,
+        "-Didea.config.path=${projectDirectories.config}",
+        "-Didea.system.path=${projectDirectories.system}",
+        "-Didea.log.path=${projectDirectories.logs}",
+        "-Didea.plugins.path=${projectDirectories.plugins}",
+        "-D$PROJECT_JUGGLER_BASE_DIR=${IdeRegistry.getDefaultBaseDir()}",
+    )
+
+    private fun isOverrideLine(trimmed: String): Boolean =
+        trimmed.startsWith("-Didea.") || trimmed.startsWith("-Dproject.juggler.")
 
     private fun filterBaseOptions(lines: List<String>, debugPort: Int?): List<String> {
         // Filter out any existing idea.*.path properties to avoid duplicates

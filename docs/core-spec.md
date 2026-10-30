@@ -80,10 +80,10 @@ Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation
 ### 3.2 `metadata.json` (`ProjectMetadata`)
 
 ```json
-{ "path": "/abs/path", "lastOpened": "2026-10-30T10:00:00Z", "openCount": 3, "debugPort": 5001 }
+{ "path": "/abs/path", "lastOpened": "2026-10-30T10:00:00Z", "openCount": 3, "debugPort": 5001, "baseVmOptionsHash": "<sha256>" }
 ```
 
-`openCount` omitted when 0, `debugPort` omitted when null. `name` and `id` are derived from `path`, not stored. A corrupt file throws on read; it is not treated as missing.
+`openCount` omitted when 0, `debugPort` and `baseVmOptionsHash` omitted when null. `baseVmOptionsHash` is the SHA-256 of the base vmoptions `idea.vmoptions` was last written from (null when written without a base, or by a version predating the field). `name` and `id` are derived from `path`, not stored. A corrupt file throws on read; it is not treated as missing.
 
 ### 3.3 `recent.json`
 
@@ -97,7 +97,7 @@ Newest first. A corrupt file is treated as empty.
 
 - `IdeRegistry` (singleton) lists installations: registered ones are `v2/*` directories with a readable `config.json`; `getAllInstallations()` is detected (§10) plus registered, deduplicated by `executablePath`. `getRepository(installation)` returns `IdeConfigRepository` at `<ideDir>`; nothing is created until the first write.
 - `IdeConfigRepository` exposes `load()`, `save()`, `update(transform)` (load then save, two separate lock acquisitions), `saveProjectMetadata`, `loadProjectMetadata(path|id)` (null when missing), `loadAllProjects()` (unsorted, skips dirs without `metadata.json`), `deleteProjectMetadata(path)` (removes only the JSON file).
-- `ProjectManager` wraps metadata operations: `registerOrUpdate` increments `openCount`, sets `lastOpened = now`, preserves `debugPort`; `listAll()` sorts by `lastOpened` descending; `listSyncable()` returns all tracked projects except the main project (§8); `ensureDebugPort` allocates and persists a port when missing; `remove(path)` deletes metadata only; `get(path)` and `resolvePath(string)` as above.
+- `ProjectManager` wraps metadata operations: `registerOrUpdate` increments `openCount`, sets `lastOpened = now`, preserves `debugPort` and `baseVmOptionsHash`; `listAll()` sorts by `lastOpened` descending; `listSyncable()` returns all tracked projects except the main project (§8); `ensureDebugPort` allocates and persists a port when missing; `updateBaseVmOptionsHash(project, hash)` reloads the stored metadata (so a just-saved `debugPort` is kept), sets the hash and saves; `remove(path)` deletes metadata only; `get(path)` and `resolvePath(string)` as above.
 
 ## 5. Dependency injection
 
@@ -119,7 +119,9 @@ Fresh write (file missing, or `forceRegenerate = true`):
 3. `-Didea.config.path=`, `-Didea.system.path=`, `-Didea.log.path=`, `-Didea.plugins.path=` pointing at `dirs`.
 4. `-Dproject.juggler.base.dir=<base>` so child IDEs inherit a custom base dir.
 
-Update (file exists, not forced): only the marker block is refreshed. The marker and the contiguous run of following lines starting with `-Didea.` are replaced by the marker plus the four path lines; if there is no marker, a blank line, the marker and the four lines are appended. Base options and the debug port are not reapplied on this path.
+Update (file exists, not forced): only the marker block is refreshed. The marker and the contiguous run of following lines starting with `-Didea.` or `-Dproject.juggler.` are replaced by the marker, the four path lines and the base-dir line; if there is no marker, a blank line and those lines are appended. Base options and the debug port are not reapplied on this path.
+
+`VMOptionsGenerator.computeBaseHash(basePath?)` is `sha256(base file)`, or null when the path is null or missing.
 
 `BaseVMOptionsTracker.hasChanged()` is `sha256(base file) != baseVmOptionsHash` (false when path unset or file missing; a null stored hash counts as changed). `updateHash()` persists the current hash.
 
@@ -127,13 +129,13 @@ Update (file exists, not forced): only the marker block is refreshed. The marker
 
 ### 7.1 Isolated launch (`ProjectLauncher.launch` for non-main projects)
 
-1. If base vmoptions changed, update the stored hash (the vmoptions file is not regenerated here).
+1. If base vmoptions changed, update the IDE-level stored hash (`IdeConfig.baseVmOptionsHash`; regeneration is decided per project in step 4).
 2. `ProjectManager.registerOrUpdate(path)`.
 3. `RecentProjectsIndex.recordOpen(path)`: drop any existing entry for the id, insert at head, truncate to `maxRecentProjects`, save.
 4. `IntelliJLauncher.launch(project)`:
    - `DirectoryManager.ensureProjectDirectories`: create `config/ system/ logs/ plugins/` (idempotent); then, if `config/` is empty, copy base config into it; if `plugins/` is empty, copy base plugins. Copy failures are swallowed.
    - `ensureDebugPort` (always allocates; range 5001..14999, first port not used by another project of this IDE).
-   - `generate(base, dirs, port)` (update mode if the file exists).
+   - `generate(base, dirs, port, forceRegenerate = computeBaseHash(base) != project.baseVmOptionsHash)`: update mode if the file exists and the base is unchanged since the project's last write; otherwise a fresh write, after which `updateBaseVmOptionsHash` persists the new hash (null when no base).
    - Start `<installation.executablePath> <project path>` with env `IDEA_VM_OPTIONS=<projRoot>/idea.vmoptions`.
 
 Base config copy exclusions: any directory named `plugins`; files named `.lock`, `recentProjects.xml`, `recentProjectDirectories.xml`; relative path `options/recentProjects.xml`. Plugin copies have no exclusions.
@@ -176,7 +178,7 @@ Sequence:
    ```
    then poll `isProjectOpen` once per second up to `shutdownTimeout`, emitting `SyncProgress.Stopping(seconds)`. On success sleep 500 ms; on timeout throw `SyncException` (the request file is left for cleanup in step 6). `syncTypes` lists the requested parts in the order vmoptions, config, plugins; `timeoutSeconds` is `SyncOptions.shutdownTimeout`.
 4. Emit `Syncing`, then `ensureProjectDirectories` and:
-   - vmoptions: require an existing base vmoptions file (else `IllegalStateException`); `ensureDebugPort`; `generate(..., forceRegenerate = true)`.
+   - vmoptions: require an existing base vmoptions file (else `IllegalStateException`); `ensureDebugPort`; `generate(..., forceRegenerate = true)`; persist `computeBaseHash(base)` via `updateBaseVmOptionsHash`.
    - config: wipe `<projRoot>/config/` contents and recopy base config with the §7.1 exclusions.
    - plugins: wipe `<projRoot>/plugins/` and recopy base plugins.
 5. If `wasRunning && stopIfRunning && autoRestart`: emit `Restarting` and call `ProjectLauncher.launch(project.path, onFailure)` (metadata, recents and vmoptions-hash bookkeeping as in §7.1). A crash within 10 s is reported as `SyncProgress.Error("IntelliJ exited with code <n> after restart of '<name>': <output>")`, possibly after `syncProject` has returned, so `onProgress` consumers must tolerate a late `Error`; exceptions from `launch` become `SyncProgress.Error("Failed to restart IntelliJ: ...")` as well. Neither fails the sync.
@@ -239,7 +241,6 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 
 Behavior above that is likely unintended, kept here so the spec stays honest. Not fixed by this document.
 
-4. Changed base vmoptions only update the hash on launch; the file is refreshed only by a vmoptions sync. Update mode never adds `-Dproject.juggler.base.dir` to a file lacking it.
 5. Debug ports are allocated even without JDWP in base options; uniqueness is per IDE, not global; the documented lower bound (5000) differs from the code (5001).
 6. `launchMain` inherits the parent's `IDEA_VM_OPTIONS` when no base vmoptions is configured, so a main project launched from an isolated IDE may get isolated options.
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.

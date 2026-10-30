@@ -10,6 +10,7 @@ import com.projectjuggler.core.*
 import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.test.createTempDir
 import com.projectjuggler.test.createTempFile
+import com.projectjuggler.util.HashUtils
 import com.projectjuggler.util.ProjectLockUtils
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -117,6 +118,7 @@ class ProjectLauncherSyncTest : StringSpec({
         content shouldContain "-Xms512m"
         content shouldContain "-Xmx4096m"
         content shouldContain "-XX:NewOption=true"
+        projectManager.get(projectPath)!!.baseVmOptionsHash shouldBe HashUtils.calculateFileHash(baseVmOptions)
 
         // Verify no restart (project wasn't running)
         verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
