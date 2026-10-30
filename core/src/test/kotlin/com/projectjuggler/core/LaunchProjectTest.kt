@@ -43,7 +43,7 @@ class LaunchProjectTest : StringSpec({
         val mockProcessLauncher = mockk<ProcessLauncher>(relaxed = true)
         val executableSlot = slot<Path>()
         val argsSlot = slot<List<String>>()
-        val envSlot = slot<Map<String, String>>()
+        val envSlot = slot<Map<String, String?>>()
         every {
             mockProcessLauncher.launch(capture(executableSlot), capture(argsSlot), capture(envSlot))
         } returns Unit

@@ -55,12 +55,8 @@ class IntelliJLauncher internal constructor(
         // Get base VM options path (if configured)
         val baseVmOptionsPath = BaseVMOptionsTracker.getInstance(ideConfigRepository).getBaseVmOptionsPath()
 
-        // Build environment - include IDEA_VM_OPTIONS if base vmoptions is configured
-        val environment = if (baseVmOptionsPath != null) {
-            mapOf("IDEA_VM_OPTIONS" to baseVmOptionsPath.toString())
-        } else {
-            emptyMap()
-        }
+        // Use the base vmoptions if configured; otherwise drop an inherited IDEA_VM_OPTIONS (e.g. from an isolated IDE)
+        val environment = mapOf("IDEA_VM_OPTIONS" to baseVmOptionsPath?.toString())
 
         // Launch IntelliJ with the project path
         processLauncher.launch(intellijPath, listOf(projectPath.toString()), environment, onFailure)

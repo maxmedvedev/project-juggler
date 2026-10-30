@@ -146,14 +146,14 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 ### 7.2 Main project launch
 
-`MainProjectService.isMainProject` is an exact string comparison of `mainProjectPath` with `pathString`. For the main project, `launch` calls `IntelliJLauncher.launchMain`: start the executable with the project path and, only if a base vmoptions file is configured and exists, `IDEA_VM_OPTIONS=<base vmoptions>`. No directories, metadata, recents, or vmoptions generation.
+`MainProjectService.isMainProject` is an exact string comparison of `mainProjectPath` with `pathString`. For the main project, `launch` calls `IntelliJLauncher.launchMain`: start the executable with the project path and `IDEA_VM_OPTIONS` set to the base vmoptions file when one is configured and exists, otherwise removed from the child environment. No directories, metadata, recents, or vmoptions generation.
 
 `shouldPromptForMainProject(repo, currentConfigDir)` is true when `mainProjectPath` is null, `dontAskAboutMainProject` is false, and the caller runs in the main instance. "Main instance" means `baseConfigPath` is null or equals `currentConfigDir.toString()` exactly.
 
 ### 7.3 Process launching (`ProcessLauncherImpl`)
 
 - Windows: `cmd /c start "" <exe> <args>`. macOS/Linux: `<exe> <args>` with inherited IO.
-- Extra env is merged over the inherited environment.
+- Extra env is merged over the inherited environment; a `null` value removes the variable.
 - A non-daemon thread polls for 10 s. If the process exits non-zero in that window, `onFailure(LaunchFailure(exitCode, stdout, stderr))` is invoked. Exit 0 or still running means no callback.
 
 ### 7.4 Running detection
@@ -243,7 +243,6 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 
 Behavior above that is likely unintended, kept here so the spec stays honest. Not fixed by this document.
 
-6. `launchMain` inherits the parent's `IDEA_VM_OPTIONS` when no base vmoptions is configured, so a main project launched from an isolated IDE may get isolated options.
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
 9. Running detection is a `.lock` existence check; stale locks read as running and make `stopIfRunning` syncs time out. `isProcessRunning` is always true on Windows (`tasklist` exits 0 with no match). `isProjectOpen` for the main project returns false when `baseConfigPath` is unset, unlike `DirectoryManager`, which auto-detects.

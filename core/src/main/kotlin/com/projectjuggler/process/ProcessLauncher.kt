@@ -20,10 +20,14 @@ fun LaunchFailure.describe(): String =
     stderr.ifBlank { stdout }.trim().take(500)
 
 interface ProcessLauncher {
+    /**
+     * Starts [executable] with [args]. [environment] is merged over the inherited environment; a `null` value
+     * removes the variable from the child environment.
+     */
     fun launch(
         executable: Path,
         args: List<String>,
-        environment: Map<String, String> = emptyMap(),
+        environment: Map<String, String?> = emptyMap(),
         onFailure: ((LaunchFailure) -> Unit)? = null
     )
 }
@@ -33,7 +37,7 @@ class ProcessLauncherImpl : ProcessLauncher {
     override fun launch(
         executable: Path,
         args: List<String>,
-        environment: Map<String, String>,
+        environment: Map<String, String?>,
         onFailure: ((LaunchFailure) -> Unit)?
     ) {
         // Log launch diagnostics
@@ -41,7 +45,7 @@ class ProcessLauncherImpl : ProcessLauncher {
         System.err.println("  Executable: $executable")
         System.err.println("  Arguments: $args")
         if (environment.isNotEmpty()) {
-            System.err.println("  Environment: $environment")
+            System.err.println("  Environment: ${environment.mapValues { it.value ?: "<unset>" }}")
         }
 
         val processBuilder = when (Platform.current()) {
@@ -93,29 +97,39 @@ class ProcessLauncherImpl : ProcessLauncher {
     private fun createWindowsProcess(
         executable: Path,
         args: List<String>,
-        environment: Map<String, String>
+        environment: Map<String, String?>
     ): ProcessBuilder {
         // On Windows, use 'start' command to properly detach the process
         return ProcessBuilder()
             .command(listOf("cmd", "/c", "start", "", executable.toString()) + args)
             .apply {
-                environment().putAll(environment)
+                applyEnvironment(environment)
             }
     }
 
     private fun createUnixProcess(
         executable: Path,
         args: List<String>,
-        environment: Map<String, String>
+        environment: Map<String, String?>
     ): ProcessBuilder {
         // On Unix-like systems, directly launch the process
         // The process will be adopted by init when the parent (CLI) exits
         return ProcessBuilder()
             .command(listOf(executable.toString()) + args)
             .apply {
-                environment().putAll(environment)
+                applyEnvironment(environment)
                 // Inherit IO to avoid blocking on buffers
                 inheritIO()
             }
+    }
+}
+
+/**
+ * Merges [environment] into this builder's environment; a `null` value removes the variable.
+ */
+internal fun ProcessBuilder.applyEnvironment(environment: Map<String, String?>) {
+    val target = environment()
+    for ((key, value) in environment) {
+        if (value == null) target.remove(key) else target[key] = value
     }
 }
