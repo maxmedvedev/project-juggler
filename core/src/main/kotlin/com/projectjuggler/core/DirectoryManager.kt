@@ -15,6 +15,8 @@ import kotlin.io.path.deleteRecursively
 
 class DirectoryManager internal constructor(private val configRepository: IdeConfigRepository) {
 
+    private val projectsDir: Path = configRepository.baseDir.resolve("projects")
+
     fun ensureProjectDirectories(project: ProjectMetadata): ProjectDirectories {
         val root = getProjectRoot(project)
 
@@ -134,7 +136,16 @@ class DirectoryManager internal constructor(private val configRepository: IdeCon
     }
 
     fun getProjectRoot(project: ProjectPath): Path {
-        return configRepository.baseDir.resolve("projects").resolve(project.id.id)
+        return projectsDir.resolve(project.id.id)
+    }
+
+    /**
+     * True when [dir] lies under `<ideDir>/projects`, i.e. it belongs to an isolated project instance.
+     * Paths are compared after `toAbsolutePath().normalize()`; symlinks are not resolved.
+     */
+    fun isIsolatedConfigDir(dir: Path): Boolean {
+        val projects = projectsDir.toAbsolutePath().normalize()
+        return dir.toAbsolutePath().normalize().startsWith(projects)
     }
 
     companion object {

@@ -337,4 +337,17 @@ class DirectoryManagerTest : StringSpec({
         shouldThrow<IllegalStateException> { manager.syncConfigFromBase(project) }
         shouldThrow<IllegalStateException> { manager.syncPluginsFromBase(project) }
     }
+
+    "isIsolatedConfigDir recognizes project config dirs and rejects others" {
+        val baseDir = tempDir.resolve("isolated")
+        val manager = DirectoryManager.getInstance(IdeConfigRepository(baseDir, IdeInstallation("/test/ide", "Test IDE")))
+
+        manager.isIsolatedConfigDir(baseDir.resolve("projects/x-abc/config")) shouldBe true
+        manager.isIsolatedConfigDir(baseDir.resolve("projects/x-abc/config/../config/.")) shouldBe true
+        manager.isIsolatedConfigDir(baseDir.resolve("projects/x-abc/system/deep/nested")) shouldBe true
+        manager.isIsolatedConfigDir(baseDir) shouldBe false
+        manager.isIsolatedConfigDir(baseDir.resolve("projects-other/x/config")) shouldBe false
+        manager.isIsolatedConfigDir(baseDir.resolve("projects/../config")) shouldBe false
+        manager.isIsolatedConfigDir(tempDir.resolve("elsewhere/config")) shouldBe false
+    }
 })

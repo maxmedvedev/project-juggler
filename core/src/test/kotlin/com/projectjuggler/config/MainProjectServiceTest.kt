@@ -2,11 +2,15 @@ package com.projectjuggler.config
 
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.di.KoinTestExtension
+import com.projectjuggler.platform.Platform
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import java.nio.file.Files
+import java.nio.file.Paths
+import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 
@@ -130,5 +134,63 @@ class MainProjectServiceTest : StringSpec({
 
         // Verify still no duplication
         recentProjectsIndex.getRecent(10) shouldHaveSize 1
+    }
+
+    "isRunningInMainInstance is false for an isolated config dir" {
+        val repo = IdeConfigRepository(baseDir.resolve("isolated"), IdeInstallation("/test/ide7", "Test IDE"))
+        val isolatedConfig = repo.baseDir.resolve("projects/x-abc/config").createDirectories()
+
+        MainProjectService.isRunningInMainInstance(repo, isolatedConfig) shouldBe false
+
+        repo.update { it.copy(baseConfigPath = isolatedConfig.toString()) }
+        MainProjectService.isRunningInMainInstance(repo, isolatedConfig) shouldBe false
+    }
+
+    "isRunningInMainInstance is true when base is unset and dir is not isolated" {
+        val repo = IdeConfigRepository(baseDir.resolve("unset-base"), IdeInstallation("/test/ide8", "Test IDE"))
+        val configDir = createTempDir("test-base-config")
+
+        MainProjectService.isRunningInMainInstance(repo, configDir) shouldBe true
+    }
+
+    "isRunningInMainInstance normalizes paths" {
+        val repo = IdeConfigRepository(baseDir.resolve("normalize"), IdeInstallation("/test/ide9", "Test IDE"))
+        val configDir = createTempDir("test-base-config")
+        repo.update { it.copy(baseConfigPath = configDir.toString()) }
+
+        MainProjectService.isRunningInMainInstance(repo, configDir.resolve(".")) shouldBe true
+        MainProjectService.isRunningInMainInstance(repo, Paths.get(configDir.toString() + "/")) shouldBe true
+        MainProjectService.isRunningInMainInstance(repo, configDir.resolve("sub/..")) shouldBe true
+    }
+
+    "isRunningInMainInstance follows symlinks" {
+        if (!Platform.isWindows()) {
+            val repo = IdeConfigRepository(baseDir.resolve("symlink"), IdeInstallation("/test/ide10", "Test IDE"))
+            val configDir = createTempDir("test-base-config")
+            val link = createTempDir("test-link-parent").resolve("config-link")
+            Files.createSymbolicLink(link, configDir)
+            repo.update { it.copy(baseConfigPath = configDir.toString()) }
+
+            MainProjectService.isRunningInMainInstance(repo, link) shouldBe true
+        }
+    }
+
+    "isRunningInMainInstance is false for a different dir" {
+        val repo = IdeConfigRepository(baseDir.resolve("different"), IdeInstallation("/test/ide11", "Test IDE"))
+        val configDir = createTempDir("test-base-config")
+        val otherDir = createTempDir("test-other-config")
+        repo.update { it.copy(baseConfigPath = configDir.toString()) }
+
+        MainProjectService.isRunningInMainInstance(repo, otherDir) shouldBe false
+        MainProjectService.isRunningInMainInstance(repo, configDir.resolve("missing")) shouldBe false
+    }
+
+    "shouldPromptForMainProject is false in an isolated instance even with no main project" {
+        val repo = IdeConfigRepository(baseDir.resolve("prompt"), IdeInstallation("/test/ide12", "Test IDE"))
+        val isolatedConfig = repo.baseDir.resolve("projects/x-abc/config")
+        val mainConfig = createTempDir("test-base-config")
+
+        MainProjectService.shouldPromptForMainProject(repo, isolatedConfig) shouldBe false
+        MainProjectService.shouldPromptForMainProject(repo, mainConfig) shouldBe true
     }
 })

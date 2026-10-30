@@ -149,7 +149,7 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 `MainProjectService.isMainProject` is an exact string comparison of `mainProjectPath` with `pathString`. For the main project, `launch` calls `IntelliJLauncher.launchMain`: start the executable with the project path and `IDEA_VM_OPTIONS` set to the base vmoptions file when one is configured and exists, otherwise removed from the child environment. No directories, metadata, recents, or vmoptions generation.
 
-`shouldPromptForMainProject(repo, currentConfigDir)` is true when `mainProjectPath` is null, `dontAskAboutMainProject` is false, and the caller runs in the main instance. "Main instance" means `baseConfigPath` is null or equals `currentConfigDir.toString()` exactly.
+`shouldPromptForMainProject(repo, currentConfigDir)` is true when `mainProjectPath` is null, `dontAskAboutMainProject` is false, and the caller runs in the main instance. `isRunningInMainInstance(repo, currentConfigDir)` decides "main instance": false when `DirectoryManager.isIsolatedConfigDir(currentConfigDir)` (the dir, after `toAbsolutePath().normalize()`, lies under `<ideDir>/projects/`; symlinks are not resolved), regardless of `baseConfigPath`. Otherwise true when `baseConfigPath` is null, or when it names the same directory as `currentConfigDir` after `toAbsolutePath().normalize()`, comparing real paths (`toRealPath()`) when both exist so symlinked locations match.
 
 ### 7.3 Process launching (`ProcessLauncherImpl`)
 
@@ -249,5 +249,4 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
 13. On Windows `ProcessLauncherImpl` reports the exit code of `cmd start` and captures no child output.
-14. `isRunningInMainInstance` compares paths as raw strings and assumes "main" when `baseConfigPath` is unset.
 15. Untested: `WindowFocuser`, the "still running after 10 s" path of `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.

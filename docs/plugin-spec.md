@@ -151,7 +151,7 @@ Cancellable-by-API `Task.Backgroundable` (default cancellable flag). `SyncOption
 
 ## 7. IDE path drift (`IdePathSyncDetector`)
 
-Stored base paths can go stale after an IDE update or relocation. `detectMismatches(repo)` returns an empty list when `PathManager.getConfigDir()` is under `repo.baseDir` (isolated instance). Otherwise it compares, as strings, `baseConfigPath` to `PathManager.getConfigDir()`, `basePluginsPath` to `PathManager.getPluginsDir()`, and `baseVmOptionsPath` to `VMOptionsCopy.getUserOptionsFile() ?: getPlatformOptionsFile()`, each only when the stored value is non-null. Labels: "Config", "Plugins", "VM Options".
+Stored base paths can go stale after an IDE update or relocation. `detectMismatches(repo)` returns an empty list when `PathManager.getConfigDir()` is under `repo.baseDir` (isolated instance). (Core's `DirectoryManager.isIsolatedConfigDir` implements the stricter, normalized `<ideDir>/projects/` rule; this check could delegate to it.) Otherwise it compares, as strings, `baseConfigPath` to `PathManager.getConfigDir()`, `basePluginsPath` to `PathManager.getPluginsDir()`, and `baseVmOptionsPath` to `VMOptionsCopy.getUserOptionsFile() ?: getPlatformOptionsFile()`, each only when the stored value is non-null. Labels: "Config", "Plugins", "VM Options".
 
 `updatePaths(repo, project)` overwrites config and plugins paths, overwrites the vmoptions path only if the current file exists, refreshes the vmoptions hash when it exists, and notifies `notification.success.paths.updated` or `notification.error.paths.update.failed`.
 

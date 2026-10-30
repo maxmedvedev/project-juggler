@@ -1,6 +1,9 @@
 package com.projectjuggler.config
 
+import com.projectjuggler.core.DirectoryManager
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Service for managing the main project configuration.
@@ -37,11 +40,28 @@ object MainProjectService {
 
     /**
      * Checks if the current IDE instance is running as the main instance.
-     * Compares the current config directory with the stored base config path.
+     *
+     * A config dir under `<ideDir>/projects/` always belongs to an isolated instance, so the result is false there.
+     * Otherwise the instance is main when `baseConfigPath` is unset or names the same directory as
+     * [currentConfigDir] after normalization (real paths when both exist, so symlinks match).
      */
     fun isRunningInMainInstance(ideConfigRepository: IdeConfigRepository, currentConfigDir: Path): Boolean {
-        val baseConfigPath = ideConfigRepository.load().baseConfigPath ?: return true // assume main if not configured
-        return currentConfigDir.toString() == baseConfigPath
+        if (DirectoryManager.getInstance(ideConfigRepository).isIsolatedConfigDir(currentConfigDir)) return false
+        val baseConfigPath = ideConfigRepository.load().baseConfigPath ?: return true
+        return samePath(Paths.get(baseConfigPath), currentConfigDir)
+    }
+
+    private fun samePath(a: Path, b: Path): Boolean {
+        val normalizedA = a.toAbsolutePath().normalize()
+        val normalizedB = b.toAbsolutePath().normalize()
+        if (normalizedA == normalizedB) return true
+        if (!Files.exists(normalizedA) || !Files.exists(normalizedB)) return false
+        return try {
+            normalizedA.toRealPath() == normalizedB.toRealPath()
+        } catch (e: Throwable) {
+            System.err.println("Failed to resolve real paths of $normalizedA and $normalizedB: ${e.message}")
+            false
+        }
     }
 
     /**
