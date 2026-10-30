@@ -1,7 +1,7 @@
 package com.projectjuggler.util
 
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
+import java.time.Duration
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
@@ -35,14 +35,16 @@ object GitUtils {
                 }
 
                 // If HEAD contains a commit SHA (detached HEAD state)
-                if (headContent.matches(Regex("[0-9a-f]{40}"))) {
+                if (headContent.matches(Regex("[0-9a-f]{40}|[0-9a-f]{64}"))) {
                     return "HEAD (detached)"
                 }
             }
 
             // Fallback: execute git command
-            return executeGitCommand(startDir, "git", "rev-parse", "--abbrev-ref", "HEAD")
-        } catch (e: Exception) {
+            val result = GitCommandRunner.run(startDir, listOf("rev-parse", "--abbrev-ref", "HEAD"), Duration.ofSeconds(2))
+            val output = result.output.trim()
+            return if (result.exitCode == 0 && output.isNotEmpty()) output else null
+        } catch (e: Throwable) {
             // Silently return null on any error
             return null
         }
@@ -67,26 +69,5 @@ object GitUtils {
             }
         }
         return null
-    }
-
-    private fun executeGitCommand(workingDir: Path, vararg command: String): String? {
-        try {
-            val process = ProcessBuilder(*command)
-                .directory(workingDir.toFile())
-                .redirectErrorStream(true)
-                .start()
-
-            // Wait max 2 seconds for git command to prevent hanging
-            val completed = process.waitFor(2, TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroyForcibly()
-                return null
-            }
-
-            val output = process.inputStream.bufferedReader().readText().trim()
-            return if (process.exitValue() == 0 && output.isNotEmpty()) output else null
-        } catch (e: Exception) {
-            return null
-        }
     }
 }

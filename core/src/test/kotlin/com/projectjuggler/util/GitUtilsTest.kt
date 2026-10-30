@@ -45,6 +45,10 @@ class GitUtilsTest : StringSpec({
         GitUtils.detectGitBranch(repoDir.resolve("module.bazel").createFile()) shouldBe "HEAD (detached)"
     }
 
+    "should report detached HEAD for a SHA-256 repository" {
+        GitUtils.detectGitBranch(repo("detached-sha256", head = "b".repeat(64))) shouldBe "HEAD (detached)"
+    }
+
     "should follow a .git file pointing at the real git directory" {
         val worktreeDir = baseDir.resolve("worktree").createDirectories()
         val realGitDir = baseDir.resolve("real-git-dir").createDirectories()

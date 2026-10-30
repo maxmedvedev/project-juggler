@@ -224,8 +224,9 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 
 ## 11. Utilities with external contracts
 
-- `GitUtils.detectGitBranch(path)`: walk up from `projectRoot(path)` to the first `.git` (directory, or file with `gitdir:` resolved relative to its location). Read `HEAD`: `ref: refs/heads/X` -> `X`; 40-hex SHA -> `"HEAD (detached)"`; else `git rev-parse --abbrev-ref HEAD` with a 2 s timeout. Any error -> null.
-- `GitWorktreeManager.createWorktree(src, dst, branch, out?)`: validates (src exists, is a dir, has `.git`; dst absent; branch non-blank; `IllegalArgumentException` otherwise), runs `git worktree add -b <branch> <dst>` in `src`, throws `IOException` on non-zero exit.
+- `GitUtils.detectGitBranch(path)`: walk up from `projectRoot(path)` to the first `.git` (directory, or file with `gitdir:` resolved relative to its location). Read `HEAD`: `ref: refs/heads/X` -> `X`; 40- or 64-hex SHA -> `"HEAD (detached)"`; else `git rev-parse --abbrev-ref HEAD` with a 2 s timeout. Any error -> null.
+- `GitWorktreeManager.createWorktree(src, dst, branch, out?)`: validates (src exists, is a dir, has `.git`; dst absent; branch non-blank; `IllegalArgumentException` otherwise), runs `git worktree add -b <branch> <dst>` in `src` with a 30 s timeout, throws a single `IOException("Failed to create git worktree: <output>")` on non-zero exit (stdout and stderr are merged into the error message), `IOException("git worktree timed out after 30 s")` on timeout, and lets the `IOException` from a missing `git` propagate unwrapped.
+- `GitCommandRunner` (internal) runs `git` with merged output and a timeout; used by both. On timeout it destroys the process and its descendants. The timeout path is covered by the runner's `waitFor(timeout)` contract, not by a unit test.
 - `DirectoryCopier.copyIfFirstOpen(src, dst, ...)` copies only when `dst` is missing or empty, returns whether it copied, swallows errors. `copy(src, dst, ...)` clears `dst` contents then copies; throws if `src` is invalid. Files are copied with `REPLACE_EXISTING`, attributes not preserved, symlinks followed.
 - `HashUtils`: SHA-256 as 64 lowercase hex chars for files and UTF-8 strings.
 - `PortAllocator.allocatePort()`: first port in 5001..14999 not used by a project of this IDE, else null.
@@ -245,8 +246,7 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
-11. `GitWorktreeManager` double-wraps its own `IOException` and has no timeout. `GitUtils` does not treat 64-hex (SHA-256) detached heads as detached.
 12. `copyIfFirstOpen` can leave a partial copy that is never retried. A forced config sync wipes the project's own `.lock` and `recentProjects.xml`.
 13. `ProcessLauncherImpl` captures no output on Unix (inherited IO), reports the exit code of `cmd start` on Windows, and keeps a CLI JVM alive up to 10 s via a non-daemon thread.
 14. `isRunningInMainInstance` compares paths as raw strings and assumes "main" when `baseConfigPath` is unset.
-15. Untested: `WindowFocuser`, `GitWorktreeManager`, `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
+15. Untested: `WindowFocuser`, `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
