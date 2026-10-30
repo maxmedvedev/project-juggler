@@ -55,7 +55,7 @@ Invariant: the id is the on-disk directory name for the project's isolated state
           config/  system/  logs/  plugins/ # isolated IDE dirs
           signals/
             stop-request.json               # §8
-            sync-in-progress.lock           # §8
+            sync-in-progress.lock           # permanent, §8
 ```
 
 All JSON is pretty-printed with `encodeDefaults = false`. `config.json` and `metadata.json` are read and written under an exclusive OS file lock (`FileLockUtils.withFileLock`, blocking `FileChannel.lock()`, creates the file if missing). `recent.json` is not locked.
@@ -180,13 +180,13 @@ Sequence:
    - config: wipe `<projRoot>/config/` contents and recopy base config with the §7.1 exclusions.
    - plugins: wipe `<projRoot>/plugins/` and recopy base plugins.
 5. If `wasRunning && stopIfRunning && autoRestart`: emit `Restarting` and `IntelliJLauncher.launch(project)`. Failures become `SyncProgress.Error(msg)` and do not fail the sync.
-6. Always: delete every file in `signals/`, then release and delete the sync lock.
+6. Always: delete every file in `signals/` except `sync-in-progress.lock`, then release the sync lock. The lock file is never deleted.
 
 If the project is running and `stopIfRunning` is false, the sync proceeds against a live IDE.
 
 ### 8.1 Expectations on the running IDE
 
-The isolated IDE (plugin side) is expected to poll `signals/stop-request.json`, exit gracefully when one appears, and thereby remove `config/.lock`. `ShutdownSignalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)` deletes files in `signals/` whose embedded timestamp is older than the limit, and any file that does not parse as a stop request.
+The isolated IDE (plugin side) is expected to poll `signals/stop-request.json`, exit gracefully when one appears, and thereby remove `config/.lock`. `ShutdownSignalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)` deletes files in `signals/` other than `sync-in-progress.lock` whose embedded timestamp is older than the limit, and any such file that does not parse as a stop request.
 
 ### 8.2 Self-sync
 
@@ -238,7 +238,6 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 
 Behavior above that is likely unintended, kept here so the spec stays honest. Not fixed by this document.
 
-1. `cleanupStaleSignals` deletes `sync-in-progress.lock` because it is not JSON; on Unix this can defeat sync mutual exclusion. `doWithLock` also deletes the lock file before releasing the lock.
 2. Stop request `timeoutSeconds` ignores `SyncOptions.shutdownTimeout`; `syncTypes` is always `["settings"]`.
 3. Post-sync restart always uses the isolated launcher and skips recents/metadata/`onFailure`. (The main project is rejected by `syncProject`, so it can no longer be restarted this way.)
 4. Changed base vmoptions only update the hash on launch; the file is refreshed only by a vmoptions sync. Update mode never adds `-Dproject.juggler.base.dir` to a file lacking it.

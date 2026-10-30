@@ -9,7 +9,14 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.nio.file.Files
+import java.nio.file.Path
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import kotlin.io.path.exists
+import kotlin.io.path.writeText
 
 class ShutdownSignalManagerTest : StringSpec({
     extensions(KoinTestExtension())
@@ -111,38 +118,115 @@ class ShutdownSignalManagerTest : StringSpec({
         }
     }
 
-    "should cleanup stale signals older than specified age" {
+    "cleanup keeps the sync lock file" {
         val tempDir = Files.createTempDirectory("test")
         try {
-            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
-            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val ideConfigRepository = IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))
             val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
+            val project = testProject()
+            val signalsDir = signalsDir(ideConfigRepository, project)
 
-            val project = ProjectMetadata(
-                path = ProjectPath("/tmp/test-project"),
-                lastOpened = "2025-01-01T00:00:00Z"
+            val lock = signalManager.acquireSyncLock(project)
+            lock.shouldNotBeNull()
+            try {
+                signalManager.createStopRequest(project, autoRestart = false, syncTypes = listOf("config"))
+
+                signalManager.cleanup(project)
+
+                signalsDir.resolve(ShutdownSignalManager.STOP_REQUEST_FILE_NAME).exists() shouldBe false
+                signalsDir.resolve(ShutdownSignalManager.SYNC_LOCK_FILE_NAME).exists() shouldBe true
+                signalManager.acquireSyncLock(project).shouldBeNull()
+            } finally {
+                lock.close()
+            }
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    "cleanupStaleSignals keeps the sync lock file and deletes unparseable files" {
+        val tempDir = Files.createTempDirectory("test")
+        try {
+            val ideConfigRepository = IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
+            val project = testProject()
+            val signalsDir = signalsDir(ideConfigRepository, project)
+
+            val lock = signalManager.acquireSyncLock(project)
+            lock.shouldNotBeNull()
+            try {
+                val garbage = signalsDir.resolve("garbage.txt")
+                garbage.writeText("not json")
+
+                signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
+
+                signalsDir.resolve(ShutdownSignalManager.SYNC_LOCK_FILE_NAME).exists() shouldBe true
+                garbage.exists() shouldBe false
+                signalManager.acquireSyncLock(project).shouldBeNull()
+            } finally {
+                lock.close()
+            }
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    "cleanupStaleSignals deletes stop requests older than maxAgeMinutes" {
+        val tempDir = Files.createTempDirectory("test")
+        try {
+            val ideConfigRepository = IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
+            val project = testProject()
+            val signalsDir = signalsDir(ideConfigRepository, project)
+
+            val staleSignal = StopRequestSignal(
+                requestId = "stale",
+                timestamp = Instant.now().minus(10, ChronoUnit.MINUTES).toString(),
+                requestedBy = "system",
+                autoRestart = false,
+                syncTypes = listOf("config"),
+                timeoutSeconds = 60
             )
-
-            // Create signal
-            signalManager.createStopRequest(
-                project = project,
-                autoRestart = true,
-                syncTypes = listOf("config")
-            )
-
-            // Cleanup with high threshold - signal should remain
-            signalManager.cleanupStaleSignals(project, maxAgeMinutes = 60)
-
-            // Signal should still exist (it's not stale yet)
+            Files.createDirectories(signalsDir)
+            signalsDir.resolve(ShutdownSignalManager.STOP_REQUEST_FILE_NAME)
+                .writeText(Json.encodeToString(staleSignal))
             signalManager.readStopRequest(project).shouldNotBeNull()
 
-            // Now cleanup with 0 minutes - should remove immediately
-            // Note: This may not work because signal was created < 1 minute ago
-            // So let's just verify the cleanup method works
-            signalManager.cleanup(project)
+            signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
+
             signalManager.readStopRequest(project).shouldBeNull()
         } finally {
             tempDir.toFile().deleteRecursively()
         }
     }
+
+    "closing the sync lock keeps the file" {
+        val tempDir = Files.createTempDirectory("test")
+        try {
+            val ideConfigRepository = IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
+            val project = testProject()
+            val lockFile = signalsDir(ideConfigRepository, project).resolve(ShutdownSignalManager.SYNC_LOCK_FILE_NAME)
+
+            val lock1 = signalManager.acquireSyncLock(project)
+            lock1.shouldNotBeNull()
+            lock1.close()
+
+            lockFile.exists() shouldBe true
+
+            val lock2 = signalManager.acquireSyncLock(project)
+            lock2.shouldNotBeNull()
+            lock2.close()
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
 })
+
+private fun testProject() = ProjectMetadata(
+    path = ProjectPath("/tmp/test-project"),
+    lastOpened = "2025-01-01T00:00:00Z"
+)
+
+private fun signalsDir(ideConfigRepository: IdeConfigRepository, project: ProjectMetadata): Path =
+    DirectoryManager.getInstance(ideConfigRepository).getProjectRoot(project).resolve("signals")

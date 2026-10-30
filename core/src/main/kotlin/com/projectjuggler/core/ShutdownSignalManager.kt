@@ -79,6 +79,7 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
 
     /**
      * Cleans up all signal files for the specified project.
+     * The sync lock file is permanent and is never deleted.
      *
      * @param project Project
      */
@@ -88,6 +89,7 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
 
     /**
      * Cleans up stale signal files older than the specified age, and any file that is not a valid stop request.
+     * The sync lock file is permanent and is never deleted.
      *
      * @param project Project
      * @param maxAgeMinutes Maximum age in minutes
@@ -110,16 +112,18 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
     }
 
     /**
-     * Runs [action] on every file in the signals directory.
+     * Runs [action] on every file in the signals directory except the sync lock file.
      */
     private fun forEachSignalFile(project: ProjectMetadata, action: (Path) -> Unit) {
         val signalsDir = getSignalsDirectory(project)
         if (!signalsDir.exists()) return
 
         Files.list(signalsDir).use { files ->
-            files.forEach(action)
+            files.filter { !it.isSyncLock() }.forEach(action)
         }
     }
+
+    private fun Path.isSyncLock() = fileName.toString() == SYNC_LOCK_FILE_NAME
 
     /**
      * Gets the signals directory for the specified project ID.
@@ -145,7 +149,7 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
             val lock = raf.channel.tryLock()
 
             if (lock != null) {
-                SyncLock(raf, lock, lockFile)
+                SyncLock(raf, lock)
             } else {
                 raf.close()
                 null
@@ -179,18 +183,17 @@ data class StopRequestSignal(
 
 /**
  * Represents a sync lock that prevents concurrent sync operations.
- * Automatically releases the lock when closed.
+ * Automatically releases the lock when closed. The lock file itself is permanent: deleting it while
+ * another process holds or is acquiring the lock would let two processes lock different inodes.
  */
 class SyncLock(
     private val raf: java.io.RandomAccessFile,
-    private val lock: FileLock,
-    private val lockFile: Path
+    private val lock: FileLock
 ) : AutoCloseable {
     override fun close() {
         try {
             lock.release()
             raf.close()
-            Files.deleteIfExists(lockFile)
         } catch (e: Exception) {
             // Log but don't throw - cleanup is best effort
         }
