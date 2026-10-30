@@ -83,35 +83,41 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
      * @param project Project
      */
     fun cleanup(project: ProjectMetadata) {
-        val signalsDir = getSignalsDirectory(project)
-        if (signalsDir.exists()) {
-            signalsDir.toFile().listFiles()?.forEach { it.delete() }
-        }
+        forEachSignalFile(project) { Files.deleteIfExists(it) }
     }
 
     /**
-     * Cleans up stale signal files older than the specified age.
+     * Cleans up stale signal files older than the specified age, and any file that is not a valid stop request.
      *
      * @param project Project
      * @param maxAgeMinutes Maximum age in minutes
      */
     fun cleanupStaleSignals(project: ProjectMetadata, maxAgeMinutes: Long = 5) {
-        val signalsDir = getSignalsDirectory(project)
-        if (!signalsDir.exists()) return
-
-        signalsDir.toFile().listFiles()?.forEach { file ->
+        forEachSignalFile(project) { file ->
             try {
                 val signal = json.decodeFromString<StopRequestSignal>(file.readText())
                 val signalTime = Instant.parse(signal.timestamp)
                 val ageMinutes = (Instant.now().toEpochMilli() - signalTime.toEpochMilli()) / 1000 / 60
 
                 if (ageMinutes > maxAgeMinutes) {
-                    file.delete()
+                    Files.deleteIfExists(file)
                 }
-            } catch (e: Exception) {
-                // Corrupted file, delete it
-                file.delete()
+            } catch (e: Throwable) {
+                System.err.println("[ShutdownSignalManager] Deleting unreadable signal file $file: $e")
+                Files.deleteIfExists(file)
             }
+        }
+    }
+
+    /**
+     * Runs [action] on every file in the signals directory.
+     */
+    private fun forEachSignalFile(project: ProjectMetadata, action: (Path) -> Unit) {
+        val signalsDir = getSignalsDirectory(project)
+        if (!signalsDir.exists()) return
+
+        Files.list(signalsDir).use { files ->
+            files.forEach(action)
         }
     }
 
