@@ -13,6 +13,7 @@ import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.ShutdownWaiter
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.core.SyncProgress
+import com.projectjuggler.core.SyncTypeNames
 import com.projectjuggler.core.VMOptionsGenerator
 import com.projectjuggler.di.getScope
 import com.projectjuggler.util.ProjectLockUtils
@@ -76,14 +77,21 @@ class ProjectLauncher internal constructor(
             )
         }
 
-        doWithLock(project, options) {
+        val syncTypes = buildList {
+            if (syncVmOptions) add(SyncTypeNames.VM_OPTIONS)
+            if (syncConfig) add(SyncTypeNames.CONFIG)
+            if (syncPlugins) add(SyncTypeNames.PLUGINS)
+        }
+
+        doWithLock(project, options, syncTypes) {
             doSync(project, syncVmOptions, syncConfig, syncPlugins)
         }
     }
 
     private fun doWithLock(
         project: ProjectMetadata,
-        options: SyncOptions = SyncOptions.DEFAULT,
+        options: SyncOptions,
+        syncTypes: List<String>,
         block: () -> Unit
     ) {
         val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
@@ -98,7 +106,7 @@ class ProjectLauncher internal constructor(
 
             // If running and should stop, request shutdown and wait
             if (wasRunning && options.stopIfRunning) {
-                requestShutdownAndWait(project, options, signalManager)
+                requestShutdownAndWait(project, options, syncTypes, signalManager)
             }
 
             // Perform sync operations
@@ -159,19 +167,15 @@ class ProjectLauncher internal constructor(
     private fun requestShutdownAndWait(
         project: ProjectMetadata,
         options: SyncOptions,
+        syncTypes: List<String>,
         signalManager: ShutdownSignalManager
     ) {
-        // Determine what's being synced for diagnostic purposes
-        val syncTypes = mutableListOf<String>()
-        // Note: We don't have access to the boolean flags here
-        // For now, just use a generic message
-        syncTypes.add("settings")
-
         // Create stop request signal
         signalManager.createStopRequest(
             project = project,
             autoRestart = options.autoRestart,
-            syncTypes = syncTypes
+            syncTypes = syncTypes,
+            timeoutSeconds = options.shutdownTimeout
         )
 
         // Wait for shutdown

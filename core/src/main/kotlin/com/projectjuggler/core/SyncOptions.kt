@@ -45,6 +45,15 @@ data class SyncOptions(
 }
 
 /**
+ * Names of the synced parts written to `stop-request.json`; the same words the sync-helper CLI flags use.
+ */
+internal object SyncTypeNames {
+    const val VM_OPTIONS = "vmoptions"
+    const val CONFIG = "config"
+    const val PLUGINS = "plugins"
+}
+
+/**
  * Progress updates during sync operation.
  */
 sealed class SyncProgress {

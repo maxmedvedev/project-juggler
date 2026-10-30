@@ -37,7 +37,8 @@ class ShutdownSignalManagerTest : StringSpec({
             val signal = signalManager.createStopRequest(
                 project = project,
                 autoRestart = true,
-                syncTypes = listOf("vmoptions", "config")
+                syncTypes = listOf("vmoptions", "config"),
+                timeoutSeconds = 60
             )
 
             signal.autoRestart shouldBe true
@@ -49,6 +50,26 @@ class ShutdownSignalManagerTest : StringSpec({
             readSignal.requestId shouldBe signal.requestId
             readSignal.autoRestart shouldBe true
             readSignal.syncTypes shouldBe listOf("vmoptions", "config")
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    "should persist the given timeout" {
+        val tempDir = Files.createTempDirectory("test")
+        try {
+            val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+            val ideConfigRepository = IdeConfigRepository(tempDir, testInstallation)
+            val signalManager = ShutdownSignalManager.getInstance(ideConfigRepository)
+
+            val project = ProjectMetadata(
+                path = ProjectPath("/tmp/test-project"),
+                lastOpened = "2025-01-01T00:00:00Z"
+            )
+
+            signalManager.createStopRequest(project, autoRestart = true, syncTypes = listOf("config"), timeoutSeconds = 15)
+
+            signalManager.readStopRequest(project)!!.timeoutSeconds shouldBe 15
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -70,7 +91,8 @@ class ShutdownSignalManagerTest : StringSpec({
             signalManager.createStopRequest(
                 project = project,
                 autoRestart = false,
-                syncTypes = listOf("config")
+                syncTypes = listOf("config"),
+                timeoutSeconds = 60
             )
 
             // Verify signal exists
@@ -129,7 +151,7 @@ class ShutdownSignalManagerTest : StringSpec({
             val lock = signalManager.acquireSyncLock(project)
             lock.shouldNotBeNull()
             try {
-                signalManager.createStopRequest(project, autoRestart = false, syncTypes = listOf("config"))
+                signalManager.createStopRequest(project, autoRestart = false, syncTypes = listOf("config"), timeoutSeconds = 60)
 
                 signalManager.cleanup(project)
 

@@ -30,13 +30,15 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
      *
      * @param project Project to stop
      * @param autoRestart Whether to automatically restart after sync
-     * @param syncTypes Types of settings being synced (for logging/diagnostics)
+     * @param syncTypes Types of settings being synced (for logging/diagnostics), see [SyncTypeNames]
+     * @param timeoutSeconds How long the requester waits for the shutdown
      * @return The created signal
      */
     fun createStopRequest(
         project: ProjectMetadata,
         autoRestart: Boolean,
-        syncTypes: List<String>
+        syncTypes: List<String>,
+        timeoutSeconds: Int
     ): StopRequestSignal {
         val signal = StopRequestSignal(
             requestId = UUID.randomUUID().toString(),
@@ -44,7 +46,7 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
             requestedBy = "system",
             autoRestart = autoRestart,
             syncTypes = syncTypes,
-            timeoutSeconds = 60
+            timeoutSeconds = timeoutSeconds
         )
 
         val signalsDir = getSignalsDirectory(project)

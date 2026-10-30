@@ -172,9 +172,9 @@ Sequence:
 3. If `wasRunning && stopIfRunning`: write `signals/stop-request.json`:
    ```json
    { "requestId": "<uuid>", "timestamp": "<ISO instant>", "requestedBy": "system",
-     "autoRestart": true, "syncTypes": ["settings"], "timeoutSeconds": 60 }
+     "autoRestart": true, "syncTypes": ["vmoptions", "config"], "timeoutSeconds": <shutdownTimeout> }
    ```
-   then poll `isProjectOpen` once per second up to `shutdownTimeout`, emitting `SyncProgress.Stopping(seconds)`. On success sleep 500 ms; on timeout throw `SyncException` (the request file is left for cleanup in step 6).
+   then poll `isProjectOpen` once per second up to `shutdownTimeout`, emitting `SyncProgress.Stopping(seconds)`. On success sleep 500 ms; on timeout throw `SyncException` (the request file is left for cleanup in step 6). `syncTypes` lists the requested parts in the order vmoptions, config, plugins; `timeoutSeconds` is `SyncOptions.shutdownTimeout`.
 4. Emit `Syncing`, then `ensureProjectDirectories` and:
    - vmoptions: require an existing base vmoptions file (else `IllegalStateException`); `ensureDebugPort`; `generate(..., forceRegenerate = true)`.
    - config: wipe `<projRoot>/config/` contents and recopy base config with the §7.1 exclusions.
@@ -238,7 +238,6 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 
 Behavior above that is likely unintended, kept here so the spec stays honest. Not fixed by this document.
 
-2. Stop request `timeoutSeconds` ignores `SyncOptions.shutdownTimeout`; `syncTypes` is always `["settings"]`.
 3. Post-sync restart always uses the isolated launcher and skips recents/metadata/`onFailure`. (The main project is rejected by `syncProject`, so it can no longer be restarted this way.)
 4. Changed base vmoptions only update the hash on launch; the file is refreshed only by a vmoptions sync. Update mode never adds `-Dproject.juggler.base.dir` to a file lacking it.
 5. Debug ports are allocated even without JDWP in base options; uniqueness is per IDE, not global; the documented lower bound (5000) differs from the code (5001).

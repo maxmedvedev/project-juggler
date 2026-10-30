@@ -13,6 +13,7 @@ import com.projectjuggler.util.ProjectLockUtils
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.*
@@ -268,6 +269,65 @@ class ProjectLauncherSyncTest : StringSpec({
         // Verify both were stopped and restarted
         verify(exactly = 2) { ShutdownWaiter.waitForShutdown(ideConfigRepository, any(), any(), any()) }
         verify(exactly = 2) { mockProcessLauncher.launch(any(), any(), any()) }
+    }
+
+    "should write sync types and timeout into the stop request" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true andThen false
+
+        // doWithLock deletes the signal in finally, so read it while the shutdown wait is in progress
+        var signal: StopRequestSignal? = null
+        every {
+            ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any())
+        } answers {
+            signal = ShutdownSignalManager.getInstance(ideConfigRepository).readStopRequest(project)
+            ShutdownResult.Success
+        }
+
+        projectLauncher.syncProject(
+            project = project,
+            syncVmOptions = false,
+            syncConfig = true,
+            syncPlugins = true,
+            options = SyncOptions(stopIfRunning = true, shutdownTimeout = 120)
+        )
+
+        val captured = signal.shouldNotBeNull()
+        captured.syncTypes shouldBe listOf(SyncTypeNames.CONFIG, SyncTypeNames.PLUGINS)
+        captured.timeoutSeconds shouldBe 120
+        captured.autoRestart shouldBe false
+    }
+
+    "should write only vmoptions into the stop request for a vmoptions-only sync" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+        projectManager.ensureDebugPort(project)
+
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true andThen false
+
+        var signal: StopRequestSignal? = null
+        every {
+            ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any())
+        } answers {
+            signal = ShutdownSignalManager.getInstance(ideConfigRepository).readStopRequest(project)
+            ShutdownResult.Success
+        }
+
+        projectLauncher.syncProject(
+            project = project,
+            syncVmOptions = true,
+            syncConfig = false,
+            syncPlugins = false,
+            options = SyncOptions(stopIfRunning = true)
+        )
+
+        val captured = signal.shouldNotBeNull()
+        captured.syncTypes shouldBe listOf(SyncTypeNames.VM_OPTIONS)
+        captured.timeoutSeconds shouldBe 60
     }
 
     // ============================================
