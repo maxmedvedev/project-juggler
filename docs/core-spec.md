@@ -38,7 +38,7 @@ Both derived fields are `@Transient`; only the two constructor fields are serial
 
 Invariant: the id is the on-disk directory name for the project's isolated state. It must stay stable for existing paths. Display-name rules may change; id rules may not.
 
-`ProjectManager.resolvePath(string)` expands a leading `~` (Unix only, exactly the first segment `~`), normalizes, and requires the path to exist.
+`ProjectManager.resolvePath(string)` expands a leading `~` (Unix only, exactly the first segment `~`), makes the path absolute and normalizes it. It does not check existence.
 
 ## 3. On-disk layout
 
