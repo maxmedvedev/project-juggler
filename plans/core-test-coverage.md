@@ -205,7 +205,7 @@ Opus 5.5 at low effort, ending with its own commit (rules in Finishing) that mar
 1. **Done.** **Drop migration, add Kover.** Implements "Drop migration" and "Kover", plus the migration parts of Docs (core-spec
    §3/§3.4, plugin-spec §2, CLAUDE.md paragraph and Kover command). Reads `IdeInstallationService.kt`, root and
    `core/build.gradle.kts`. Verify with steps 1–4. Record the baseline in "Coverage log". ~8%.
-2. **Model, persistence, DI, ProjectManager tests** (Tests → Session 2). Reads `config/*.kt`, `di/*.kt`,
+2. **Done.** **Model, persistence, DI, ProjectManager tests** (Tests → Session 2). Reads `config/*.kt`, `di/*.kt`,
    `util/FileLockUtils.kt`, `core/ProjectManager.kt`, `ProjectManagerTest.kt`, `LaunchProjectTest.kt` (mocking
    pattern), `plans/core-gap-10-persistence-robustness.md` Tests section (to avoid duplicating its cases). ~18%.
 3. **Launch, shutdown, directories, cleaning tests** (Tests → Session 3). Reads `process/ProjectLauncher.kt` (lines
@@ -220,6 +220,7 @@ Opus 5.5 at low effort, ending with its own commit (rules in Finishing) that mar
 Line coverage of `core` from `./gradlew :core:koverLog`, filled in by each session.
 
 - Baseline (session 1, Kover 0.9.9): 60.39%
+- Session 2: 63.93%
 
 ## Verification
 

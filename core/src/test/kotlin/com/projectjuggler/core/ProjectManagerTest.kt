@@ -3,14 +3,19 @@ package com.projectjuggler.core
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.MainProjectService
+import com.projectjuggler.config.ProjectMetadata
+import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldNotBe
+import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.exists
 
 class ProjectManagerTest : StringSpec({
     extensions(KoinTestExtension())
@@ -130,5 +135,69 @@ class ProjectManagerTest : StringSpec({
 
         projectManager.listAll().map { it.path } shouldContainExactlyInAnyOrder listOf(mainPath, otherPath)
         projectManager.listSyncable().map { it.path } shouldContainExactly listOf(otherPath)
+    }
+
+    fun newRepository() = IdeConfigRepository(createTempDir("test-pm-repo"), IdeInstallation("/test/ide", "Test IDE"))
+
+    "registerOrUpdate increments openCount and preserves a saved debugPort" {
+        val repository = newRepository()
+        val projectManager = ProjectManager.getInstance(repository)
+        val path = ProjectPath(projectDir.toString())
+
+        projectManager.registerOrUpdate(path).openCount shouldBe 1
+        repository.saveProjectMetadata(repository.loadProjectMetadata(path)!!.copy(debugPort = 7001))
+        val updated = projectManager.registerOrUpdate(path)
+
+        updated.openCount shouldBe 2
+        updated.debugPort shouldBe 7001
+        repository.loadProjectMetadata(path) shouldBe updated
+    }
+
+    "listAll sorts by lastOpened descending" {
+        val repository = newRepository()
+        val old = ProjectMetadata(ProjectPath("/work/old"), "2026-01-01T00:00:00Z")
+        val newest = ProjectMetadata(ProjectPath("/work/newest"), "2026-03-01T00:00:00Z")
+        val middle = ProjectMetadata(ProjectPath("/work/middle"), "2026-02-01T00:00:00Z")
+        listOf(old, newest, middle).forEach(repository::saveProjectMetadata)
+
+        ProjectManager.getInstance(repository).listAll() shouldContainExactly listOf(newest, middle, old)
+    }
+
+    "ensureDebugPort returns an existing port without saving" {
+        val repository = newRepository()
+        val metadata = ProjectMetadata(ProjectPath("/work/repo"), "2026-01-01T00:00:00Z", debugPort = 7001)
+
+        ProjectManager.getInstance(repository).ensureDebugPort(metadata) shouldBe 7001
+
+        repository.loadProjectMetadata(metadata.path) shouldBe null
+    }
+
+    "ensureDebugPort saves an allocated port when missing" {
+        val repository = newRepository()
+        val projectManager = ProjectManager.getInstance(repository)
+        val metadata = projectManager.registerOrUpdate(ProjectPath("/work/repo"))
+
+        val port = projectManager.ensureDebugPort(metadata)
+
+        port.shouldNotBeNull()
+        repository.loadProjectMetadata(metadata.path)?.debugPort shouldBe port
+    }
+
+    "remove deletes metadata only" {
+        val repository = newRepository()
+        val projectManager = ProjectManager.getInstance(repository)
+        val path = ProjectPath("/work/repo")
+        projectManager.registerOrUpdate(path)
+        val projectRoot = repository.baseDir.resolve("projects").resolve(path.id.id)
+        Files.createDirectories(projectRoot.resolve("config"))
+
+        projectManager.remove(path)
+
+        projectManager.get(path) shouldBe null
+        projectRoot.resolve("config").exists() shouldBe true
+    }
+
+    "get returns null for an unknown path" {
+        ProjectManager.getInstance(newRepository()).get(ProjectPath("/work/unknown")) shouldBe null
     }
 })
