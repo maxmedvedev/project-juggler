@@ -29,6 +29,13 @@ class SyncTypeTest : StringSpec({
         SyncType.Plugins.syncPlugins shouldBe true
     }
 
+    "cli flags match the sync-helper options" {
+        SyncType.All.cliFlag shouldBe "--all"
+        SyncType.VmOptions.cliFlag shouldBe "--vmoptions"
+        SyncType.Config.cliFlag shouldBe "--config"
+        SyncType.Plugins.cliFlag shouldBe "--plugins"
+    }
+
     "display names" {
         SyncType.All.displayName shouldBe "all settings"
         SyncType.VmOptions.displayName shouldBe "VM options"

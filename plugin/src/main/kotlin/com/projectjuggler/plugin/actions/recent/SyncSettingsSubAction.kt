@@ -3,13 +3,14 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
-import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.isCurrentProject
 import com.projectjuggler.plugin.actions.performSelfShutdownSync
 import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.SyncPlanner
+import com.projectjuggler.plugin.services.SyncTarget
 
 /** Sync settings from base config */
 data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubAction {
@@ -23,27 +24,34 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
     }
 
     private fun syncSingleProjectWithType(project: Project?, projectPath: ProjectPath, syncType: SyncType) {
-        // Check if syncing current project (self-shutdown case)
-        if (isCurrentProject(IdeInstallationService.currentIdeConfigRepository, projectPath)) {
-            handleSelfShutdownSync(project, projectPath, syncType)
-            return
+        val repository = IdeInstallationService.currentIdeConfigRepository
+        when (val target = SyncPlanner.forProject(repository, projectPath, syncType)) {
+            is SyncTarget.SelfShutdown -> handleSelfShutdownSync(project, target.helperArgs, syncType)
+            is SyncTarget.InProcess -> syncInProcess(project, target.projects, projectPath, syncType)
+            SyncTarget.NoTarget -> return
         }
+    }
 
-        val metadata = ProjectManager.getInstance(IdeInstallationService.currentIdeConfigRepository).get(projectPath) ?: return
+    private fun syncInProcess(
+        project: Project?,
+        projects: List<ProjectMetadata>,
+        projectPath: ProjectPath,
+        syncType: SyncType
+    ) {
         performSyncWithProgress(
             project = project,
-            projects = listOf(metadata),
+            projects = projects,
             syncType = syncType,
             taskTitle = ProjectJugglerBundle.message(
                 "progress.sync.project.type",
                 syncType.displayName,
                 projectPath.name
             ),
-            successMessage = { projects ->
+            successMessage = { synced ->
                 ProjectJugglerBundle.message(
                     "notification.success.sync.single.project.type",
                     syncType.displayName,
-                    projects.first().path.name
+                    synced.first().path.name
                 )
             },
             errorMessage = { e ->
@@ -55,16 +63,13 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
     /**
      * Handles syncing the current project by spawning sync-helper and shutting down.
      */
-    private fun handleSelfShutdownSync(project: Project?, projectPath: ProjectPath, syncType: SyncType) {
-        val idePath = IdeInstallationService.currentIdeConfigRepository.installation.executablePath
+    private fun handleSelfShutdownSync(project: Project?, helperArgs: List<String>, syncType: SyncType) {
         performSelfShutdownSync(
             project = project,
             notificationMessage = "IntelliJ will close to sync ${syncType.displayName} and reopen automatically...",
-            helperArgs = listOf("--ide", idePath, "--path", projectPath.pathString),
-            syncType = syncType
+            helperArgs = helperArgs
         )
     }
-
 
     override fun getTextFor(item: OpenRecentProjectAction): String = when (syncType) {
         SyncType.All -> ProjectJugglerBundle.message("popup.recent.projects.action.sync.all")

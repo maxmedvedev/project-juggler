@@ -3,13 +3,13 @@ package com.projectjuggler.plugin.shutdown
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
-import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.IsolatedInstance
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,8 +19,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
-import java.time.Instant
-import kotlin.io.path.Path
 
 /**
  * Application-level service that monitors for shutdown signals and initiates graceful shutdown.
@@ -34,7 +32,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
     private val log = logger<ShutdownSignalService>()
     private val scope = scope + Dispatchers.IO
     private var pollingJob: Job? = null
-    private val processedRequestIds = mutableSetOf<String>()
+    private val stopRequests = StopRequestTracker()
 
     init {
         KoinInit.init(pluginModule)
@@ -54,25 +52,13 @@ class ShutdownSignalService(scope: CoroutineScope) {
      * Returns null if not running as an isolated project.
      */
     private fun getCurrentProjectId(): ProjectMetadata? {
-        val configPath = System.getProperty("idea.config.path") ?: return null
-        val configPathObj = Path(configPath)
-
-        // Check if this is an isolated project:
-        // Path should be: ~/.project-juggler/v2/<ide-dir>/projects/<project-id>/config
-        val parts = configPathObj.toString().split("/").filter { it.isNotEmpty() }
-        val projectsIndex = parts.indexOf("projects")
-
-        if (projectsIndex < 0 || projectsIndex + 2 >= parts.size || parts[projectsIndex + 2] != "config") {
-            return null
-        }
-
-        val projectId = parts[projectsIndex + 1]
+        val projectId = IsolatedInstance.currentProjectId() ?: return null
 
         // Load the ProjectMetadata from the config repository
         return try {
-            IdeInstallationService.currentIdeConfigRepository.loadProjectMetadata(ProjectId(projectId))
+            IdeInstallationService.currentIdeConfigRepository.loadProjectMetadata(projectId)
         } catch (e: Exception) {
-            log.error("Error loading project metadata for ID: $projectId", e)
+            log.error("Error loading project metadata for ID: ${projectId.id}", e)
             null
         }
     }
@@ -108,19 +94,10 @@ class ShutdownSignalService(scope: CoroutineScope) {
 
             val signal = signalManager.readStopRequest(project) ?: return
 
-            // Check if already processed
-            if (processedRequestIds.contains(signal.requestId)) {
+            // Acted on once per request id and only while fresh
+            if (!stopRequests.shouldAct(signal)) {
                 return
             }
-
-            // Validate signal age (ignore signals older than 5 minutes)
-            if (!isSignalValid(signal)) {
-                log.warn("Ignoring stale stop signal: ${signal.requestId}")
-                return
-            }
-
-            // Mark as processed
-            processedRequestIds.add(signal.requestId)
 
             log.info("Received stop request: ${signal.requestId} (autoRestart=${signal.autoRestart})")
 
@@ -131,20 +108,6 @@ class ShutdownSignalService(scope: CoroutineScope) {
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             log.error("Error processing stop signal", e)
-        }
-    }
-
-    /**
-     * Validates if the signal is not too old.
-     */
-    private fun isSignalValid(signal: StopRequestSignal): Boolean {
-        return try {
-            val signalTime = Instant.parse(signal.timestamp)
-            val now = Instant.now()
-            val ageMinutes = (now.toEpochMilli() - signalTime.toEpochMilli()) / 1000 / 60
-            ageMinutes <= 5
-        } catch (e: Exception) {
-            false
         }
     }
 

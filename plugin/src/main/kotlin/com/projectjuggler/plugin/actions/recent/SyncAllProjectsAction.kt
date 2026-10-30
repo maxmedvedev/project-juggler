@@ -3,14 +3,13 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
-import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectMetadata
-import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.actions.isCurrentProject
 import com.projectjuggler.plugin.actions.performSelfShutdownSync
 import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.SyncPlanner
+import com.projectjuggler.plugin.services.SyncTarget
 
 data class SyncAllProjectsAction(
     val syncType: SyncType
@@ -32,16 +31,17 @@ data class SyncAllProjectsAction(
 
     private fun syncAllProjectsWithType(syncType: SyncType, project: Project?) {
         val repository = IdeInstallationService.currentIdeConfigRepository
-        val syncableProjects = ProjectManager.getInstance(repository).listSyncable()
-
-        if (isSyncingAllIncludingMe(repository, syncableProjects)) {
-            handleSelfShutdownSyncAll(syncType, project)
-            return
+        when (val target = SyncPlanner.forAllProjects(repository, syncType)) {
+            is SyncTarget.SelfShutdown -> handleSelfShutdownSyncAll(project, target.helperArgs)
+            is SyncTarget.InProcess -> syncInProcess(project, target.projects, syncType)
+            SyncTarget.NoTarget -> return
         }
+    }
 
+    private fun syncInProcess(project: Project?, projects: List<ProjectMetadata>, syncType: SyncType) {
         performSyncWithProgress(
             project = project,
-            projects = syncableProjects,
+            projects = projects,
             syncType = syncType,
             taskTitle = ProjectJugglerBundle.message("progress.sync.all.projects.type", syncType.displayName),
             successMessage = {
@@ -57,22 +57,15 @@ data class SyncAllProjectsAction(
         )
     }
 
-    private fun isSyncingAllIncludingMe(repository: IdeConfigRepository, projects: List<ProjectMetadata>): Boolean {
-        // Check if current project is in the list (self-shutdown case)
-        return projects.any { isCurrentProject(repository, it.path) }
-    }
-
     /**
      * Handles syncing all projects when current project is in the list.
      * Spawns sync-helper with --all-projects and shuts down.
      */
-    private fun handleSelfShutdownSyncAll(syncType: SyncType, project: Project?) {
-        val idePath = IdeInstallationService.currentIdeConfigRepository.installation.executablePath
+    private fun handleSelfShutdownSyncAll(project: Project?, helperArgs: List<String>) {
         performSelfShutdownSync(
             project = project,
             notificationMessage = "IntelliJ will close to sync all projects and reopen automatically...",
-            helperArgs = listOf("--ide", idePath, "--all-projects"),
-            syncType = syncType
+            helperArgs = helperArgs
         )
     }
 }

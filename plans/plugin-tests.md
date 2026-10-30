@@ -437,6 +437,16 @@ uses `CurrentIdePaths` from 4 and does the Finishing).
    `SyncAllProjectsAction.kt`, `SyncType.kt`, `shutdown/ShutdownSignalService.kt`, spec §6 and §10. Does: A, B, C;
    `IsolatedInstanceTest`, `StopRequestTrackerTest`, `SyncPlannerTest`, `SyncProjectsTest`, add `cliFlag` cases to
    `SyncTypeTest`. Done when those pass and `:plugin:compileKotlin` is clean.
+   **Done** in `extract sync planning and stop-request tracking into services`. Deviations:
+   `SyncPlanner.forAllProjects` compares `metadata.id == currentProjectId` directly instead of calling
+   `IsolatedInstance.isCurrentProject` per project (same result, no metadata reload). `StopRequestTracker` keeps the
+   old whole-minute age comparison (a 5 min 59 s old request still counts as fresh) and logs stale/unparseable
+   requests itself via `logger<StopRequestTracker>()`. `ShutdownSignalService.getCurrentProjectId` and
+   `performSyncWithProgress` keep their `catch (e: Exception)` (edited in place, not moved). `StopRequestTrackerTest`
+   and `SyncProjectsTest` are pure and do not register `KoinTestExtension` (nothing in them calls `getInstance`);
+   `SyncProjectsTest` builds `ProjectMetadata` directly from temp dirs. The spec text for §6, §6.3 and §10
+   (`SyncPlanner`, `SyncType.cliFlag`, `syncProjects`, `IsolatedInstance`, `StopRequestTracker`) is left to session 5's
+   Docs pass as planned.
 3. **Launch, main project, remove, import** (~20%). Reads: `actions/Launch.kt`, `services/LaunchProject.kt`,
    `FocusExistingProject.kt`, `SetMainProject.kt`, `UnsetMainProject.kt`, `RemoveProject.kt`,
    `actions/recent/ImportRecentProjectsAction.kt`, core `ProjectLockUtils.kt`, spec §4 and §5.4-5.5. Does: D, E;
