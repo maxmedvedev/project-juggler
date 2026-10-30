@@ -460,6 +460,18 @@ class VMOptionsGeneratorTest : StringSpec({
         VMOptionsGenerator.computeBaseHash(tempDir.resolve("missing.vmoptions")) shouldBe null
         VMOptionsGenerator.computeBaseHash(base) shouldBe HashUtils.calculateFileHash(base)
     }
+
+    "containsJdwp is false without a base file or a JDWP line" {
+        VMOptionsGenerator.containsJdwp(null) shouldBe false
+        VMOptionsGenerator.containsJdwp(tempDir.resolve("missing.vmoptions")) shouldBe false
+        baseVmOptions.writeText("-Xmx2048m\n# -agentlib:jdwp=transport=dt_socket,address=*:5005")
+        VMOptionsGenerator.containsJdwp(baseVmOptions) shouldBe false
+    }
+
+    "containsJdwp is true when a line starts with the JDWP agent" {
+        baseVmOptions.writeText("-Xmx2048m\n   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+        VMOptionsGenerator.containsJdwp(baseVmOptions) shouldBe true
+    }
 })
 
 private fun extractPort(content: String): Int {

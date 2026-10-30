@@ -29,6 +29,13 @@ class ProjectManager internal constructor(
     }
 
     /**
+     * Debug port to write into the project's vmoptions: allocated via [ensureDebugPort] only when the base vmoptions
+     * enables JDWP; otherwise the stored port (if any) is passed through without allocating a new one.
+     */
+    fun debugPortFor(project: ProjectMetadata, baseVmOptionsPath: Path?): Int? =
+        if (VMOptionsGenerator.containsJdwp(baseVmOptionsPath)) ensureDebugPort(project) else project.debugPort
+
+    /**
      * Ensures the project has a debug port allocated.
      * If the project already has a port, returns it.
      * If not, allocates a new port and updates the project metadata.

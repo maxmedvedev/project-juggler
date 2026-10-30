@@ -166,4 +166,27 @@ class LaunchProjectTest : StringSpec({
 
         vmOptionsFile.readText() shouldContain "-Dmy.user.edit=true"
     }
+
+    "does not allocate a debug port when base vmoptions has no JDWP" {
+        baseVmOptions.writeText("-Xmx2048m")
+        val ideConfigRepository = setUpRepository()
+        val projectPath = ProjectPath(createTempDir("test-debug-port-project").toString())
+
+        ProjectLauncher.getInstance(ideConfigRepository).launch(projectPath)
+
+        ideConfigRepository.loadProjectMetadata(projectPath)!!.debugPort shouldBe null
+    }
+
+    "allocates a debug port when base vmoptions has JDWP" {
+        baseVmOptions.writeText("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+        val ideConfigRepository = setUpRepository()
+        val projectPath = ProjectPath(createTempDir("test-debug-port-project").toString())
+
+        ProjectLauncher.getInstance(ideConfigRepository).launch(projectPath)
+
+        ideConfigRepository.loadProjectMetadata(projectPath)!!.debugPort shouldBe 5001
+        val vmOptionsFile = ideConfigRepository.baseDir.resolve("projects").resolve(projectPath.id.id)
+            .resolve("idea.vmoptions")
+        vmOptionsFile.readText() shouldContain "address=*:5001"
+    }
 })

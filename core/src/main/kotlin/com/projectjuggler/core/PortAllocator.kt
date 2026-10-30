@@ -9,7 +9,7 @@ class PortAllocator(
     }
 
     /**
-     * Allocates the first available debug port in the range [5000, 15000).
+     * Allocates the first debug port in [MIN_PORT, MAX_PORT) not used by another project of this IDE.
      * Returns null if all ports are exhausted.
      */
     fun allocatePort(): Int? {

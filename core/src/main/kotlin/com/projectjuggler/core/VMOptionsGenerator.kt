@@ -10,12 +10,20 @@ import kotlin.io.path.writeText
 
 object VMOptionsGenerator {
     const val OVERRIDES_MARKER = "# project-juggler overrides (auto-generated)"
+    private const val JDWP_PREFIX = "-agentlib:jdwp="
 
     /**
      * SHA-256 of the base vmoptions file, or null when no base file is configured or it does not exist.
      */
     fun computeBaseHash(baseVmOptionsPath: Path?): String? =
         baseVmOptionsPath?.takeIf { Files.exists(it) }?.let(HashUtils::calculateFileHash)
+
+    /**
+     * Whether the base vmoptions file enables the JDWP agent, i.e. whether isolated instances need a debug port.
+     */
+    fun containsJdwp(baseVmOptionsPath: Path?): Boolean =
+        baseVmOptionsPath != null && Files.exists(baseVmOptionsPath) &&
+                baseVmOptionsPath.readLines().any { it.trim().startsWith(JDWP_PREFIX) }
 
     fun generate(
         baseVmOptionsPath: Path?,
@@ -118,7 +126,7 @@ object VMOptionsGenerator {
         }
 
         // Match JDWP option line
-        if (!line.trim().startsWith("-agentlib:jdwp=")) {
+        if (!line.trim().startsWith(JDWP_PREFIX)) {
             return line
         }
 

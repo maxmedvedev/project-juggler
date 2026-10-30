@@ -124,6 +124,16 @@ class ProjectLauncherSyncTest : StringSpec({
         verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
+    "vmoptions sync without JDWP in the base does not allocate a debug port" {
+        val projectPath = ProjectPath(createTempDir("test-sync-no-jdwp").toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+
+        projectLauncher.syncProject(project, syncVmOptions = true, syncConfig = false, syncPlugins = false)
+
+        projectManager.get(projectPath)!!.debugPort shouldBe null
+    }
+
     "should sync config only" {
         val projectPath = ProjectPath(projectDir.toString())
         val project = projectManager.registerOrUpdate(projectPath)

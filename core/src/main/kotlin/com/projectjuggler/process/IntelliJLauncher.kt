@@ -23,9 +23,9 @@ class IntelliJLauncher internal constructor(
         // 2. Get base VM options path (if configured)
         val baseVmOptionsPath = BaseVMOptionsTracker.getInstance(ideConfigRepository).getBaseVmOptionsPath()
 
-        // 3. Ensure debug port is allocated (if base VM options contains JDWP)
+        // 3. Ensure debug port is allocated (only if base VM options contains JDWP)
         val projectManager = ProjectManager.getInstance(ideConfigRepository)
-        val debugPort = projectManager.ensureDebugPort(project)
+        val debugPort = projectManager.debugPortFor(project, baseVmOptionsPath)
 
         // 4. Generate or update VM options file; regenerate fully if the base changed since the last write
         val baseHash = VMOptionsGenerator.computeBaseHash(baseVmOptionsPath)
@@ -34,14 +34,11 @@ class IntelliJLauncher internal constructor(
             VMOptionsGenerator.generate(baseVmOptionsPath, projectDirs, debugPort, forceRegenerate = baseChanged)
         if (baseChanged) projectManager.updateBaseVmOptionsHash(project, baseHash)
 
-        // 4. Find IntelliJ executable
+        // 5. Find IntelliJ executable
         // For IdeConfigRepository, IDE path comes from the installation
         val intellijPath = Paths.get(ideConfigRepository.installation.executablePath)
-            ?: throw IllegalStateException(
-                "IntelliJ IDEA not found. Please configure the path using: project-juggler config --intellij-path <path>"
-            )
 
-        // 5. Launch IntelliJ with custom VM options
+        // 6. Launch IntelliJ with custom VM options
         val environment = mapOf("IDEA_VM_OPTIONS" to vmOptionsFile.toString())
         processLauncher.launch(intellijPath, listOf(project.path.pathString), environment, onFailure)
 
@@ -54,9 +51,6 @@ class IntelliJLauncher internal constructor(
         // Get IntelliJ executable path
         // For IdeConfigRepository, IDE path comes from the installation
         val intellijPath = Paths.get(ideConfigRepository.installation.executablePath)
-            ?: throw IllegalStateException(
-                "IntelliJ IDEA not found. Please configure the path using: project-juggler config --intellij-path <path>"
-            )
 
         // Get base VM options path (if configured)
         val baseVmOptionsPath = BaseVMOptionsTracker.getInstance(ideConfigRepository).getBaseVmOptionsPath()

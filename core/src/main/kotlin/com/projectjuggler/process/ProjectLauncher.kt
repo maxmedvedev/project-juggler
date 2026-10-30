@@ -150,7 +150,7 @@ class ProjectLauncher internal constructor(
             val baseVmOptionsPath = baseVMOptionsTracker.getBaseVmOptionsPath()
                 ?: throw IllegalStateException("Base VM options path not configured. Configure it using: project-juggler config --base-vmoptions <path>")
 
-            val debugPort = projectManager.ensureDebugPort(project)
+            val debugPort = projectManager.debugPortFor(project, baseVmOptionsPath)
             VMOptionsGenerator.generate(
                 baseVmOptionsPath,
                 projectDirs,
