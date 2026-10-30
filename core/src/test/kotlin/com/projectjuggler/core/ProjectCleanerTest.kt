@@ -11,8 +11,11 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
 class ProjectCleanerTest : StringSpec({
@@ -76,5 +79,19 @@ class ProjectCleanerTest : StringSpec({
         cleaner.cleanStaleMainProjectEntry().shouldBeNull()
         projectManager.listAll().size shouldBe 2
         directoryManager.getProjectRoot(mainPath).exists() shouldBe true
+    }
+
+    "cleanProject removes the recent entry and the project root, leaving other projects intact" {
+        val mainRoot = directoryManager.getProjectRoot(mainPath)
+        val otherRoot = directoryManager.getProjectRoot(otherPath)
+
+        cleaner.cleanProject(projectManager.get(mainPath)!!)
+
+        mainRoot.exists() shouldBe false
+        otherRoot.exists() shouldBe true
+        val recentJson = repository.baseDir.resolve("recent.json").readText()
+        recentJson shouldNotContain mainPath.id.id
+        recentJson shouldContain otherPath.id.id
+        RecentProjectsIndex.getInstance(repository).getRecent(10).map { it.path } shouldContainExactly listOf(otherPath)
     }
 })

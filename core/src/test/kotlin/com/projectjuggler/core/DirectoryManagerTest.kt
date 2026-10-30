@@ -4,12 +4,27 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.config.IdeConfig
 import com.projectjuggler.di.KoinTestExtension
+import com.projectjuggler.locators.ConfigLocator
+import com.projectjuggler.locators.PluginLocator
 import com.projectjuggler.test.createTempDir
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import kotlin.io.path.createDirectories
+import kotlin.io.path.createFile
 import kotlin.io.path.exists
+import kotlin.io.path.isRegularFile
+import kotlin.io.path.walk
 
 class DirectoryManagerTest : StringSpec({
     extensions(KoinTestExtension())
@@ -215,5 +230,111 @@ class DirectoryManagerTest : StringSpec({
         // Second call should not fail
         val dirs2 = manager.ensureProjectDirectories(project)
         Files.exists(dirs2.plugins) shouldBe true
+    }
+
+    val installation = IdeInstallation("/test/ide", "Test IDE")
+    val project = ProjectMetadata(path = ProjectPath("/test/project/base"), lastOpened = "2025-12-25T10:00:00Z")
+
+    afterTest {
+        unmockkObject(ConfigLocator, PluginLocator)
+    }
+
+    fun mockLocators(config: Path?, plugins: Path?) {
+        mockkObject(ConfigLocator, PluginLocator)
+        every { ConfigLocator.findDefaultConfigDirectory() } returns config
+        every { PluginLocator.findDefaultPluginsDirectory() } returns plugins
+    }
+
+    fun repositoryWith(baseConfig: Path? = null, basePlugins: Path? = null): IdeConfigRepository {
+        val repository = IdeConfigRepository(createTempDir("test-dm"), installation)
+        repository.save(
+            IdeConfig(installation, baseConfigPath = baseConfig?.toString(), basePluginsPath = basePlugins?.toString())
+        )
+        return repository
+    }
+
+    fun Path.createFileWithParents(relative: String): Path =
+        resolve(relative).also { it.parent.createDirectories(); it.createFile() }
+
+    @OptIn(kotlin.io.path.ExperimentalPathApi::class)
+    fun Path.relativeFiles(): List<String> =
+        walk().filter { it.isRegularFile() }.map { relativize(it).toString().replace('\\', '/') }.sorted().toList()
+
+    "base paths come from the configured paths first" {
+        mockLocators(Paths.get("/located/config"), Paths.get("/located/plugins"))
+        val manager = DirectoryManager.getInstance(
+            repositoryWith(Paths.get("/configured/config"), Paths.get("/configured/plugins"))
+        )
+
+        manager.getBaseConfigPath() shouldBe Paths.get("/configured/config")
+        manager.getBasePluginsPath() shouldBe Paths.get("/configured/plugins")
+    }
+
+    "base paths fall back to the locators" {
+        mockLocators(Paths.get("/located/config"), Paths.get("/located/plugins"))
+        val manager = DirectoryManager.getInstance(repositoryWith())
+
+        manager.getBaseConfigPath() shouldBe Paths.get("/located/config")
+        manager.getBasePluginsPath() shouldBe Paths.get("/located/plugins")
+    }
+
+    "base paths are null when neither is available" {
+        mockLocators(null, null)
+        val manager = DirectoryManager.getInstance(repositoryWith())
+
+        manager.getBaseConfigPath() shouldBe null
+        manager.getBasePluginsPath() shouldBe null
+    }
+
+    "first open copies base config without excluded entries" {
+        mockLocators(null, null)
+        val baseConfig = createTempDir("test-base-config")
+        listOf(
+            ".lock", "recentProjects.xml", "recentProjectDirectories.xml", "options/recentProjects.xml",
+            "plugins/x.jar", "options/other.xml",
+        ).forEach { baseConfig.createFileWithParents(it) }
+
+        val dirs = DirectoryManager.getInstance(repositoryWith(baseConfig = baseConfig)).ensureProjectDirectories(project)
+
+        dirs.config.relativeFiles() shouldContainExactly listOf("options/other.xml")
+    }
+
+    "first open copies base plugins" {
+        mockLocators(null, null)
+        val basePlugins = createTempDir("test-base-plugins")
+        basePlugins.createFileWithParents("a.jar")
+
+        val dirs = DirectoryManager.getInstance(repositoryWith(basePlugins = basePlugins)).ensureProjectDirectories(project)
+
+        dirs.plugins.relativeFiles() shouldContainExactly listOf("a.jar")
+    }
+
+    "base plugins are not copied when plugins dir is not empty" {
+        mockLocators(null, null)
+        val basePlugins = createTempDir("test-base-plugins")
+        basePlugins.createFileWithParents("a.jar")
+        val manager = DirectoryManager.getInstance(repositoryWith(basePlugins = basePlugins))
+        manager.getProjectRoot(project).resolve("plugins").createFileWithParents("existing.jar")
+
+        val dirs = manager.ensureProjectDirectories(project)
+
+        dirs.plugins.relativeFiles() shouldContainExactly listOf("existing.jar")
+    }
+
+    "without any base directories are created and nothing is copied" {
+        mockLocators(null, null)
+
+        val dirs = DirectoryManager.getInstance(repositoryWith()).ensureProjectDirectories(project)
+
+        listOf(dirs.config, dirs.system, dirs.logs, dirs.plugins).forEach { it.exists() shouldBe true }
+        dirs.root.relativeFiles().shouldBeEmpty()
+    }
+
+    "sync from base throws when no base is found" {
+        mockLocators(null, null)
+        val manager = DirectoryManager.getInstance(repositoryWith())
+
+        shouldThrow<IllegalStateException> { manager.syncConfigFromBase(project) }
+        shouldThrow<IllegalStateException> { manager.syncPluginsFromBase(project) }
     }
 })

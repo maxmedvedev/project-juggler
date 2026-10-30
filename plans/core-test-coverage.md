@@ -208,7 +208,7 @@ Opus 5.5 at low effort, ending with its own commit (rules in Finishing) that mar
 2. **Done.** **Model, persistence, DI, ProjectManager tests** (Tests → Session 2). Reads `config/*.kt`, `di/*.kt`,
    `util/FileLockUtils.kt`, `core/ProjectManager.kt`, `ProjectManagerTest.kt`, `LaunchProjectTest.kt` (mocking
    pattern), `plans/core-gap-10-persistence-robustness.md` Tests section (to avoid duplicating its cases). ~18%.
-3. **Launch, shutdown, directories, cleaning tests** (Tests → Session 3). Reads `process/ProjectLauncher.kt` (lines
+3. **Done.** **Launch, shutdown, directories, cleaning tests** (Tests → Session 3). Reads `process/ProjectLauncher.kt` (lines
    20–66), `process/IntelliJLauncher.kt`, `core/ShutdownWaiter.kt`, `core/DirectoryManager.kt`,
    `core/ProjectCleaner.kt`, `DirectoryManagerTest.kt`, `ProjectCleanerTest.kt`, `LaunchProjectTest.kt`. ~18%.
 4. **Locator seams and tests** ("Locator seams", Tests → Session 4, the §10 and CLAUDE.md Testing lines of Docs).
@@ -221,6 +221,7 @@ Line coverage of `core` from `./gradlew :core:koverLog`, filled in by each sessi
 
 - Baseline (session 1, Kover 0.9.9): 60.39%
 - Session 2: 63.93%
+- Session 3: 65.61%
 
 ## Verification
 
