@@ -71,13 +71,16 @@ private class RecentProjectPopupStep(
 //                actions.add(OpenWithIdeSubAction(installation))
 //            }
 
-        actions.addAll(listOf(
-            SyncSettingsSubAction(SyncType.All),
-            SyncSettingsSubAction(SyncType.VmOptions),
-            SyncSettingsSubAction(SyncType.Config),
-            SyncSettingsSubAction(SyncType.Plugins),
-            RemoveProjectSubAction
-        ))
+        // The main project runs on base settings directly, so there is nothing to sync
+        if (!item.isMainProject) {
+            actions.addAll(listOf(
+                SyncSettingsSubAction(SyncType.All),
+                SyncSettingsSubAction(SyncType.VmOptions),
+                SyncSettingsSubAction(SyncType.Config),
+                SyncSettingsSubAction(SyncType.Plugins),
+            ))
+        }
+        actions.add(RemoveProjectSubAction)
 
         return object : BaseListPopupStep<RecentProjectSubAction>(null, actions) {
             override fun onChosen(selectedValue: RecentProjectSubAction, finalChoice: Boolean): PopupStep<*>? {

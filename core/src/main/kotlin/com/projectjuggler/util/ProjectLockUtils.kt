@@ -22,19 +22,34 @@ object ProjectLockUtils {
     fun isProjectOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
         try {
             val config = ideConfigRepository.load()
-            val configDir = if (isMainProject(config.mainProjectPath, projectPath)) {
-                // Main project uses base-config directly
-                config.baseConfigPath?.let { Paths.get(it) } ?: return false
-            } else {
+            if (!isMainProject(config.mainProjectPath, projectPath)) {
                 // Regular project uses isolated config
-                getIsolatedConfigPath(ideConfigRepository.baseDir, projectPath)
+                return isIsolatedInstanceOpen(ideConfigRepository, projectPath)
             }
-
-            val lockFile = configDir.resolve(".lock")
-            return lockFile.exists() && lockFile.isRegularFile()
+            // Main project uses base-config directly
+            val configDir = config.baseConfigPath?.let { Paths.get(it) } ?: return false
+            return hasLockFile(configDir)
         } catch (e: Exception) {
             return false
         }
+    }
+
+    /**
+     * Checks whether an isolated IntelliJ instance of the project is running, regardless of
+     * whether the project is currently the main project. Used to detect a still-running isolated
+     * instance of a project that has since been made the main project.
+     */
+    fun isIsolatedInstanceOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
+        return try {
+            hasLockFile(getIsolatedConfigPath(ideConfigRepository.baseDir, projectPath))
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun hasLockFile(configDir: Path): Boolean {
+        val lockFile = configDir.resolve(".lock")
+        return lockFile.exists() && lockFile.isRegularFile()
     }
 
     private fun isMainProject(mainProjectPath: String?, projectPath: ProjectPath): Boolean {

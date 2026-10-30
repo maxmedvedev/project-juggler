@@ -3,6 +3,7 @@ package com.projectjuggler.process
 import com.projectjuggler.config.IdeConfig
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.*
 import com.projectjuggler.di.KoinTestExtension
@@ -609,5 +610,30 @@ class ProjectLauncherSyncTest : StringSpec({
         // Verify both projects were restarted
         launchedProjects.size shouldBe 2
         launchedProjects shouldContainExactly listOf(projectDir.toString(), projectDir2.toString())
+    }
+
+    "should refuse to sync the main project without stopping it" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+        MainProjectService.setMainProject(ideConfigRepository, projectPath)
+
+        // The main IDE is running (base config .lock present)
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true
+
+        val exception = shouldThrow<SyncException> {
+            projectLauncher.syncProject(
+                project = project,
+                syncVmOptions = true,
+                syncConfig = true,
+                syncPlugins = true,
+                options = SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)
+            )
+        }
+
+        exception.message shouldContain "main project"
+        // Main instance must never receive a stop request or be relaunched
+        verify(exactly = 0) { ShutdownWaiter.waitForShutdown(any(), any(), any(), any()) }
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any()) }
     }
 })

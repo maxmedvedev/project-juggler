@@ -50,17 +50,19 @@ object ToggleMainProjectSubAction : RecentProjectSubAction {
 
             if (result != Messages.OK) return@invokeLater
 
-            // todo move from EDT
-            if (isMain) {
-                clearMainProject(
-                    IntelliJNotificationHandler(project),
-                    IdeInstallationService.currentIdeConfigRepository
-                )
-            } else {
-                setMainProject(projectPath,
-                    IntelliJNotificationHandler(project),
-                    IdeInstallationService.currentIdeConfigRepository
-                )
+            application.executeOnPooledThread {
+                if (isMain) {
+                    clearMainProject(
+                        IntelliJNotificationHandler(project),
+                        IdeInstallationService.currentIdeConfigRepository
+                    )
+                } else {
+                    setMainProject(
+                        projectPath,
+                        IntelliJNotificationHandler(project),
+                        IdeInstallationService.currentIdeConfigRepository
+                    )
+                }
             }
         }
     }

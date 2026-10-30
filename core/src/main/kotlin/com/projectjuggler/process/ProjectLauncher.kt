@@ -70,6 +70,12 @@ class ProjectLauncher internal constructor(
         syncPlugins: Boolean,
         options: SyncOptions = SyncOptions.DEFAULT
     ) {
+        if (MainProjectService.isMainProject(ideConfigRepository, project.path)) {
+            throw SyncException(
+                "'${project.name}' is the main project and uses base settings directly; there is nothing to sync."
+            )
+        }
+
         doWithLock(project, options) {
             doSync(project, syncVmOptions, syncConfig, syncPlugins)
         }

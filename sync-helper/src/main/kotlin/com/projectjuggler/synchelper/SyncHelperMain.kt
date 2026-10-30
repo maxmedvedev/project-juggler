@@ -48,12 +48,12 @@ fun main(args: Array<String>) {
         shutdownTimeout = 60
     )
 
+    val projectManager = ProjectManager.getInstance(ideConfigRepository)
     val projects: List<ProjectMetadata> = if (allProjects) {
-        ideConfigRepository.loadAllProjects().also {
+        projectManager.listSyncable().also {
             if (it.isEmpty()) error("No tracked projects found")
         }
     } else {
-        val projectManager = ProjectManager.getInstance(ideConfigRepository)
         val projectPath = projectManager.resolvePath(pathString!!)
         val project = projectManager.get(projectPath)
             ?: error("Project not found: $pathString")

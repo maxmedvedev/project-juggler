@@ -15,7 +15,7 @@ Conventions:
 - Depends on `:core` and Koin. No tests.
 - `processResources` depends on `:sync-helper:installDist` and copies the distribution into plugin resources under `sync-helper/` (`bin/`, `lib/`). This is what `BundledSyncHelper` extracts at runtime (§9).
 - `runIde` passes `-Dproject.juggler.base.dir=/Users/max/.project-juggler-test` (a machine-specific absolute path).
-- Registered extensions: one notification group `project-juggler.notifications` (balloon), two `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
+- Registered extensions: one notification group `project-juggler.notifications` (balloon), three `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
 
 ## 2. Initialization and DI
 
@@ -48,7 +48,7 @@ Actions are thin; all run `update` on BGT. None requires an open project (`e.pro
 ### 4.2 `launchOrFocusProject(project, path)` (`actions/Launch.kt`)
 
 1. If `MainProjectService.shouldPromptForMainProject(repo, PathManager.getConfigDir())` (no main project, not suppressed, running in main instance): on EDT show the main-project prompt (§4.3), then on a pooled thread:
-   - `SetAsMain`: `setMainProject` (persist + `notification.success.set.main`) and open the project in the current IDE via `ProjectUtil.openOrImport(path, currentProject, forceOpenInNewFrame = true)`.
+   - `SetAsMain`: `setMainProject` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, `notification.success.set.main`) and open the project in the current IDE via `ProjectUtil.openOrImport(path, currentProject, forceOpenInNewFrame = true)`.
    - `OpenIsolated`: continue to step 2.
    - `Cancelled`: nothing.
 2. Otherwise queue a non-cancellable `Task.Backgroundable` titled `progress.opening.project` that:
@@ -92,7 +92,7 @@ Any `Throwable` (except `ControlFlowException`) -> `notification.error.recent.pr
 
 ### 5.2 Popup behavior (`RecentProjectPopup`)
 
-`ListPopupImpl` with title `popup.recent.projects.title`, speed search enabled. Speed-search index for a project item is `"<name> [<branch> ]<path>"`; for other items it is their label. Only `OpenRecentProjectAction` has a substep (right arrow / click on arrow): a sub-popup with, in order, Open Project, Set/Unset Main Project, Sync All Settings, Sync VM Options, Sync Configuration, Sync Plugins, Remove Project. "Open with <other IDE>" sub-actions exist in code but are commented out and would throw `TODO()`.
+`ListPopupImpl` with title `popup.recent.projects.title`, speed search enabled. Speed-search index for a project item is `"<name> [<branch> ]<path>"`; for other items it is their label. Only `OpenRecentProjectAction` has a substep (right arrow / click on arrow): a sub-popup with, in order, Open Project, Set/Unset Main Project, Sync All Settings, Sync VM Options, Sync Configuration, Sync Plugins, Remove Project. The four Sync entries are omitted for the main project item (`isMainProject`), since it runs on base settings and has nothing to sync. "Open with <other IDE>" sub-actions exist in code but are commented out and would throw `TODO()`.
 
 Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
@@ -116,8 +116,8 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 | Sub-action | Behavior |
 |---|---|
 | Open Project | `launchOrFocusProject`. |
-| Set / Unset Main Project | OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then `MainProjectService.setMainProject(path)` or `clearMainProject()` with a success notification. Config I/O happens on EDT. |
-| Sync All Settings / VM Options / Configuration / Plugins | §6.1 for this project. |
+| Set / Unset Main Project | OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then on a pooled thread `setMainProject(path)` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, success notification) or `clearMainProject()` with a success notification. |
+| Sync All Settings / VM Options / Configuration / Plugins | §6.1 for this project. Not shown for the main project. |
 | Remove Project | On a pooled thread: `RecentProjectsIndex.remove(id)` then `ProjectCleaner.cleanProject(metadata)` (deletes `<projRoot>` recursively, core-spec §9). The popup is rebuilt immediately, in parallel with the deletion. No confirmation. |
 
 ## 6. Sync from the plugin (`actions/Sync.kt`)
@@ -131,8 +131,8 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
 ### 6.2 All projects (`SyncAllProjectsAction`)
 
-- `loadAllProjects()`; if any of them `isCurrentProject`, self-shutdown sync with `--ide <executablePath> --all-projects`.
-- Else `performSyncWithProgress` over all projects. Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed`.
+- Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If any target `isCurrentProject`, self-shutdown sync with `--ide <executablePath> --all-projects`.
+- Else `performSyncWithProgress` over the targets. Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed`.
 
 ### 6.3 `isCurrentProject`
 
@@ -177,14 +177,18 @@ The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one 
 - `ShutdownSignalService.init`: init Koin; parse `idea.config.path` exactly as §6.3 to get the current project id; load its metadata from the current repository. If this is not an isolated instance (or metadata fails to load), monitoring is disabled and logged.
 - Monitoring (coroutine on `Dispatchers.IO`): `ShutdownSignalManager.cleanupStaleSignals(project, 5)` once, then every 1 s `readStopRequest`. A request is acted on once per `requestId` (in-memory set) and only if its timestamp is at most 5 minutes old (unparseable timestamps are ignored). Action: `ApplicationManager.getApplication().exit()` on the main dispatcher, which runs the normal save/confirm flow. `autoRestart` and `syncTypes` in the signal are logged but otherwise unused; restart is the sync initiator's job. Errors are logged and polling continues.
 
+## 10a. Stale main-project entry cleanup (`startup/StaleMainProjectCleanupActivity`)
+
+`ProjectActivity`, so it runs per project open. Init Koin; return unless `isRunningInMainInstance`. On `Dispatchers.IO` call `ProjectCleaner.cleanStaleMainProjectEntry()` (core-spec §9) and log the removed entry, if any. Any `Throwable` is logged; `ControlFlowException` is rethrown. Together with the call in `setMainProject`, this guarantees the main project does not keep a `projects/<id>/` entry once its isolated instance has exited.
+
 ## 11. Plugin sync on IDE update (`startup/PluginSyncOnUpdateActivity`)
 
 `ProjectActivity`, so it runs per project open. Steps:
 
 1. Init Koin; return unless `MainProjectService.isRunningInMainInstance(repo, PathManager.getConfigDir())`.
 2. Read `lastKnownBuildNumber`, then always store the current build (`ApplicationInfo.build.asString()`).
-3. Return if there was no previous build, the build is unchanged, `syncPluginsOnIdeUpdate` is false, or there are no tracked projects.
-4. Notify `notification.sync.on.update.started` (build, count). On `Dispatchers.IO`, for each project `syncProject(syncPlugins = true only, stopIfRunning = true, autoRestart = true, 60 s)`; per-project failures are logged as warnings and the loop continues. Then `notification.sync.on.update.complete`.
+3. Return if there was no previous build, the build is unchanged, `syncPluginsOnIdeUpdate` is false, or `ProjectManager.listSyncable()` (tracked projects minus the main project) is empty.
+4. Notify `notification.sync.on.update.started` (build, count). On `Dispatchers.IO`, for each syncable project `syncProject(syncPlugins = true only, stopIfRunning = true, autoRestart = true, 60 s)`; per-project failures are logged as warnings and the loop continues. Then `notification.sync.on.update.complete`.
 5. Any other `Throwable` -> `notification.sync.on.update.failed` and a logged error. `ControlFlowException` is rethrown.
 
 Because the build number is stored before the checks, only the first project opened after an update triggers the sync. Running isolated IDEs are stopped and restarted without a prompt.
@@ -197,7 +201,7 @@ Because the build number is stored before the checks, only the first project ope
 | `showFileChooserAndLaunch` config I/O (`resolvePath`, Koin init) | caller (EDT for actions) |
 | `launchOrFocusUnderProgress`, `performSyncWithProgress` | `Task.Backgroundable` |
 | Popup building, import, remove, worktree | pooled thread |
-| Set/Unset main project config write | EDT |
+| Set/Unset main project config write and stale-entry cleanup | pooled thread |
 | `ShutdownSignalService` polling | `Dispatchers.IO` coroutine |
 | `PluginSyncOnUpdateActivity` sync loop | `Dispatchers.IO` |
 

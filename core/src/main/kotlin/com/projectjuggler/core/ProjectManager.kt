@@ -54,6 +54,16 @@ class ProjectManager internal constructor(
         return ideConfigRepository.loadAllProjects().sortedByDescending { it.lastOpened }
     }
 
+    /**
+     * Lists tracked projects whose settings can be synced from base settings.
+     * The main project is excluded: it runs on base settings directly, so its isolated
+     * directories are never used and there is nothing to sync.
+     */
+    fun listSyncable(): List<ProjectMetadata> {
+        val mainProjectPath = ideConfigRepository.load().mainProjectPath
+        return ideConfigRepository.loadAllProjects().filter { it.path.pathString != mainProjectPath }
+    }
+
     fun remove(projectId: ProjectPath) {
         ideConfigRepository.deleteProjectMetadata(projectId)
     }

@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.projectjuggler.config.MainProjectService
+import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
@@ -42,7 +43,7 @@ internal class PluginSyncOnUpdateActivity : ProjectActivity {
             // Skip if setting is disabled
             if (!config.syncPluginsOnIdeUpdate) return
 
-            val allProjects = repository.loadAllProjects()
+            val allProjects = ProjectManager.getInstance(repository).listSyncable()
             if (allProjects.isEmpty()) return
 
             showInfoNotification(

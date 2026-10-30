@@ -3,6 +3,9 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.ProjectMetadata
+import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.isCurrentProject
 import com.projectjuggler.plugin.actions.performSelfShutdownSync
@@ -28,15 +31,17 @@ data class SyncAllProjectsAction(
     }
 
     private fun syncAllProjectsWithType(syncType: SyncType, project: Project?) {
-        if (isSyncingAllIncludingMe()) {
+        val repository = IdeInstallationService.currentIdeConfigRepository
+        val syncableProjects = ProjectManager.getInstance(repository).listSyncable()
+
+        if (isSyncingAllIncludingMe(repository, syncableProjects)) {
             handleSelfShutdownSyncAll(syncType, project)
             return
         }
 
-        val allProjects = IdeInstallationService.currentIdeConfigRepository.loadAllProjects()
         performSyncWithProgress(
             project = project,
-            projects = allProjects,
+            projects = syncableProjects,
             syncType = syncType,
             taskTitle = ProjectJugglerBundle.message("progress.sync.all.projects.type", syncType.displayName),
             successMessage = {
@@ -52,11 +57,9 @@ data class SyncAllProjectsAction(
         )
     }
 
-    private fun isSyncingAllIncludingMe(): Boolean {
+    private fun isSyncingAllIncludingMe(repository: IdeConfigRepository, projects: List<ProjectMetadata>): Boolean {
         // Check if current project is in the list (self-shutdown case)
-        val allProjects = IdeInstallationService.currentIdeConfigRepository.loadAllProjects()
-        val currentProjectInList = allProjects.any { isCurrentProject(IdeInstallationService.currentIdeConfigRepository, it.path) }
-        return currentProjectInList
+        return projects.any { isCurrentProject(repository, it.path) }
     }
 
     /**

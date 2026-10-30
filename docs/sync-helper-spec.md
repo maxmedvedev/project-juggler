@@ -26,7 +26,7 @@ sync-helper --ide <ide-path> --all-projects         [--all|--vmoptions|--config|
 |------------------|-------------|---------|
 | `--ide`          | yes         | `IdeInstallation.executablePath` of the IDE whose repository to use. Required. |
 | `--path`         | yes         | A tracked project path. `~` is expanded, the path is normalized and must exist. |
-| `--all-projects` | no          | Sync every project under `<ideDir>/projects/`. |
+| `--all-projects` | no          | Sync every project under `<ideDir>/projects/` except the main project. |
 | `--all`          | no          | vmoptions + config + plugins. |
 | `--vmoptions`    | no          | Regenerate `idea.vmoptions`. |
 | `--config`       | no          | Wipe and recopy `config/`. |
@@ -52,7 +52,7 @@ Parsing rules:
 5. `ProjectLauncher.getInstance(repository)`.
 6. Target selection:
    - `--path`: `ProjectManager.resolvePath(raw)` then `ProjectManager.get(path)`; a missing `metadata.json` is `error("Project not found: <raw>")`.
-   - `--all-projects`: `repository.loadAllProjects()`; an empty list is `error("No tracked projects found")`. Directory order is whatever `Files.list` returns (unspecified).
+   - `--all-projects`: `ProjectManager.listSyncable()` (all tracked projects minus the main project); an empty list is `error("No tracked projects found")`. Directory order is whatever `Files.list` returns (unspecified).
 7. For each target, sequentially: `syncProject(project, syncVmOptions, syncConfig, syncPlugins, SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60))`. `onProgress` is the no-op default, so the helper prints no progress of its own; the only output is what core prints (`IntelliJLauncher`, `ProcessLauncherImpl`).
 8. `main` returns. No explicit `exitProcess`; the JVM ends when non-daemon threads finish (core-spec §7.3: the launcher's 10 s crash-watch thread keeps it alive up to 10 s after the last restart).
 
@@ -108,7 +108,7 @@ The IDE's own exit removes `config/.lock`. The helper, started ~100 ms earlier, 
 
 1. **Restart race.** If the IDE finishes exiting before the helper's first `isProjectOpen` check (the plugin only waits 100 ms, and JVM startup of the helper is slower than that on most machines), `wasRunning` is false, the sync runs, and the IDE is *not* restarted despite the notification promising it. Conversely, if the IDE is still running, both the plugin's `Application.exit()` and the helper's stop request try to close it.
 2. `project.juggler.base.dir` is not propagated from the IDE to the helper. Under `runIde` the plugin uses `~/.project-juggler-test` while the helper syncs `~/.project-juggler`, so self-sync in the sandbox operates on the wrong tree (and will fail with `Project not found`).
-3. The relaunch after a self-sync goes through `IntelliJLauncher.launch` regardless of whether the project is the main project (core-spec Known gaps #3). For the main project this means the restarted IDE is isolated even though it was launched with base settings.
+3. `--path <main project>` fails with `SyncException` from core (core-spec §8 step 0); the helper has no special handling and exits 1.
 4. Stdout/stderr are inherited from the IDE and disappear with it. Errors (lock held, shutdown timeout, missing base paths) are invisible to the user; the IDE simply does not come back.
 5. No `exitProcess`: the helper lingers up to 10 s after the last relaunch because of the non-daemon crash-watch thread. One sync-type-less invocation (`--ide X --path Y` with no type flag) is accepted and does a stop/restart with no copying.
 6. Unknown arguments are ignored, so a typo like `--plugin` silently produces an empty sync.

@@ -2,9 +2,12 @@ package com.projectjuggler.core
 
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import java.nio.file.Path
@@ -112,5 +115,20 @@ class ProjectManagerTest : StringSpec({
 
         // IDs should be identical
         tildeProjectPath.id shouldBe absoluteProjectPath.id
+    }
+
+    "listSyncable should exclude the main project" {
+        val testInstallation = IdeInstallation("/test/ide", "Test IDE")
+        val ideConfigRepository = IdeConfigRepository(createTempDir("test-pm-syncable"), testInstallation)
+        val projectManager = ProjectManager.getInstance(ideConfigRepository)
+
+        val mainPath = projectManager.resolvePath(projectDir.toString())
+        val otherPath = projectManager.resolvePath(createTempDir("test-project-other").toString())
+        projectManager.registerOrUpdate(mainPath)
+        projectManager.registerOrUpdate(otherPath)
+        MainProjectService.setMainProject(ideConfigRepository, mainPath)
+
+        projectManager.listAll().map { it.path } shouldContainExactlyInAnyOrder listOf(mainPath, otherPath)
+        projectManager.listSyncable().map { it.path } shouldContainExactly listOf(otherPath)
     }
 })

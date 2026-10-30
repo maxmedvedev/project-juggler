@@ -102,7 +102,7 @@ v1 kept a single `<base>/config.json` (`LegacyGlobalConfig`: `intellijPath`, bas
 
 - `IdeRegistry` (singleton) lists installations: registered ones are `v2/*` directories with a readable `config.json`; `getAllInstallations()` is detected (§10) plus registered, deduplicated by `executablePath`. `getRepository(installation)` returns `IdeConfigRepository` at `<ideDir>`; nothing is created until the first write.
 - `IdeConfigRepository` exposes `load()`, `save()`, `update(transform)` (load then save, two separate lock acquisitions), `saveProjectMetadata`, `loadProjectMetadata(path|id)` (null when missing), `loadAllProjects()` (unsorted, skips dirs without `metadata.json`), `deleteProjectMetadata(path)` (removes only the JSON file).
-- `ProjectManager` wraps metadata operations: `registerOrUpdate` increments `openCount`, sets `lastOpened = now`, preserves `debugPort`; `listAll()` sorts by `lastOpened` descending; `ensureDebugPort` allocates and persists a port when missing; `remove(path)` deletes metadata only; `get(path)` and `resolvePath(string)` as above.
+- `ProjectManager` wraps metadata operations: `registerOrUpdate` increments `openCount`, sets `lastOpened = now`, preserves `debugPort`; `listAll()` sorts by `lastOpened` descending; `listSyncable()` returns all tracked projects except the main project (§8); `ensureDebugPort` allocates and persists a port when missing; `remove(path)` deletes metadata only; `get(path)` and `resolvePath(string)` as above.
 
 ## 5. Dependency injection
 
@@ -159,7 +159,7 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 ### 7.4 Running detection
 
-`ProjectLockUtils.isProjectOpen(repo, path)` returns true iff `<dir>/.lock` exists as a regular file, where `<dir>` is `<projRoot>/config` for isolated projects and `baseConfigPath` for the main project (false when that is unset). No liveness check. `readPidFromLock` returns the file's content as an int, or null.
+`ProjectLockUtils.isProjectOpen(repo, path)` returns true iff `<dir>/.lock` exists as a regular file, where `<dir>` is `<projRoot>/config` for isolated projects and `baseConfigPath` for the main project (false when that is unset). `isIsolatedInstanceOpen(repo, path)` always checks `<projRoot>/config/.lock`, even for the main project. No liveness check. `readPidFromLock` returns the file's content as an int, or null.
 
 ### 7.5 Window focusing (`WindowFocuser.focus(pid)`)
 
@@ -171,6 +171,7 @@ Returns `Success`, `ProcessNotFound`, `WindowNotFound`, `CommandFailed(msg)` or 
 
 Sequence:
 
+0. If `project.path` is the configured `mainProjectPath`, throw `SyncException("'<name>' is the main project and uses base settings directly; there is nothing to sync.")` before any lock, running check or stop request. The main project runs on base settings, so its isolated directories are never used. Callers that sync many projects should pick targets with `ProjectManager.listSyncable()`, which already excludes it.
 1. Acquire `<projRoot>/signals/sync-in-progress.lock` with a non-blocking `FileChannel.tryLock()`. Failure, including an overlapping lock in the same JVM, throws `SyncException("Sync already in progress for project '<name>'...")`.
 2. `wasRunning = isProjectOpen(...)`.
 3. If `wasRunning && stopIfRunning`: write `signals/stop-request.json`:
@@ -199,6 +200,7 @@ A process cannot sync its own IDE while running. The expected pattern (used by t
 ## 9. Cleaning and removal
 
 - `ProjectCleaner.cleanProject(metadata)`: remove the id from `recent.json`, then delete `<projRoot>` recursively (including `metadata.json`).
+- `ProjectCleaner.cleanStaleMainProjectEntry()`: if `mainProjectPath` is set and has a `projects/<id>/metadata.json` (the project was opened isolated before it became main), `cleanProject` it and return the metadata. Returns null, and leaves everything in place, when there is no main project, no entry, or `isIsolatedInstanceOpen` is true (an isolated IDE of that project is still running; the caller is expected to retry later). The plugin calls this when a project is set as main and at startup of the main instance.
 - `ProjectManager.remove(path)`: delete `metadata.json` only; isolated dirs remain.
 
 ## 10. Locators and platform
@@ -241,7 +243,7 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 
 1. `cleanupStaleSignals` deletes `sync-in-progress.lock` because it is not JSON; on Unix this can defeat sync mutual exclusion. `doWithLock` also deletes the lock file before releasing the lock.
 2. Stop request `timeoutSeconds` ignores `SyncOptions.shutdownTimeout`; `syncTypes` is always `["settings"]`.
-3. Post-sync restart always uses the isolated launcher, even for the main project, and skips recents/metadata/`onFailure`.
+3. Post-sync restart always uses the isolated launcher and skips recents/metadata/`onFailure`. (The main project is rejected by `syncProject`, so it can no longer be restarted this way.)
 4. Changed base vmoptions only update the hash on launch; the file is refreshed only by a vmoptions sync. Update mode never adds `-Dproject.juggler.base.dir` to a file lacking it.
 5. Debug ports are allocated even without JDWP in base options; uniqueness is per IDE, not global; the documented lower bound (5000) differs from the code (5001).
 6. `launchMain` inherits the parent's `IDEA_VM_OPTIONS` when no base vmoptions is configured, so a main project launched from an isolated IDE may get isolated options.
