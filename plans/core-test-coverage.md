@@ -202,7 +202,7 @@ Context estimate ~20%.
 Sessions run in order; 2, 3 and 4 depend only on session 1 (Kover) and can run in any order after it. Each on
 Opus 5.5 at low effort, ending with its own commit (rules in Finishing) that marks its entry **Done**.
 
-1. **Drop migration, add Kover.** Implements "Drop migration" and "Kover", plus the migration parts of Docs (core-spec
+1. **Done.** **Drop migration, add Kover.** Implements "Drop migration" and "Kover", plus the migration parts of Docs (core-spec
    §3/§3.4, plugin-spec §2, CLAUDE.md paragraph and Kover command). Reads `IdeInstallationService.kt`, root and
    `core/build.gradle.kts`. Verify with steps 1–4. Record the baseline in "Coverage log". ~8%.
 2. **Model, persistence, DI, ProjectManager tests** (Tests → Session 2). Reads `config/*.kt`, `di/*.kt`,
@@ -219,7 +219,7 @@ Opus 5.5 at low effort, ending with its own commit (rules in Finishing) that mar
 
 Line coverage of `core` from `./gradlew :core:koverLog`, filled in by each session.
 
-- Baseline (session 1): _tbd_
+- Baseline (session 1, Kover 0.9.9): 60.39%
 
 ## Verification
 

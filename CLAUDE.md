@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew :plugin:buildPlugin    # Build IntelliJ plugin zip
 ./gradlew :plugin:runIde         # Run sandbox IDE (uses ~/.project-juggler-test as base dir)
 ./gradlew :plugin:verifyPlugin   # Plugin Verifier against recommended IDEs
+./gradlew :core:koverHtmlReport  # Core coverage report (core/build/reports/kover/html)
 ```
 
 Run a single test class or test:
@@ -35,8 +36,6 @@ The `.github/workflows/release.yml` references a `:cli` module that no longer ex
 ### Multi-IDE data model (v2)
 
 Everything is keyed by **IDE installation**, not globally. `IdeInstallation(executablePath, displayName)` derives a hash-based `directoryName`; `IdeRegistry` discovers installations and hands out one `IdeConfigRepository` per installation rooted at `~/.project-juggler/v2/<ide-dir>/`. That directory holds `config.json` (`IdeConfig`: base VM options/config/plugins paths, main project, sync-on-update flag), `recent.json`, and `projects/<project-id>/` with `metadata.json` plus the isolated `config`/`system`/`logs`/`plugins` dirs. All JSON writes go through `FileLockUtils.withFileLock`.
-
-`LegacyGlobalConfig` + `MigrationManager` describe the old flat v1 layout (`~/.project-juggler/config.json`). Migration is written but currently not invoked (see the todo in `IdeInstallationService.init`).
 
 The base dir can be overridden with the `project.juggler.base.dir` system property (used by `runIde`).
 

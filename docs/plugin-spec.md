@@ -26,7 +26,6 @@ Conventions:
   - `currentRepository` (lazy): `IdeRegistry.getRepository(currentInstallation)` followed by `autoPopulateIfNeeded`.
   - `autoPopulateIfNeeded(repo)`: no-op when `baseConfigPath` is already set. Otherwise writes `baseConfigPath = PathManager.getConfigDir()`, `basePluginsPath = PathManager.getPluginsDir()`, and, if the file exists, `baseVmOptionsPath = VMOptionsCopy.getUserOptionsFile() ?: getPlatformOptionsFile()`, then updates the vmoptions hash. Errors are logged, not surfaced.
   - `getAllInstallations()` / `getRepository(installation)` delegate to `IdeRegistry`.
-  - v1 to v2 migration is written (`doMigrationFromV1toV2IfNeeded`) but not called.
 - `VMOptionsCopy` is a copy of the platform's `VMOptions` file-location logic: user file from `jb.vmOptionsFile` if outside the IDE home, else `PathManager.getCustomOptionsDirectory()/<script>[64][.exe].vmoptions`; platform file is `<bin>/<same name>`.
 
 ## 3. Entry points (actions)

@@ -5,7 +5,6 @@ import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
-import com.projectjuggler.config.MigrationManager
 import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
@@ -30,11 +29,6 @@ class IdeInstallationService internal constructor(
      * Repository for current IDE, initializing config if needed.
      */
     val currentRepository: IdeConfigRepository by lazy { detectCurrentRepository() }
-
-    init {
-        // todo implement?
-        // doMigrationFromV1toV2IfNeeded()
-    }
 
     /** Get all available IDE installations (detected + registered). */
     fun getAllInstallations(): List<IdeInstallation> = ideRegistry.getAllInstallations()
@@ -126,20 +120,6 @@ class IdeInstallationService internal constructor(
             logger<IdeInstallationService>().info("Auto-populated config for IDE: ${repository.installation.displayName}")
         } catch (e: Exception) {
             logger<IdeInstallationService>().error("Failed to auto-populate config", e)
-        }
-    }
-
-    private fun doMigrationFromV1toV2IfNeeded() {
-        // Run migration if needed
-        val migrationManager = MigrationManager.create()
-        if (migrationManager.needsMigration()) {
-            try {
-                val currentInstallation = currentInstallation
-                migrationManager.migrateV1ToV2(currentInstallation)
-                logger<IdeInstallationService>().info("Successfully migrated v1 config to v2")
-            } catch (e: Exception) {
-                logger<IdeInstallationService>().error("Failed to migrate v1 config to v2", e)
-            }
         }
     }
 

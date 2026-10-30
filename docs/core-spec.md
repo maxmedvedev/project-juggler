@@ -44,7 +44,6 @@ Invariant: the id is the on-disk directory name for the project's isolated state
 
 ```
 <base>/
-  config.json.v1.bak, recent.json.v1.bak   # archived v1 files after migration (if run)
   v2/
     <ideDir>/
       config.json                           # IdeConfig
@@ -93,10 +92,6 @@ Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation
 ```
 
 Newest first. A corrupt file is treated as empty.
-
-### 3.4 v1 layout and migration
-
-v1 kept a single `<base>/config.json` (`LegacyGlobalConfig`: `intellijPath`, base paths, hash, `maxRecentProjects`, `mainProjectPath`), `<base>/recent.json`, and `<base>/projects/`. `MigrationManager.needsMigration()` is true when v1 `config.json` exists and `v2/` does not. `migrateV1ToV2(current)` picks the installation from `intellijPath`, else the argument, else the first detected IDE; builds `<ideDir>/config.json`, copies `recent.json`, moves `projects/`, and renames the v1 files to `*.v1.bak`. Nothing calls it today.
 
 ## 4. Repository and registry
 
