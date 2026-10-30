@@ -11,19 +11,20 @@ object ConfigLocator {
      * Find the default IntelliJ config directory.
      * Returns null if not found.
      */
-    fun findDefaultConfigDirectory(): Path? {
-        val candidates = when (Platform.current()) {
-            Platform.MACOS -> getMacOSCandidates()
-            Platform.LINUX -> getLinuxCandidates()
-            Platform.WINDOWS -> getWindowsCandidates()
+    fun findDefaultConfigDirectory(): Path? = findDefaultConfigDirectory(LocatorEnvironment.current())
+
+    internal fun findDefaultConfigDirectory(env: LocatorEnvironment): Path? {
+        val candidates = when (env.platform) {
+            Platform.MACOS -> getMacOSCandidates(env)
+            Platform.LINUX -> getLinuxCandidates(env)
+            Platform.WINDOWS -> getWindowsCandidates(env)
         }
 
         return candidates.firstOrNull { Files.exists(it) && Files.isDirectory(it) }
     }
 
-    private fun getMacOSCandidates(): List<Path> {
-        val userHome = System.getProperty("user.home")
-        val baseDir = Paths.get(userHome, "Library", "Application Support", "JetBrains")
+    private fun getMacOSCandidates(env: LocatorEnvironment): List<Path> {
+        val baseDir = env.userHome.resolve(Paths.get("Library", "Application Support", "JetBrains"))
 
         if (!Files.exists(baseDir)) {
             return emptyList()
@@ -32,9 +33,8 @@ object ConfigLocator {
         return getCandidates(baseDir)
     }
 
-    private fun getLinuxCandidates(): List<Path> {
-        val userHome = System.getProperty("user.home")
-        val baseDir = Paths.get(userHome, ".local", "share", "JetBrains")
+    private fun getLinuxCandidates(env: LocatorEnvironment): List<Path> {
+        val baseDir = env.userHome.resolve(Paths.get(".local", "share", "JetBrains"))
 
         if (!Files.exists(baseDir)) {
             return emptyList()
@@ -43,9 +43,8 @@ object ConfigLocator {
         return getCandidates(baseDir)
     }
 
-    private fun getWindowsCandidates(): List<Path> {
-        val userHome = System.getProperty("user.home")
-        val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
+    private fun getWindowsCandidates(env: LocatorEnvironment): List<Path> {
+        val appData = env.getenv("APPDATA") ?: "${env.userHome}\\AppData\\Roaming"
         val baseDir = Paths.get(appData, "JetBrains")
 
         if (!Files.exists(baseDir)) {

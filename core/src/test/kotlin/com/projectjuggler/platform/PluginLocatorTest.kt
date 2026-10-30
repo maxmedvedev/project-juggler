@@ -3,23 +3,37 @@ package com.projectjuggler.platform
 import com.projectjuggler.locators.PluginLocator
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
+import kotlin.io.path.createDirectories
 
 class PluginLocatorTest : StringSpec({
+    val configDir = ".local/share/JetBrains/IntelliJIdea2025.1"
 
-    "should return null or valid plugins directory" {
-        // This test may pass or fail depending on local environment
-        // Just verify it doesn't throw exceptions
-        val result = PluginLocator.findDefaultPluginsDirectory()
-
-        if (result != null) {
-            result.fileName.toString() shouldBe "plugins"
-        }
+    "smoke: findDefaultPluginsDirectory on the real machine does not throw" {
+        PluginLocator.findDefaultPluginsDirectory()
     }
 
-    "should handle platform detection without crashing" {
-        // Verify platform-specific logic doesn't crash
-        val platform = Platform.current()
-        platform shouldNotBe null
+    "returns the plugins child of the chosen config dir" {
+        val fixture = locatorFixture()
+        val plugins = fixture.home.resolve("$configDir/plugins").createDirectories()
+
+        PluginLocator.findDefaultPluginsDirectory(fixture.env(Platform.LINUX)) shouldBe plugins
+    }
+
+    "returns null when plugins is absent" {
+        val fixture = locatorFixture()
+        fixture.home.resolve(configDir).createDirectories()
+
+        PluginLocator.findDefaultPluginsDirectory(fixture.env(Platform.LINUX)) shouldBe null
+    }
+
+    "returns null when plugins is a file" {
+        val fixture = locatorFixture()
+        fixture.home.createFileWithParents("$configDir/plugins")
+
+        PluginLocator.findDefaultPluginsDirectory(fixture.env(Platform.LINUX)) shouldBe null
+    }
+
+    "returns null without a config dir" {
+        PluginLocator.findDefaultPluginsDirectory(locatorFixture().env(Platform.LINUX)) shouldBe null
     }
 })

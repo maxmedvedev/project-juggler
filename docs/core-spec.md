@@ -216,6 +216,8 @@ Toolbox: `<Toolbox>/apps/<type>/ch-0/<version>/...` where `<type>` contains `ide
 
 `ConfigLocator.findDefaultConfigDirectory()`: under `~/Library/Application Support/JetBrains` (macOS), `~/.local/share/JetBrains` (Linux), `%APPDATA%\JetBrains` (Windows), the lexicographically greatest existing child whose name starts with `IntelliJIdea`. `PluginLocator.findDefaultPluginsDirectory()` is that directory's `plugins/` child if it is a directory.
 
+All locators resolve their roots (platform, user home, filesystem root for `/Applications`, `/opt`, `/snap`, and the `ProgramFiles`/`LOCALAPPDATA`/`APPDATA` variables) through an internal `LocatorEnvironment`; the public functions use `LocatorEnvironment.current()`.
+
 ## 11. Utilities with external contracts
 
 - `GitUtils.detectGitBranch(path)`: walk up from `projectRoot(path)` to the first `.git` (directory, or file with `gitdir:` resolved relative to its location). Read `HEAD`: `ref: refs/heads/X` -> `X`; 40-hex SHA -> `"HEAD (detached)"`; else `git rev-parse --abbrev-ref HEAD` with a 2 s timeout. Any error -> null.

@@ -61,6 +61,7 @@ The base dir can be overridden with the `project.juggler.base.dir` system proper
 ## Testing
 
 Kotest `StringSpec` + MockK, only in `core/`. Register `KoinTestExtension()` in any spec that calls `getInstance(...)`; it starts Koin per spec and closes IDE scopes after each test. Build repositories directly with `IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))`; `TempDirExtension` is available for temp dirs.
+Locators are tested through `LocatorEnvironment` with fake IDE trees in temp dirs, not against the real machine.
 
 ## Development Guidelines
 

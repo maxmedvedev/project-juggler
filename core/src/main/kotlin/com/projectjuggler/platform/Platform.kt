@@ -6,8 +6,10 @@ enum class Platform {
     WINDOWS;
 
     companion object {
-        fun current(): Platform {
-            val osName = System.getProperty("os.name").lowercase()
+        fun current(): Platform = fromOsName(System.getProperty("os.name"))
+
+        internal fun fromOsName(name: String): Platform {
+            val osName = name.lowercase()
             return when {
                 osName.contains("mac") || osName.contains("darwin") -> MACOS
                 osName.contains("win") -> WINDOWS

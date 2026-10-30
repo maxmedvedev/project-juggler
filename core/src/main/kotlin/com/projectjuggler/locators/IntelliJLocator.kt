@@ -17,30 +17,34 @@ object IntelliJLocator {
 
     fun findInstallation(
         executablePath: String
-    ): IdeInstallation {
-        val installations = findAllInstallations()
+    ): IdeInstallation = findInstallation(executablePath, LocatorEnvironment.current())
+
+    internal fun findInstallation(executablePath: String, env: LocatorEnvironment): IdeInstallation {
+        val installations = findAllInstallations(env)
         val matching = installations.find { it.executablePath == executablePath }
         if (matching != null) {
             return matching
         }
 
-        return IdeInstallation(executablePath, extractDisplayName(executablePath))
+        return IdeInstallation(executablePath, extractDisplayName(Paths.get(executablePath), env.platform))
     }
 
     /**
      * Finds all IntelliJ IDE installations on the system.
      * Scans standard installation directories and JetBrains Toolbox locations.
      */
-    fun findAllInstallations(): List<IdeInstallation> {
+    fun findAllInstallations(): List<IdeInstallation> = findAllInstallations(LocatorEnvironment.current())
+
+    internal fun findAllInstallations(env: LocatorEnvironment): List<IdeInstallation> {
         val installations = mutableListOf<IdeInstallation>()
-        val config = prepareScanConfig(Platform.current())
+        val config = prepareScanConfig(env)
 
         scanStandardDirectories(config, installations)
         scanDirectExecutables(config, installations)
         scanToolboxDirectory(config, installations)
 
         if (config.platform == Platform.LINUX) {
-            scanLinuxSnapInstallations(installations)
+            scanLinuxSnapInstallations(env.fsRoot.resolve("snap"), installations)
         }
 
         return installations.distinctBy { it.executablePath }
@@ -50,38 +54,39 @@ object IntelliJLocator {
 
     fun extractDisplayName(ideDir: Path): String = extractDisplayName(ideDir, Platform.current())
 
-    private fun prepareScanConfig(platform: Platform): ScanConfig {
-        val userHome = System.getProperty("user.home")
+    private fun prepareScanConfig(env: LocatorEnvironment): ScanConfig {
+        val platform = env.platform
+        val userHome = env.userHome
 
         val config = when (platform) {
             Platform.MACOS -> ScanConfig(
                 platform = platform,
-                standardDirs = listOf(Paths.get("/Applications"), Paths.get(userHome, "Applications")),
+                standardDirs = listOf(env.fsRoot.resolve("Applications"), userHome.resolve("Applications")),
                 directExecutables = emptyList(),
                 filter = { path -> path.fileName.toString().let { it.contains("IntelliJ") && it.endsWith(".app") } },
                 execResolver = { path -> path.resolve("Contents/MacOS/idea") },
-                toolboxDir = Paths.get(userHome, "Library/Application Support/JetBrains/Toolbox/apps")
+                toolboxDir = userHome.resolve("Library/Application Support/JetBrains/Toolbox/apps")
             )
 
             Platform.LINUX -> ScanConfig(
                 platform = platform,
-                standardDirs = listOf(Paths.get("/opt")),
+                standardDirs = listOf(env.fsRoot.resolve("opt")),
                 directExecutables = listOf(
-                    Paths.get(userHome, "bin", "idea", "bin", "idea.sh"),
-                    Paths.get(userHome, "idea", "bin", "idea.sh"),
-                    Paths.get(userHome, ".local", "bin", "idea"),
-                    Paths.get(userHome, ".local", "share", "applications", "idea")
+                    userHome.resolve(Paths.get("bin", "idea", "bin", "idea.sh")),
+                    userHome.resolve(Paths.get("idea", "bin", "idea.sh")),
+                    userHome.resolve(Paths.get(".local", "bin", "idea")),
+                    userHome.resolve(Paths.get(".local", "share", "applications", "idea"))
                 ),
                 filter = { path ->
                     path.fileName.toString().lowercase().let { it.contains("intellij") || it == "idea" }
                 },
                 execResolver = { path -> path.resolve("bin/idea.sh") },
-                toolboxDir = Paths.get(userHome, ".local/share/JetBrains/Toolbox/apps")
+                toolboxDir = userHome.resolve(".local/share/JetBrains/Toolbox/apps")
             )
 
             Platform.WINDOWS -> {
-                val programFiles = System.getenv("ProgramFiles") ?: "C:\\Program Files"
-                val localAppData = System.getenv("LOCALAPPDATA") ?: "$userHome\\AppData\\Local"
+                val programFiles = env.getenv("ProgramFiles") ?: "C:\\Program Files"
+                val localAppData = env.getenv("LOCALAPPDATA") ?: "$userHome\\AppData\\Local"
                 ScanConfig(
                     platform = platform,
                     standardDirs = listOf(
@@ -138,8 +143,7 @@ object IntelliJLocator {
         }
     }
 
-    private fun scanLinuxSnapInstallations(installations: MutableList<IdeInstallation>) {
-        val snapDir = Paths.get("/snap")
+    private fun scanLinuxSnapInstallations(snapDir: Path, installations: MutableList<IdeInstallation>) {
         if (Files.exists(snapDir) && Files.isDirectory(snapDir)) {
             listOf("intellij-idea-ultimate", "intellij-idea-community").forEach { snapName ->
                 val execPath = snapDir.resolve("$snapName/current/bin/idea.sh")
@@ -197,7 +201,7 @@ object IntelliJLocator {
         }
     }
 
-    private fun extractDisplayName(ideDir: Path, platform: Platform): String {
+    internal fun extractDisplayName(ideDir: Path, platform: Platform): String {
         val dirName = ideDir.fileName.toString()
         return when (platform) {
             Platform.MACOS -> dirName.removeSuffix(".app")
