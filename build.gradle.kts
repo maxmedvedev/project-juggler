@@ -8,6 +8,8 @@ plugins {
 group = "com.projectjuggler"
 
 val koinVersion by extra("4.1.1")
+val kotestVersion by extra("5.8.0")
+val mockkVersion by extra("1.13.9")
 
 subprojects {
     group = rootProject.group

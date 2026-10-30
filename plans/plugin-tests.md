@@ -429,6 +429,10 @@ uses `CurrentIdePaths` from 4 and does the Finishing).
    `plugin/test` support files, `SyncTypeTest` (without `cliFlag`), `BundledSyncHelperTest`,
    `IntelliJNotificationHandlerTest`. Done when `./gradlew :core:test :plugin:test` passes and
    `./gradlew :plugin:buildPlugin` produces a zip whose `lib/` has no kotest/mockk/junit jars.
+   **Done** in `wire plugin tests and share core test fixtures`. Deviations: `testFixtures(project(":core"))` is
+   typed as `Dependency`, so the exclusion lambda needs `testFixtures(project(":core")) as ModuleDependency`;
+   the plugin `test` task is configured inside the existing `tasks { }` block. The support functions in
+   `PluginTestSupport.kt` are public top-level functions (like core's `createTempDir`), not `internal`.
 2. **Sync and isolated instance** (~20%). Reads: `actions/Sync.kt`, `actions/recent/SyncSettingsSubAction.kt`,
    `SyncAllProjectsAction.kt`, `SyncType.kt`, `shutdown/ShutdownSignalService.kt`, spec §6 and §10. Does: A, B, C;
    `IsolatedInstanceTest`, `StopRequestTrackerTest`, `SyncPlannerTest`, `SyncProjectsTest`, add `cliFlag` cases to
