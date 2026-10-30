@@ -15,6 +15,15 @@ import kotlin.io.path.readLines
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
+private fun overrides(dirs: ProjectDirectories) = listOf(
+    VMOptionsGenerator.OVERRIDES_MARKER,
+    "-Didea.config.path=${dirs.config}",
+    "-Didea.system.path=${dirs.system}",
+    "-Didea.log.path=${dirs.logs}",
+    "-Didea.plugins.path=${dirs.plugins}",
+    "-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=${IdeRegistry.getDefaultBaseDir()}",
+)
+
 class VMOptionsGeneratorTest : StringSpec({
     val tempDir = createTempDir("test-project")
     val baseVmOptions = createTempFile("base", ".vmoptions")
@@ -450,6 +459,48 @@ class VMOptionsGeneratorTest : StringSpec({
 
         lines.count { it.startsWith("-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=") } shouldBe 1
         lines.last() shouldBe "-Xmx1g"
+    }
+
+    "update mode replaces stale override lines and keeps everything else" {
+        val projectDirs = ProjectDirectories(
+            root = tempDir.resolve("t16"),
+            config = tempDir.resolve("t16/config"),
+            system = tempDir.resolve("t16/system"),
+            logs = tempDir.resolve("t16/logs"),
+            plugins = tempDir.resolve("t16/plugins")
+        )
+        Files.createDirectories(projectDirs.root)
+        val before = listOf("# Base VM options from: /old/base.vmoptions", "-Xmx2g", "-agentlib:jdwp=transport=dt_socket,address=*:5005", "")
+        val after = listOf("", "-Xss4m")
+        val stale = listOf(
+            VMOptionsGenerator.OVERRIDES_MARKER,
+            "-Didea.config.path=/old/config",
+            "-Didea.system.path=/old/system",
+            "-Didea.log.path=/old/logs",
+            "-Didea.plugins.path=/old/plugins",
+            "-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=/old/base",
+        )
+        projectDirs.root.resolve("idea.vmoptions").writeText((before + stale + after).joinToString("\n") + "\n")
+
+        val lines = VMOptionsGenerator.generate(baseVmOptions, projectDirs, debugPort = 6000).readLines()
+
+        lines shouldBe before + overrides(projectDirs) + after
+    }
+
+    "update mode appends the override block when the marker is missing" {
+        val projectDirs = ProjectDirectories(
+            root = tempDir.resolve("t17"),
+            config = tempDir.resolve("t17/config"),
+            system = tempDir.resolve("t17/system"),
+            logs = tempDir.resolve("t17/logs"),
+            plugins = tempDir.resolve("t17/plugins")
+        )
+        Files.createDirectories(projectDirs.root)
+        projectDirs.root.resolve("idea.vmoptions").writeText("-Xmx2g\n")
+
+        val lines = VMOptionsGenerator.generate(null, projectDirs, null).readLines()
+
+        lines shouldBe listOf("-Xmx2g", "") + overrides(projectDirs)
     }
 
     "computeBaseHash returns null for missing path and the file hash otherwise" {

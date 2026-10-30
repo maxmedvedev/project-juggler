@@ -41,10 +41,11 @@ interface ProcessLauncher {
 /**
  * Launches processes detached from the caller. On macOS/Linux the child's stdout/stderr go to
  * `launch-<millis>-<n>.out`/`.err` in [logDirectory]; the files are kept only when the child exits non-zero
- * within [WATCH_TIMEOUT_SECONDS].
+ * within [watchTimeout] (10 s by default; tests pass a shorter one).
  */
 class ProcessLauncherImpl(
-    private val logDirectory: Path = IdeRegistry.getDefaultBaseDir().resolve("launcher-logs")
+    private val logDirectory: Path = IdeRegistry.getDefaultBaseDir().resolve("launcher-logs"),
+    private val watchTimeout: Duration = DEFAULT_WATCH_TIMEOUT
 ) : ProcessLauncher {
 
     override fun launch(
@@ -89,7 +90,7 @@ class ProcessLauncherImpl(
 
     private fun watch(process: Process, logs: LaunchLogs?, onFailure: ((LaunchFailure) -> Unit)?) {
         try {
-            val exited = process.waitFor(WATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val exited = process.waitFor(watchTimeout.toMillis(), TimeUnit.MILLISECONDS)
             val exitCode = if (exited) process.exitValue() else 0
             if (exitCode == 0) {
                 logs?.delete()
@@ -188,7 +189,7 @@ class ProcessLauncherImpl(
 
     companion object {
         const val WATCHER_THREAD_NAME = "project-juggler-launch-watcher"
-        private const val WATCH_TIMEOUT_SECONDS = 10L
+        private val DEFAULT_WATCH_TIMEOUT = Duration.ofSeconds(10)
         private const val TAIL_BYTES = 64 * 1024L
         private val LOG_RETENTION = Duration.ofDays(7)
         private val launchCounter = AtomicInteger()

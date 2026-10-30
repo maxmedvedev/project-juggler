@@ -92,6 +92,18 @@ class ProcessLauncherImplTest : StringSpec({
         launchLogs(logDir).shouldBeEmpty()
     }
 
+    "should not report a process still running after the watch timeout and should remove its logs".config(enabledIf = unixOnly) {
+        val logDir = newLogDir()
+        val launcher = ProcessLauncherImpl(logDir, watchTimeout = Duration.ofMillis(200))
+
+        // The child outlives the watch window and then fails; the failure must go unreported
+        val failure = launchAndAwait(launcher, "sleep 2; exit 5", waitSeconds = 1)
+        awaitNoLaunchLogs(logDir)
+
+        failure.shouldBeNull()
+        launchLogs(logDir).shouldBeEmpty()
+    }
+
     "should pass environment variables to the child".config(enabledIf = unixOnly) {
         val failure = launchAndAwait(
             ProcessLauncherImpl(newLogDir()),

@@ -155,7 +155,7 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 - macOS/Linux: `<exe> <args>` with stdin inherited and stdout/stderr redirected to `<base>/launcher-logs/launch-<millis>-<n>.out` and `.err` (files, not pipes, so nothing has to drain them while the IDE runs). If the directory or files cannot be created, a line is logged to stderr and the output is discarded. Windows: `cmd /c start "" <exe> <args>`, no redirect.
 - Extra env is merged over the inherited environment; a `null` value removes the variable.
-- A daemon thread named `project-juggler-launch-watcher` waits up to 10 s for the process, so a CLI JVM can exit as soon as its `main` returns. On a non-zero exit in that window it passes the last 64 KiB (UTF-8) of both files to `onFailure(LaunchFailure(exitCode, stdout, stderr))` and keeps them; on exit 0 or still running it invokes no callback and deletes them (a running child keeps writing to the unlinked files).
+- A daemon thread named `project-juggler-launch-watcher` waits up to 10 s (constructor parameter `watchTimeout`) for the process, so a CLI JVM can exit as soon as its `main` returns. On a non-zero exit in that window it passes the last 64 KiB (UTF-8) of both files to `onFailure(LaunchFailure(exitCode, stdout, stderr))` and keeps them; on exit 0 or still running it invokes no callback and deletes them (a running child keeps writing to the unlinked files).
 - Each launch first deletes, best effort, regular files in `launcher-logs/` last modified more than 7 days ago.
 
 ### 7.4 Running detection
@@ -164,7 +164,7 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 ### 7.5 Window focusing (`WindowFocuser.focus(pid)`)
 
-Returns `Success`, `ProcessNotFound`, `WindowNotFound`, `CommandFailed(msg)` or `ToolNotInstalled(name)`. macOS uses `osascript` on System Events; Linux uses `wmctrl` then `xdotool`; Windows runs a temporary PowerShell script using `EnumWindows`/`SetForegroundWindow`.
+Returns `Success`, `ProcessNotFound`, `WindowNotFound`, `CommandFailed(msg)` or `ToolNotInstalled(name)`. macOS uses `osascript` on System Events; Linux uses `wmctrl` then `xdotool`; Windows runs a temporary PowerShell script using `EnumWindows`/`SetForegroundWindow`. Not unit tested, by decision: it only shells out to these platform tools.
 
 ## 8. Sync protocol
 
@@ -249,4 +249,3 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
 13. On Windows `ProcessLauncherImpl` reports the exit code of `cmd start` and captures no child output.
-15. Untested: `WindowFocuser`, the "still running after 10 s" path of `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
