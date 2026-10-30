@@ -1,9 +1,9 @@
 package com.projectjuggler.util
 
 import java.io.RandomAccessFile
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.io.path.exists
 
 /**
  * Utility for file locking operations.
@@ -22,9 +22,11 @@ object FileLockUtils {
         // Ensure parent directory exists
         Files.createDirectories(file.parent)
 
-        // Create file if it doesn't exist
-        if (!file.exists()) {
+        // Create file if it doesn't exist; another process may create it concurrently
+        try {
             Files.createFile(file)
+        } catch (e: FileAlreadyExistsException) {
+            // already present, possibly just created by another process
         }
 
         return RandomAccessFile(file.toFile(), "rw").use { raf ->

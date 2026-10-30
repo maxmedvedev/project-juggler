@@ -13,6 +13,7 @@ import io.mockk.unmockkObject
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.io.path.exists
+import kotlin.io.path.writeText
 
 class IdeRegistryTest : StringSpec({
     val first = IdeInstallation("/ide/first", "First IDE")
@@ -37,6 +38,17 @@ class IdeRegistryTest : StringSpec({
         Files.createDirectories(baseDir.resolve("v2/stray"))
 
         registry.getRegisteredInstallations() shouldContainExactlyInAnyOrder listOf(first, second)
+    }
+
+    "getRegisteredInstallations omits an ide dir with corrupt config" {
+        val baseDir = createTempDir("test-registry")
+        val registry = IdeRegistry(baseDir)
+        registry.register(first)
+        val corruptDir = baseDir.resolve("v2/corrupt")
+        Files.createDirectories(corruptDir)
+        corruptDir.resolve("config.json").writeText("{not json")
+
+        registry.getRegisteredInstallations() shouldContainExactly listOf(first)
     }
 
     "getRepository creates nothing on disk" {

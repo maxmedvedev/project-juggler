@@ -58,7 +58,7 @@ Invariant: the id is the on-disk directory name for the project's isolated state
             sync-in-progress.lock           # permanent, §8
 ```
 
-All JSON is pretty-printed with `encodeDefaults = false`. `config.json` and `metadata.json` are read and written under an exclusive OS file lock (`FileLockUtils.withFileLock`, blocking `FileChannel.lock()`, creates the file if missing). `recent.json` is not locked.
+All JSON is pretty-printed with `encodeDefaults = false`. `config.json`, `metadata.json` and `recent.json` are read and written under an exclusive OS file lock (`FileLockUtils.withFileLock`, blocking `FileChannel.lock()`, creates parent dirs and the file if missing, tolerating a concurrent creation). When both are needed, `config.json` is read before the `recent.json` lock is taken; locks are never nested.
 
 ### 3.1 `config.json` (`IdeConfig`)
 
@@ -75,7 +75,7 @@ All JSON is pretty-printed with `encodeDefaults = false`. `config.json` and `met
 | `syncPluginsOnIdeUpdate`  | bool     | false   | plugin re-sync on build change |
 | `lastKnownBuildNumber`    | string?  | null    | last IDE build seen |
 
-Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation)`.
+Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation)` (corruption is logged to stderr).
 
 ### 3.2 `metadata.json` (`ProjectMetadata`)
 
@@ -83,7 +83,7 @@ Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation
 { "path": "/abs/path", "lastOpened": "2026-10-30T10:00:00Z", "openCount": 3, "debugPort": 5001, "baseVmOptionsHash": "<sha256>" }
 ```
 
-`openCount` omitted when 0, `debugPort` and `baseVmOptionsHash` omitted when null. `debugPort` is present only once a launch or vmoptions sync ran with a base vmoptions that enables JDWP (§7.1); a port stored earlier is kept even if JDWP is later removed. `baseVmOptionsHash` is the SHA-256 of the base vmoptions `idea.vmoptions` was last written from (null when written without a base, or by a version predating the field). `name` and `id` are derived from `path`, not stored. A corrupt file throws on read; it is not treated as missing.
+`openCount` omitted when 0, `debugPort` and `baseVmOptionsHash` omitted when null. `debugPort` is present only once a launch or vmoptions sync ran with a base vmoptions that enables JDWP (§7.1); a port stored earlier is kept even if JDWP is later removed. `baseVmOptionsHash` is the SHA-256 of the base vmoptions `idea.vmoptions` was last written from (null when written without a base, or by a version predating the field). `name` and `id` are derived from `path`, not stored. A corrupt file is skipped (logged to stderr) and treated as missing.
 
 ### 3.3 `recent.json`
 
@@ -91,12 +91,12 @@ Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation
 [ { "projectId": "<id>", "timestamp": "<ISO instant>" }, ... ]
 ```
 
-Newest first. A corrupt file is treated as empty.
+Newest first, truncated to `maxRecentProjects` on every `recordOpen`. An empty or corrupt file is treated as empty (corruption is logged to stderr). `recordOpen` and `remove` are read-modify-write under one lock; `getRecent` locks only for the read and skips entries whose metadata is missing or corrupt.
 
 ## 4. Repository and registry
 
-- `IdeRegistry` (singleton) lists installations: registered ones are `v2/*` directories with a readable `config.json`; `getAllInstallations()` is detected (§10) plus registered, deduplicated by `executablePath`. `getRepository(installation)` returns `IdeConfigRepository` at `<ideDir>`; nothing is created until the first write.
-- `IdeConfigRepository` exposes `load()`, `save()`, `update(transform)` (load then save, two separate lock acquisitions), `saveProjectMetadata`, `loadProjectMetadata(path|id)` (null when missing), `loadAllProjects()` (unsorted, skips dirs without `metadata.json`), `deleteProjectMetadata(path)` (removes only the JSON file).
+- `IdeRegistry` (singleton) lists installations: registered ones are `v2/*` directories whose `config.json` parses and has a non-blank `installation.executablePath` (`IdeConfigRepository.loadFromDir` returns null otherwise, so corrupt dirs are omitted); `getAllInstallations()` is detected (§10) plus registered, deduplicated by `executablePath`. `getRepository(installation)` returns `IdeConfigRepository` at `<ideDir>`; nothing is created until the first write.
+- `IdeConfigRepository` exposes `load()`, `save()`, `update(transform)` (one lock held across read, transform and write, so concurrent updates from other processes are not lost; a corrupt file is transformed from the default), `saveProjectMetadata`, `loadProjectMetadata(path|id)` (null when missing or corrupt), `loadAllProjects()` (unsorted, skips dirs without a readable `metadata.json`), `deleteProjectMetadata(path)` (removes only the JSON file).
 - `ProjectManager` wraps metadata operations: `registerOrUpdate` increments `openCount`, sets `lastOpened = now`, preserves `debugPort` and `baseVmOptionsHash`; `listAll()` sorts by `lastOpened` descending; `listSyncable()` returns all tracked projects except the main project (§8); `ensureDebugPort` allocates and persists a port when missing; `debugPortFor(project, basePath?)` calls `ensureDebugPort` when `VMOptionsGenerator.containsJdwp(basePath)`, otherwise returns the stored `debugPort` without allocating; `updateBaseVmOptionsHash(project, hash)` reloads the stored metadata (so a just-saved `debugPort` is kept), sets the hash and saves; `remove(path)` deletes metadata only; `get(path)` and `resolvePath(string)` as above.
 
 ## 5. Dependency injection
@@ -235,7 +235,7 @@ All locators resolve their roots (platform, user home, filesystem root for `/App
 - `SyncException` for sync-protocol failures (lock contention, shutdown timeout).
 - `IllegalStateException` for missing base paths needed by a sync.
 - `IllegalArgumentException` for invalid inputs (worktree creation, copy source).
-- Readers of config and recents degrade to defaults on corruption; readers of project metadata throw.
+- Readers of config, recents and project metadata degrade (default / empty / skipped, logged to stderr) on corruption.
 - Launch crashes within 10 s are reported only through `onFailure`; later crashes are not observed.
 - Restart crashes after a sync surface as `SyncProgress.Error` through `onFailure`.
 
@@ -245,9 +245,8 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
-10. A corrupt `config.json` makes `loadFromDir` return a repository with an empty installation. One corrupt `metadata.json` breaks `loadAllProjects` and `getRecent`. `update()` is not atomic across processes. `recent.json` is unlocked.
 11. `GitWorktreeManager` double-wraps its own `IOException` and has no timeout. `GitUtils` does not treat 64-hex (SHA-256) detached heads as detached.
 12. `copyIfFirstOpen` can leave a partial copy that is never retried. A forced config sync wipes the project's own `.lock` and `recentProjects.xml`.
 13. `ProcessLauncherImpl` captures no output on Unix (inherited IO), reports the exit code of `cmd start` on Windows, and keeps a CLI JVM alive up to 10 s via a non-daemon thread.
 14. `isRunningInMainInstance` compares paths as raw strings and assumes "main" when `baseConfigPath` is unset.
-15. Untested: `WindowFocuser`, `GitWorktreeManager`, `ProcessLauncherImpl`, `recent.json` trimming, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
+15. Untested: `WindowFocuser`, `GitWorktreeManager`, `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.

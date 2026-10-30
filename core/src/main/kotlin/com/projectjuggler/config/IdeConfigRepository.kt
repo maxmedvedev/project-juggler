@@ -26,31 +26,52 @@ class IdeConfigRepository(
         encodeDefaults = false
     }
 
-    fun load(): IdeConfig {
-        if (!configFile.exists()) {
-            return IdeConfig.default(installation)
-        }
-        try {
-            return FileLockUtils.withFileLock(configFile) {
-                json.decodeFromString<IdeConfig>(configFile.readText())
-            }
-        }
-        catch (e: Exception) {
-            return IdeConfig.default(installation)
-        }
-    }
+    fun load(): IdeConfig = readConfigOrNull() ?: IdeConfig.default(installation)
 
     fun save(config: IdeConfig) {
         Files.createDirectories(baseDir)
         FileLockUtils.withFileLock(configFile) {
-            configFile.writeText(json.encodeToString(config))
+            writeConfig(config)
         }
     }
 
+    /**
+     * Reads, transforms and writes the config under one lock, so concurrent updates from
+     * other processes are not lost.
+     */
     fun update(transform: (IdeConfig) -> IdeConfig) {
-        val config = load()
-        val updated = transform(config)
-        save(updated)
+        Files.createDirectories(baseDir)
+        FileLockUtils.withFileLock(configFile) {
+            val current = decodeConfigOrNull() ?: IdeConfig.default(installation)
+            writeConfig(transform(current))
+        }
+    }
+
+    /** Returns the stored config, or null when the file is missing, empty or corrupt. */
+    private fun readConfigOrNull(): IdeConfig? {
+        if (!configFile.exists()) return null
+        return try {
+            FileLockUtils.withFileLock(configFile) { decodeConfigOrNull() }
+        } catch (e: Throwable) {
+            logIgnoredCorruptFile(configFile, e)
+            null
+        }
+    }
+
+    /** Decodes the config file; must be called under the config lock. */
+    private fun decodeConfigOrNull(): IdeConfig? {
+        val text = configFile.readText()
+        if (text.isBlank()) return null
+        return try {
+            json.decodeFromString<IdeConfig>(text)
+        } catch (e: Throwable) {
+            logIgnoredCorruptFile(configFile, e)
+            null
+        }
+    }
+
+    private fun writeConfig(config: IdeConfig) {
+        configFile.writeText(json.encodeToString(config))
     }
 
     fun getConfigFile(): Path = configFile
@@ -75,8 +96,13 @@ class IdeConfigRepository(
     private fun loadMetadata(projectDir: Path): ProjectMetadata? {
         val metadataFile = projectDir.resolve("metadata.json")
         if (!metadataFile.exists()) return null
-        return FileLockUtils.withFileLock(metadataFile) {
-            json.decodeFromString<ProjectMetadata>(metadataFile.readText())
+        return try {
+            FileLockUtils.withFileLock(metadataFile) {
+                json.decodeFromString<ProjectMetadata>(metadataFile.readText())
+            }
+        } catch (e: Throwable) {
+            logIgnoredCorruptFile(metadataFile, e)
+            null
         }
     }
 
@@ -109,16 +135,20 @@ class IdeConfigRepository(
         }
 
         /**
-         * Loads an IdeConfigRepository from the given directory if it exists, otherwise returns null.
+         * Loads an IdeConfigRepository from the given directory, or returns null when it has no readable
+         * `config.json` (missing, empty, corrupt, or with a blank executable path).
          */
         fun loadFromDir(ideDir: Path): IdeConfigRepository? {
-            val fakeInstallation = IdeInstallation("", "")
-            val fakeRegistry = IdeConfigRepository(ideDir, fakeInstallation)
+            val config = IdeConfigRepository(ideDir, IdeInstallation("", "")).readConfigOrNull() ?: return null
+            if (config.installation.executablePath.isBlank()) {
+                System.err.println("[IdeConfigRepository] Ignoring $ideDir: config.json has a blank executable path")
+                return null
+            }
+            return IdeConfigRepository(ideDir, config.installation)
+        }
 
-            if (!fakeRegistry.getConfigFile().exists()) return null
-            val ideConfig = fakeRegistry.load()
-            val installation = ideConfig.installation
-            return IdeConfigRepository(ideDir, installation)
+        private fun logIgnoredCorruptFile(file: Path, e: Throwable) {
+            System.err.println("[IdeConfigRepository] Ignoring corrupt $file: ${e.message}")
         }
     }
 }

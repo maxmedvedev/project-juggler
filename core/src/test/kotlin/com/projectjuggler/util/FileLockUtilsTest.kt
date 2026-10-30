@@ -4,6 +4,8 @@ import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import kotlin.io.path.exists
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 class FileLockUtilsTest : StringSpec({
     "withFileLock creates missing parent dirs and the file" {
@@ -26,5 +28,12 @@ class FileLockUtilsTest : StringSpec({
         FileLockUtils.withFileLock(file) { "first" }
 
         FileLockUtils.withFileLock(file) { "second" } shouldBe "second"
+    }
+
+    "withFileLock tolerates a pre-created file and keeps its content" {
+        val file = createTempDir("test-lock").resolve("file.json")
+        file.writeText("existing")
+
+        FileLockUtils.withFileLock(file) { file.readText() } shouldBe "existing"
     }
 })

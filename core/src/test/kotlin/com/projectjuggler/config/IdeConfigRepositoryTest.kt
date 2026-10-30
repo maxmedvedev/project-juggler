@@ -1,12 +1,17 @@
 package com.projectjuggler.config
 
 import com.projectjuggler.test.createTempDir
+import com.projectjuggler.util.FileLockUtils
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import java.nio.file.Files
 import kotlin.io.path.exists
+import kotlin.io.path.writeText
 
 class IdeConfigRepositoryTest : StringSpec({
     val installation = IdeInstallation("/test/ide", "Test IDE")
@@ -114,5 +119,64 @@ class IdeConfigRepositoryTest : StringSpec({
 
         loaded?.installation shouldBe installation
         loaded?.baseDir shouldBe repository.baseDir
+    }
+
+    fun ideDirWithConfig(text: String) = createTempDir("test-ide-dir").also { it.resolve("config.json").writeText(text) }
+
+    "loadFromDir returns null for corrupt config" {
+        IdeConfigRepository.loadFromDir(ideDirWithConfig("{not json")) shouldBe null
+    }
+
+    "loadFromDir returns null for empty config file" {
+        IdeConfigRepository.loadFromDir(ideDirWithConfig("")) shouldBe null
+    }
+
+    "loadFromDir returns null for blank executable path" {
+        val dir = ideDirWithConfig("""{"installation": {"executablePath": "", "displayName": "x"}}""")
+
+        IdeConfigRepository.loadFromDir(dir) shouldBe null
+    }
+
+    "load returns default for corrupt config" {
+        val repository = newRepository()
+        repository.getConfigFile().writeText("{not json")
+
+        repository.load() shouldBe IdeConfig.default(installation)
+    }
+
+    "update replaces a corrupt config with the transformed default" {
+        val repository = newRepository()
+        repository.getConfigFile().writeText("{not json")
+
+        repository.update { it.copy(maxRecentProjects = 3) }
+
+        repository.load() shouldBe IdeConfig.default(installation).copy(maxRecentProjects = 3)
+    }
+
+    "update holds one lock for read-transform-write" {
+        val repository = newRepository()
+        repository.save(IdeConfig.default(installation))
+        mockkObject(FileLockUtils)
+        try {
+            repository.update { it.copy(mainProjectPath = "/work/main") }
+
+            verify(exactly = 1) { FileLockUtils.withFileLock<Any?>(any(), any()) }
+        } finally {
+            unmockkObject(FileLockUtils)
+        }
+        repository.load().mainProjectPath shouldBe "/work/main"
+    }
+
+    "loadAllProjects skips a corrupt metadata file" {
+        val repository = newRepository()
+        val valid = metadata("/work/valid")
+        repository.saveProjectMetadata(valid)
+        val corruptId = ProjectPath("/work/corrupt").id
+        val corruptDir = repository.baseDir.resolve("projects").resolve(corruptId.id)
+        Files.createDirectories(corruptDir)
+        corruptDir.resolve("metadata.json").writeText("garbage")
+
+        repository.loadAllProjects() shouldContainExactlyInAnyOrder listOf(valid)
+        repository.loadProjectMetadata(corruptId) shouldBe null
     }
 })
