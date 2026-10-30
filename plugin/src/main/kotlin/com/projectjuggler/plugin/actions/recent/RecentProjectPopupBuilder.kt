@@ -7,13 +7,14 @@ import com.intellij.util.application
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.intellij.util.containers.addIfNotNull
 import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.services.CurrentIdePaths
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IdePathSyncDetector
-import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
@@ -26,51 +27,7 @@ internal class RecentProjectPopupBuilder(
     fun show() {
         try {
             val ideConfigRepository = IdeInstallationService.currentIdeConfigRepository
-
-            // Load recent projects
-            val recentIndex = RecentProjectsIndex.getInstance(ideConfigRepository)
-            val recentMetadata = recentIndex.getRecent(20)
-
-            // Filter out non-existent paths (deleted projects)
-            val validProjects = recentMetadata.filter { metadata ->
-                exists(metadata.path.path)
-            }
-
-            // Create items with git branch info (even if empty, we'll still show the "Browse..." item)
-            val items = validProjects.map { metadata ->
-                createRecentProjectItem(metadata, ideConfigRepository)
-            }
-
-            // Create popup using ListPopupImpl with custom renderer and submenu support
-            val itemsList = mutableListOf<RecentProjectPopupAction>()
-
-            // Add path sync warning if paths are out of sync (only in main instance)
-            val mismatches = IdePathSyncDetector.detectMismatches(ideConfigRepository)
-            if (mismatches.isNotEmpty()) {
-                itemsList.add(UpdatePathsAction(mismatches))
-            }
-
-            // Add browse button at the top
-            itemsList.add(OpenFileChooserAction)
-            // Add main project if configured
-            val mainProjectItem = createMainProjectItem(ideConfigRepository)
-            itemsList.addIfNotNull(mainProjectItem)
-            itemsList.addAll(items.filterNot { it.isMainProject })
-
-            // Check if there are any projects (recent or main)
-            val hasProjects = items.isNotEmpty() || mainProjectItem != null
-
-            if (hasProjects) {
-                // Add sync actions when there are projects to sync
-                itemsList.add(SyncAllProjectsAction(SyncType.All))
-                itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
-                itemsList.add(SyncAllProjectsAction(SyncType.Config))
-                itemsList.add(SyncAllProjectsAction(SyncType.Plugins))
-                itemsList.add(ToggleSyncOnUpdateAction(ideConfigRepository.load().syncPluginsOnIdeUpdate))
-            } else {
-                // Show import action when no projects
-                itemsList.add(ImportRecentProjectsAction)
-            }
+            val itemsList = buildItems(ideConfigRepository, CurrentIdePaths.detect())
 
             // Show popup on EDT
             application.invokeLater {
@@ -86,25 +43,83 @@ internal class RecentProjectPopupBuilder(
         }
     }
 
-    private fun createMainProjectItem(ideConfigRepository: IdeConfigRepository): OpenRecentProjectAction? {
-        val mainProjectPathStr = ideConfigRepository.load().mainProjectPath ?: return null
-        val path = ProjectPath(mainProjectPathStr)
-        val gitBranch = GitUtils.detectGitBranch(path.path)
-        val isOpen = detectIfProjectOpen(ideConfigRepository, path)
-        return OpenRecentProjectAction(path, gitBranch, isOpen, isMainProject = true)
-    }
+    companion object {
+        /**
+         * The popup items for [repository], in display order. Pure apart from reading the repository,
+         * the project directories and their lock files.
+         */
+        internal fun buildItems(
+            repository: IdeConfigRepository,
+            currentPaths: CurrentIdePaths,
+        ): List<RecentProjectPopupAction> {
+            // Load recent projects
+            val recentIndex = RecentProjectsIndex.getInstance(repository)
+            val recentMetadata = recentIndex.getRecent(20)
 
-    private fun createRecentProjectItem(
-        metadata: ProjectMetadata,
-        ideConfigRepository: IdeConfigRepository
-    ): OpenRecentProjectAction {
-        val gitBranch = GitUtils.detectGitBranch(metadata.path.path)
-        val isOpen = detectIfProjectOpen(ideConfigRepository, metadata.path)
-        val isMainProject = MainProjectService.isMainProject(ideConfigRepository, metadata.path)
-        return OpenRecentProjectAction(metadata.path, gitBranch, isOpen, isMainProject)
-    }
+            // Filter out non-existent paths (deleted projects)
+            val validProjects = recentMetadata.filter { metadata ->
+                exists(metadata.path.path)
+            }
 
-    private fun detectIfProjectOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
-        return ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath)
+            // Create items with git branch info (even if empty, we'll still show the "Browse..." item)
+            val items = validProjects.map { metadata ->
+                createRecentProjectItem(metadata, repository)
+            }
+
+            // Create popup using ListPopupImpl with custom renderer and submenu support
+            val itemsList = mutableListOf<RecentProjectPopupAction>()
+
+            // Add path sync warning if paths are out of sync (only in main instance)
+            val mismatches = IdePathSyncDetector.detectMismatches(repository, currentPaths)
+            if (mismatches.isNotEmpty()) {
+                itemsList.add(UpdatePathsAction(mismatches))
+            }
+
+            // Add browse button at the top
+            itemsList.add(OpenFileChooserAction)
+            // Add main project if configured
+            val mainProjectItem = createMainProjectItem(repository)
+            itemsList.addIfNotNull(mainProjectItem)
+            itemsList.addAll(items.filterNot { it.isMainProject })
+
+            // Check if there are any projects (recent or main)
+            val hasProjects = items.isNotEmpty() || mainProjectItem != null
+
+            if (hasProjects) {
+                // Add sync actions when there are projects to sync
+                itemsList.add(SyncAllProjectsAction(SyncType.All))
+                itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
+                itemsList.add(SyncAllProjectsAction(SyncType.Config))
+                itemsList.add(SyncAllProjectsAction(SyncType.Plugins))
+                itemsList.add(ToggleSyncOnUpdateAction(repository.load().syncPluginsOnIdeUpdate))
+            } else {
+                // Show import action when no projects
+                itemsList.add(ImportRecentProjectsAction)
+            }
+
+            return itemsList
+        }
+
+        private fun createMainProjectItem(ideConfigRepository: IdeConfigRepository): OpenRecentProjectAction? {
+            val mainProjectPathStr = ideConfigRepository.load().mainProjectPath ?: return null
+            val path = ProjectPath(mainProjectPathStr)
+            val gitBranch = GitUtils.detectGitBranch(path.path)
+            val isOpen = detectIfProjectOpen(ideConfigRepository, path)
+            return OpenRecentProjectAction(path, gitBranch, isOpen, isMainProject = true)
+        }
+
+        private fun createRecentProjectItem(
+            metadata: ProjectMetadata,
+            ideConfigRepository: IdeConfigRepository
+        ): OpenRecentProjectAction {
+            val gitBranch = GitUtils.detectGitBranch(metadata.path.path)
+            val isOpen = detectIfProjectOpen(ideConfigRepository, metadata.path)
+            val isMainProject = MainProjectService.isMainProject(ideConfigRepository, metadata.path)
+            return OpenRecentProjectAction(metadata.path, gitBranch, isOpen, isMainProject)
+        }
+
+        private fun detectIfProjectOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
+            return ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath)
+        }
     }
 }

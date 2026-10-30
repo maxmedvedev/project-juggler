@@ -1,16 +1,12 @@
 package com.projectjuggler.plugin.services
 
-import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.logger
-import com.intellij.openapi.project.Project
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.core.BaseVMOptionsTracker
+import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.showErrorNotification
-import com.projectjuggler.plugin.showInfoNotification
 import java.nio.file.Files
-import java.nio.file.Path
 
 /**
  * Detects and fixes mismatches between stored IDE paths and actual current paths.
@@ -23,21 +19,22 @@ internal object IdePathSyncDetector {
      * Returns a list of human-readable labels for paths that are out of sync.
      * Empty list means everything is in sync or this is not the main IDE instance.
      */
-    fun detectMismatches(repository: IdeConfigRepository): List<String> {
+    fun detectMismatches(
+        repository: IdeConfigRepository,
+        current: CurrentIdePaths = CurrentIdePaths.detect(),
+    ): List<String> {
         // Don't use MainProjectService.isRunningInMainInstance() here because it compares
         // the current config dir with the stored baseConfigPath — which may itself be stale.
         // Instead, check if we're running as an isolated project instance.
-        val currentConfigDir = PathManager.getConfigDir()
-        if (currentConfigDir.startsWith(repository.baseDir)) {
+        if (current.configDir.startsWith(repository.baseDir)) {
             return emptyList()
         }
 
         val config = repository.load()
 
-        val currentConfigPath = PathManager.getConfigDir().toString()
-        val currentPluginsPath = PathManager.getPluginsDir().toString()
-        val currentVmOptionsPath =
-            (VMOptionsCopy.getUserOptionsFile() ?: VMOptionsCopy.getPlatformOptionsFile()).toString()
+        val currentConfigPath = current.configDir.toString()
+        val currentPluginsPath = current.pluginsDir.toString()
+        val currentVmOptionsPath = current.vmOptionsFile.toString()
 
         val mismatches = mutableListOf<String>()
 
@@ -57,37 +54,80 @@ internal object IdePathSyncDetector {
     /**
      * Updates all stored paths to the current IDE paths.
      */
-    fun updatePaths(repository: IdeConfigRepository, project: Project?) {
+    fun updatePaths(
+        repository: IdeConfigRepository,
+        notificationHandler: NotificationHandler,
+        current: CurrentIdePaths = CurrentIdePaths.detect(),
+    ) {
         try {
-            val currentConfigPath = PathManager.getConfigDir().toString()
-            val currentPluginsPath = PathManager.getPluginsDir().toString()
-            val currentVmOptionsPath =
-                (VMOptionsCopy.getUserOptionsFile() ?: VMOptionsCopy.getPlatformOptionsFile()).toString()
+            val currentConfigPath = current.configDir.toString()
+            val currentPluginsPath = current.pluginsDir.toString()
+            val currentVmOptionsPath = current.vmOptionsFile.toString()
 
             repository.update { config ->
                 config.copy(
                     baseConfigPath = currentConfigPath,
                     basePluginsPath = currentPluginsPath,
-                    baseVmOptionsPath = if (Files.exists(Path.of(currentVmOptionsPath))) currentVmOptionsPath
+                    baseVmOptionsPath = if (Files.exists(current.vmOptionsFile)) currentVmOptionsPath
                     else config.baseVmOptionsPath,
                 )
             }
 
             // Update VM options hash for the new path
-            val vmPath = Path.of(currentVmOptionsPath)
-            if (Files.exists(vmPath)) {
+            if (Files.exists(current.vmOptionsFile)) {
                 BaseVMOptionsTracker.getInstance(repository).updateHash()
             }
 
             LOG.info("Updated IDE paths to current values")
-            showInfoNotification(ProjectJugglerBundle.message("notification.success.paths.updated"), project)
+            notificationHandler.showInfoNotification(ProjectJugglerBundle.message("notification.success.paths.updated"))
         } catch (e: Throwable) {
             if (e is ControlFlowException) throw e
             LOG.error("Failed to update IDE paths", e)
-            showErrorNotification(
-                ProjectJugglerBundle.message("notification.error.paths.update.failed", e.message ?: "Unknown error"),
-                project
+            notificationHandler.showErrorNotification(
+                ProjectJugglerBundle.message("notification.error.paths.update.failed", e.message ?: "Unknown error")
             )
+        }
+    }
+
+    /**
+     * Auto-populate config with detected paths if this is first run.
+     */
+    fun autoPopulateIfNeeded(
+        repository: IdeConfigRepository,
+        current: CurrentIdePaths = CurrentIdePaths.detect(),
+    ) {
+        try {
+            val config = repository.load()
+
+            // Skip if already configured
+            if (config.baseConfigPath != null) {
+                return
+            }
+
+            val vmOptionsPath = current.vmOptionsFile
+
+            repository.update { currentConfig ->
+                var updated = currentConfig
+
+                if (Files.exists(vmOptionsPath)) {
+                    updated = updated.copy(baseVmOptionsPath = vmOptionsPath.toString())
+                }
+
+                updated = updated.copy(baseConfigPath = current.configDir.toString())
+                updated = updated.copy(basePluginsPath = current.pluginsDir.toString())
+
+                updated
+            }
+
+            // Update VM options hash if path exists
+            if (Files.exists(vmOptionsPath)) {
+                BaseVMOptionsTracker.getInstance(repository).updateHash()
+            }
+
+            LOG.info("Auto-populated config for IDE: ${repository.installation.displayName}")
+        } catch (e: Throwable) {
+            if (e is ControlFlowException) throw e
+            LOG.error("Failed to auto-populate config", e)
         }
     }
 }

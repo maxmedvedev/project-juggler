@@ -466,6 +466,25 @@ uses `CurrentIdePaths` from 4 and does the Finishing).
    `RecentProjectPopupActionRenderer.kt`, `OpenRecentProjectAction.kt`, `UpdatePathsAction.kt`,
    `services/IdePathSyncDetector.kt`, `IdeInstallationService.kt`, `VMOptionsCopy.kt`, spec §5 and §7. Does: F, G;
    `RecentProjectPopupBuilderTest`, `RecentProjectPopupTest`, `CompactPathTest`, `IdePathSyncDetectorTest`.
+   **Done** in `extract popup item building and ide path detection into plain functions`. Deviations:
+   `buildItems` is in `RecentProjectPopupBuilder`'s companion object (`RecentProjectPopupBuilder.buildItems(repo,
+   paths)`) together with the private item helpers, so tests do not construct a builder around a null `Project`.
+   `IdePathSyncDetector.autoPopulateIfNeeded` (moved) catches `Throwable` and rethrows `ControlFlowException`, logging
+   through `logger<IdePathSyncDetector>()`; the public `IdeInstallationService.autoPopulateIfNeeded` is gone.
+   `CurrentIdePaths.detect()` is a default argument of `detectMismatches`/`updatePaths`/`autoPopulateIfNeeded`, so it
+   runs before their `try`: a `PathManager`/`VMOptionsCopy` failure now propagates instead of being logged (same
+   shape as session 3's launcher note). Testing a `LOG.error` path needs IntelliJ's `LoggedErrorProcessor`
+   (`test-framework-core`), which `TestFrameworkType.JUnit5` does not expose at compile time, so
+   `plugin/build.gradle.kts` also declares `testFramework(TestFrameworkType.Platform)`, and
+   `plugin/test/LoggedErrors.kt` adds `expectLoggedError { ... }: Throwable` (installs the test logger via
+   `initializeTestEnvironment()`, then `LoggedErrorProcessor.executeAndReturnLoggedError`). **Session 5 must wrap
+   every call that reaches `LOG.error` in it** (`SyncPluginsOnIdeUpdateTest` outer failure, `OpenProjectCopyTest`
+   worktree failure) and mention both in the CLAUDE.md Testing section and spec §13. `RecentProjectPopupTest` builds
+   its `ProjectPath` from a real temp directory because `ProjectPath.name` of a missing path takes the file-project
+   form (`parent [name]`). `CompactPathTest` and `RecentProjectPopupTest` are pure and do not register
+   `KoinTestExtension`. `IdePathSyncDetectorTest` has 14 tests (the plan rows plus "everything matches" and the
+   missing-vmoptions autopopulate case). Spec §2, §5.1, §5.2 and §7 text (`buildItems`, `projectSubActions`,
+   `compactPath`, `CurrentIdePaths`, `autoPopulateIfNeeded`'s new home) is left to session 5's Docs pass as planned.
 5. **Startup activities, project copy, service spec, finishing** (~22%). Reads: `startup/*.kt`,
    `actions/OpenProjectCopyAction.kt`, core `GitWorktreeManager.kt`, spec §8, §10a, §11, the Docs section. Does: H;
    `SyncPluginsOnIdeUpdateTest`, `StaleMainProjectCleanupTest`, `OpenProjectCopyTest`, `IdeInstallationServiceTest`;

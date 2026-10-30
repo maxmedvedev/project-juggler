@@ -27,6 +27,8 @@ dependencies {
         intellijIdea("2025.1.1")
         pluginVerifier()
         testFramework(TestFrameworkType.JUnit5)
+        // Platform adds test-framework-core (LoggedErrorProcessor), which specs covering LOG.error paths need
+        testFramework(TestFrameworkType.Platform)
     }
     // The IDE ships a patched kotlinx-coroutines; a second copy from the test libraries breaks the test application
     fun ModuleDependency.withoutCoroutines() =

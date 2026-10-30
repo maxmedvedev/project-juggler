@@ -6,7 +6,6 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.popup.list.ListPopupImpl
 import com.intellij.ui.popup.list.PopupListElementRenderer
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.services.IdeInstallationService
 import java.awt.Component
 import javax.swing.JList
 
@@ -53,34 +52,7 @@ private class RecentProjectPopupStep(
     }
 
     private fun createProjectSubmenu(item: OpenRecentProjectAction): PopupStep<RecentProjectSubAction> {
-        val ideService = IdeInstallationService.getInstance()
-        val allInstallations = ideService.getAllInstallations()
-        val currentInstallation = ideService.currentInstallation
-
-        // Build actions list with "Open with IDE" options for other IDEs
-        val actions = mutableListOf(
-            OpenRecentProjectSubAction,
-            ToggleMainProjectSubAction,
-        )
-
-        // todo not implemented yet
-        // Add "Open with IDE X" for each available IDE (except current)
-//        allInstallations
-//            .filter { it.executablePath != currentInstallation.executablePath }
-//            .forEach { installation ->
-//                actions.add(OpenWithIdeSubAction(installation))
-//            }
-
-        // The main project runs on base settings directly, so there is nothing to sync
-        if (!item.isMainProject) {
-            actions.addAll(listOf(
-                SyncSettingsSubAction(SyncType.All),
-                SyncSettingsSubAction(SyncType.VmOptions),
-                SyncSettingsSubAction(SyncType.Config),
-                SyncSettingsSubAction(SyncType.Plugins),
-            ))
-        }
-        actions.add(RemoveProjectSubAction)
+        val actions = projectSubActions(item)
 
         return object : BaseListPopupStep<RecentProjectSubAction>(null, actions) {
             override fun onChosen(selectedValue: RecentProjectSubAction, finalChoice: Boolean): PopupStep<*>? {
@@ -104,4 +76,34 @@ private class RecentProjectPopupStep(
 
     override fun getIndexedString(value: RecentProjectPopupAction): String =
         value.getIndexedString()
+}
+
+/**
+ * The sub-menu entries of a project item, in display order.
+ */
+internal fun projectSubActions(item: OpenRecentProjectAction): List<RecentProjectSubAction> {
+    val actions = mutableListOf<RecentProjectSubAction>(
+        OpenRecentProjectSubAction,
+        ToggleMainProjectSubAction,
+    )
+
+    // todo not implemented yet
+    // Add "Open with IDE X" for each available IDE (except current)
+//    IdeInstallationService.getInstance().getAllInstallations()
+//        .filter { it.executablePath != IdeInstallationService.getInstance().currentInstallation.executablePath }
+//        .forEach { installation ->
+//            actions.add(OpenWithIdeSubAction(installation))
+//        }
+
+    // The main project runs on base settings directly, so there is nothing to sync
+    if (!item.isMainProject) {
+        actions.addAll(listOf(
+            SyncSettingsSubAction(SyncType.All),
+            SyncSettingsSubAction(SyncType.VmOptions),
+            SyncSettingsSubAction(SyncType.Config),
+            SyncSettingsSubAction(SyncType.Plugins),
+        ))
+    }
+    actions.add(RemoveProjectSubAction)
+    return actions
 }

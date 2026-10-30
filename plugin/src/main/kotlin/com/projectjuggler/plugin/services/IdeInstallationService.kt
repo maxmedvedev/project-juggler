@@ -5,7 +5,6 @@ import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
-import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
 import org.koin.core.context.GlobalContext
@@ -41,7 +40,7 @@ class IdeInstallationService internal constructor(
         val repository = ideRegistry.getRepository(installation)
 
         // Auto-populate config if this is first run for this IDE
-        autoPopulateIfNeeded(repository)
+        IdePathSyncDetector.autoPopulateIfNeeded(repository)
         return repository
     }
 
@@ -79,47 +78,6 @@ class IdeInstallationService internal constructor(
         } catch (e: Exception) {
             logger<IdeInstallationService>().error("Failed to get IntelliJ executable path", e)
             return null
-        }
-    }
-
-    /**
-     * Auto-populate config with detected paths if this is first run.
-     */
-    fun autoPopulateIfNeeded(repository: IdeConfigRepository) {
-        try {
-            val config = repository.load()
-
-            // Skip if already configured
-            if (config.baseConfigPath != null) {
-                return
-            }
-
-            val configPath = PathManager.getConfigDir()
-            val vmOptionsPath = VMOptionsCopy.getUserOptionsFile()
-                ?: VMOptionsCopy.getPlatformOptionsFile() // todo detect when a user-options file appears
-            val pluginsPath = PathManager.getPluginsDir()
-
-            repository.update { currentConfig ->
-                var updated = currentConfig
-
-                if (Files.exists(vmOptionsPath)) {
-                    updated = updated.copy(baseVmOptionsPath = vmOptionsPath.toString())
-                }
-
-                updated = updated.copy(baseConfigPath = configPath.toString())
-                updated = updated.copy(basePluginsPath = pluginsPath.toString())
-
-                updated
-            }
-
-            // Update VM options hash if path exists
-            if (Files.exists(vmOptionsPath)) {
-                BaseVMOptionsTracker.getInstance(repository).updateHash()
-            }
-
-            logger<IdeInstallationService>().info("Auto-populated config for IDE: ${repository.installation.displayName}")
-        } catch (e: Exception) {
-            logger<IdeInstallationService>().error("Failed to auto-populate config", e)
         }
     }
 

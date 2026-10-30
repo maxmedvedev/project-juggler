@@ -264,21 +264,24 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
             panel.foreground = UIUtil.getListForeground()
         }
     }
+}
 
-    private fun compactPath(path: String): String {
-        // Replace home directory with ~
-        val home = System.getProperty("user.home")
-        if (path.startsWith(home)) {
-            return "~" + path.substring(home.length)
-        }
-
-        // If path is too long, show parent directory name and project name
-        val file = File(path)
-        val parent = file.parentFile
-        if (parent != null && path.length > 60) {
-            return ".../${parent.name}/${file.name}"
-        }
-
-        return path
+/**
+ * Shortens [path] for display: [home] becomes `~`; otherwise a path longer than 60 characters
+ * is reduced to `.../<parent>/<name>`.
+ */
+internal fun compactPath(path: String, home: String = System.getProperty("user.home")): String {
+    // Replace home directory with ~
+    if (path.startsWith(home)) {
+        return "~" + path.substring(home.length)
     }
+
+    // If path is too long, show parent directory name and project name
+    val file = File(path)
+    val parent = file.parentFile
+    if (parent != null && path.length > 60) {
+        return ".../${parent.name}/${file.name}"
+    }
+
+    return path
 }

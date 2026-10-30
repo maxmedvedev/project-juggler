@@ -7,6 +7,7 @@ import com.intellij.util.application
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IdePathSyncDetector
+import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 
 /**
  * Popup action shown when IDE paths are out of sync.
@@ -21,7 +22,10 @@ internal class UpdatePathsAction(
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
         step.doFinalStep {
-            IdePathSyncDetector.updatePaths(IdeInstallationService.currentIdeConfigRepository, project)
+            IdePathSyncDetector.updatePaths(
+                IdeInstallationService.currentIdeConfigRepository,
+                IntelliJNotificationHandler(project),
+            )
             application.executeOnPooledThread {
                 RecentProjectPopupBuilder(project).show()
             }
