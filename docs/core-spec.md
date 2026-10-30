@@ -44,6 +44,7 @@ Invariant: the id is the on-disk directory name for the project's isolated state
 
 ```
 <base>/
+  launcher-logs/                            # launch-<millis>-<n>.out/.err, §7.3
   v2/
     <ideDir>/
       config.json                           # IdeConfig
@@ -152,9 +153,10 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 ### 7.3 Process launching (`ProcessLauncherImpl`)
 
-- Windows: `cmd /c start "" <exe> <args>`. macOS/Linux: `<exe> <args>` with inherited IO.
+- macOS/Linux: `<exe> <args>` with stdin inherited and stdout/stderr redirected to `<base>/launcher-logs/launch-<millis>-<n>.out` and `.err` (files, not pipes, so nothing has to drain them while the IDE runs). If the directory or files cannot be created, a line is logged to stderr and the output is discarded. Windows: `cmd /c start "" <exe> <args>`, no redirect.
 - Extra env is merged over the inherited environment; a `null` value removes the variable.
-- A non-daemon thread polls for 10 s. If the process exits non-zero in that window, `onFailure(LaunchFailure(exitCode, stdout, stderr))` is invoked. Exit 0 or still running means no callback.
+- A daemon thread named `project-juggler-launch-watcher` waits up to 10 s for the process, so a CLI JVM can exit as soon as its `main` returns. On a non-zero exit in that window it passes the last 64 KiB (UTF-8) of both files to `onFailure(LaunchFailure(exitCode, stdout, stderr))` and keeps them; on exit 0 or still running it invokes no callback and deletes them (a running child keeps writing to the unlinked files).
+- Each launch first deletes, best effort, regular files in `launcher-logs/` last modified more than 7 days ago.
 
 ### 7.4 Running detection
 
@@ -246,6 +248,6 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
-13. `ProcessLauncherImpl` captures no output on Unix (inherited IO), reports the exit code of `cmd start` on Windows, and keeps a CLI JVM alive up to 10 s via a non-daemon thread.
+13. On Windows `ProcessLauncherImpl` reports the exit code of `cmd start` and captures no child output.
 14. `isRunningInMainInstance` compares paths as raw strings and assumes "main" when `baseConfigPath` is unset.
-15. Untested: `WindowFocuser`, `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
+15. Untested: `WindowFocuser`, the "still running after 10 s" path of `ProcessLauncherImpl`, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
