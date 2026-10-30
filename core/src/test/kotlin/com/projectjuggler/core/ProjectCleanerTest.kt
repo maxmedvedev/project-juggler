@@ -74,7 +74,7 @@ class ProjectCleanerTest : StringSpec({
         MainProjectService.setMainProject(repository, mainPath)
         val lock = directoryManager.getProjectRoot(mainPath).resolve("config/.lock")
         lock.parent.createDirectories()
-        lock.writeText("12345")
+        lock.writeText(ProcessHandle.current().pid().toString())
 
         cleaner.cleanStaleMainProjectEntry().shouldBeNull()
         projectManager.listAll().size shouldBe 2

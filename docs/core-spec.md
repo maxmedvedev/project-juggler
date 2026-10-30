@@ -158,7 +158,7 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 ### 7.4 Running detection
 
-`ProjectLockUtils.isProjectOpen(repo, path)` returns true iff `<dir>/.lock` exists as a regular file, where `<dir>` is `<projRoot>/config` for isolated projects and `baseConfigPath` for the main project (false when that is unset). `isIsolatedInstanceOpen(repo, path)` always checks `<projRoot>/config/.lock`, even for the main project. No liveness check. `readPidFromLock` returns the file's content as an int, or null.
+`ProjectLockUtils.isProjectOpen(repo, path)` returns true iff `<dir>/.lock` exists as a regular file and, when its trimmed content parses as an int, a process with that PID is alive. Locks with any other content count as live (existence only). `<dir>` is `<projRoot>/config` for isolated projects and `DirectoryManager.getBaseConfigPath()` for the main project (configured `baseConfigPath`, else `ConfigLocator`-detected; false when neither yields a dir). `isIsolatedInstanceOpen(repo, path)` applies the same check to `<projRoot>/config/.lock`, even for the main project. `readPidFromLock` uses the same `<dir>` and returns the file's trimmed content as an int, or null. `isProcessRunning(pid)` uses `ProcessHandle.of(pid).isAlive` (no external command); any error means false. All of these need a started Koin, since they resolve `DirectoryManager` from the IDE scope.
 
 ### 7.5 Window focusing (`WindowFocuser.focus(pid)`)
 
@@ -173,7 +173,7 @@ Sequence:
 0. If `project.path` is the configured `mainProjectPath`, throw `SyncException("'<name>' is the main project and uses base settings directly; there is nothing to sync.")` before any lock, running check or stop request. The main project runs on base settings, so its isolated directories are never used. Callers that sync many projects should pick targets with `ProjectManager.listSyncable()`, which already excludes it.
 1. Acquire `<projRoot>/signals/sync-in-progress.lock` with a non-blocking `FileChannel.tryLock()`. Failure, including an overlapping lock in the same JVM, throws `SyncException("Sync already in progress for project '<name>'...")`.
 2. `wasRunning = isProjectOpen(...)`.
-3. If `wasRunning && stopIfRunning`: write `signals/stop-request.json`:
+3. If `wasRunning && stopIfRunning` (a stale `.lock` whose PID is dead reads as not running, so no request is sent): write `signals/stop-request.json`:
    ```json
    { "requestId": "<uuid>", "timestamp": "<ISO instant>", "requestedBy": "system",
      "autoRestart": true, "syncTypes": ["vmoptions", "config"], "timeoutSeconds": <shutdownTimeout> }
@@ -245,10 +245,9 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 
 7. Linux locators look in `~/.local/share/JetBrains/IntelliJIdea*/plugins`; actual Linux layout is `~/.config/JetBrains/<product>` for config and `~/.local/share/JetBrains/<product>` for plugins. Only `IntelliJIdea*` (Ultimate) is matched, versions sort lexicographically, and the chosen config dir ignores which installation the repository is for.
 8. `findInstallation` fallback names the IDE after the executable file. Toolbox scanning supports only the `ch-0` layout. `findIntelliJ()` is unused.
-9. Running detection is a `.lock` existence check; stale locks read as running and make `stopIfRunning` syncs time out. `isProcessRunning` is always true on Windows (`tasklist` exits 0 with no match). `isProjectOpen` for the main project returns false when `baseConfigPath` is unset, unlike `DirectoryManager`, which auto-detects.
 10. A corrupt `config.json` makes `loadFromDir` return a repository with an empty installation. One corrupt `metadata.json` breaks `loadAllProjects` and `getRecent`. `update()` is not atomic across processes. `recent.json` is unlocked.
 11. `GitWorktreeManager` double-wraps its own `IOException` and has no timeout. `GitUtils` does not treat 64-hex (SHA-256) detached heads as detached.
 12. `copyIfFirstOpen` can leave a partial copy that is never retried. A forced config sync wipes the project's own `.lock` and `recentProjects.xml`.
 13. `ProcessLauncherImpl` captures no output on Unix (inherited IO), reports the exit code of `cmd start` on Windows, and keeps a CLI JVM alive up to 10 s via a non-daemon thread.
 14. `isRunningInMainInstance` compares paths as raw strings and assumes "main" when `baseConfigPath` is unset.
-15. Untested: main-project branch of `isProjectOpen`, `WindowFocuser`, `GitWorktreeManager`, `ProcessLauncherImpl`, `recent.json` trimming, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.
+15. Untested: `WindowFocuser`, `GitWorktreeManager`, `ProcessLauncherImpl`, `recent.json` trimming, and the vmoptions update path. `PluginCopierTest` duplicates `DirectoryCopierTest`.

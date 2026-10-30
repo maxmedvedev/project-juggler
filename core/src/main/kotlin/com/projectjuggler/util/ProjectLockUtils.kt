@@ -1,10 +1,10 @@
 package com.projectjuggler.util
 
 import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.core.DirectoryManager
 import java.nio.file.Path
-import java.nio.file.Paths
-import kotlin.io.path.exists
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 
@@ -13,24 +13,20 @@ object ProjectLockUtils {
      * Checks if a project is currently open (running IntelliJ instance).
      *
      * For regular projects: checks ~/.project-juggler/v2/<ide>/projects/<project-id>/config/.lock
-     * For main project: checks the base-config directory's .lock file
+     * For main project: checks the `.lock` in the base config directory (configured or auto-detected)
+     *
+     * The lock must exist and, when it holds a PID, that process must be alive.
      *
      * @param ideConfigRepository The IDE-specific config repository
      * @param projectPath The project to check
      * @return true if project is currently open, false otherwise
      */
     fun isProjectOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
-        try {
-            val config = ideConfigRepository.load()
-            if (!isMainProject(config.mainProjectPath, projectPath)) {
-                // Regular project uses isolated config
-                return isIsolatedInstanceOpen(ideConfigRepository, projectPath)
-            }
-            // Main project uses base-config directly
-            val configDir = config.baseConfigPath?.let { Paths.get(it) } ?: return false
-            return hasLockFile(configDir)
-        } catch (e: Exception) {
-            return false
+        return try {
+            val lockFile = lockFile(ideConfigRepository, projectPath) ?: return false
+            isLockLive(lockFile)
+        } catch (e: Throwable) {
+            false
         }
     }
 
@@ -41,28 +37,10 @@ object ProjectLockUtils {
      */
     fun isIsolatedInstanceOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
         return try {
-            hasLockFile(getIsolatedConfigPath(ideConfigRepository.baseDir, projectPath))
-        } catch (e: Exception) {
+            isLockLive(isolatedLockFile(ideConfigRepository, projectPath))
+        } catch (e: Throwable) {
             false
         }
-    }
-
-    private fun hasLockFile(configDir: Path): Boolean {
-        val lockFile = configDir.resolve(".lock")
-        return lockFile.exists() && lockFile.isRegularFile()
-    }
-
-    private fun isMainProject(mainProjectPath: String?, projectPath: ProjectPath): Boolean {
-        mainProjectPath ?: return false
-        // Simple comparison - both should be normalized by ProjectPath
-        return projectPath.pathString == mainProjectPath
-    }
-
-    private fun getIsolatedConfigPath(baseDir: Path, projectPath: ProjectPath): Path {
-        return baseDir
-            .resolve("projects")
-            .resolve(projectPath.id.id)
-            .resolve("config")
     }
 
     /**
@@ -74,54 +52,55 @@ object ProjectLockUtils {
      * @return The PID as an integer, or null if lock file doesn't exist or can't be read
      */
     fun readPidFromLock(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Int? {
-        try {
-            val config = ideConfigRepository.load()
-            val configDir = if (isMainProject(config.mainProjectPath, projectPath)) {
-                config.baseConfigPath?.let { Paths.get(it) } ?: return null
-            } else {
-                getIsolatedConfigPath(ideConfigRepository.baseDir, projectPath)
-            }
-
-            val lockFile = configDir.resolve(".lock")
-            if (!lockFile.exists() || !lockFile.isRegularFile()) {
-                return null
-            }
-
-            val content = lockFile.readText().trim()
-            return content.toIntOrNull()
-        } catch (e: Exception) {
-            return null
+        return try {
+            val lockFile = lockFile(ideConfigRepository, projectPath) ?: return null
+            readPid(lockFile)
+        } catch (e: Throwable) {
+            null
         }
     }
 
     /**
-     * Checks if a process with the given PID is currently running.
-     * Uses platform-specific commands to verify process existence.
+     * Checks if a process with the given PID is currently running, using [ProcessHandle].
      *
      * @param pid The process ID to check
      * @return true if the process is running, false otherwise
      */
     fun isProcessRunning(pid: Int): Boolean {
         return try {
-            val osName = System.getProperty("os.name").lowercase()
-            val isWindows = osName.contains("win")
-
-            val process = if (isWindows) {
-                // Windows: Use tasklist to check if PID exists
-                ProcessBuilder("tasklist", "/FI", "PID eq $pid", "/NH")
-                    .redirectErrorStream(true)
-                    .start()
-            } else {
-                // Unix-like (macOS, Linux): Use ps to check if PID exists
-                ProcessBuilder("ps", "-p", pid.toString())
-                    .redirectErrorStream(true)
-                    .start()
-            }
-
-            val exitCode = process.waitFor()
-            exitCode == 0
-        } catch (e: Exception) {
+            ProcessHandle.of(pid.toLong()).map { it.isAlive }.orElse(false)
+        } catch (e: Throwable) {
             false
         }
     }
+
+    private fun lockFile(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Path? {
+        if (!MainProjectService.isMainProject(ideConfigRepository, projectPath)) {
+            return isolatedLockFile(ideConfigRepository, projectPath)
+        }
+        return DirectoryManager.getInstance(ideConfigRepository).getBaseConfigPath()?.resolve(LOCK_FILE)
+    }
+
+    private fun isolatedLockFile(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Path =
+        DirectoryManager.getInstance(ideConfigRepository)
+            .getProjectRoot(projectPath)
+            .resolve("config")
+            .resolve(LOCK_FILE)
+
+    /**
+     * A lock is live when it exists and, if it holds a PID, that process is alive.
+     * Locks with other content fall back to an existence check.
+     */
+    private fun isLockLive(lockFile: Path): Boolean {
+        if (!lockFile.isRegularFile()) return false
+        val pid = readPid(lockFile) ?: return true
+        return isProcessRunning(pid)
+    }
+
+    private fun readPid(lockFile: Path): Int? {
+        if (!lockFile.isRegularFile()) return null
+        return lockFile.readText().trim().toIntOrNull()
+    }
+
+    private const val LOCK_FILE = ".lock"
 }
