@@ -1,90 +1,108 @@
 package com.projectjuggler.synchelper
 
-import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ProjectManager
+import com.projectjuggler.core.SelfSyncResult
+import com.projectjuggler.core.SelfSyncResultStore
 import com.projectjuggler.core.SyncOptions
+import com.projectjuggler.core.SyncProgress
+import com.projectjuggler.core.SyncTypeNames
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.process.ProjectLauncher
+import java.time.Instant
+import kotlin.system.exitProcess
 
 /**
- * Minimal sync helper for self-shutdown sync operations.
- * Called by the plugin when syncing the currently running IDE.
- *
- * Usage: sync-helper --ide <ide-path> --path <project-path> [--all|--vmoptions|--config|--plugins]
- *    or: sync-helper --ide <ide-path> --all-projects [--all|--vmoptions|--config|--plugins]
+ * Sync helper for self-shutdown syncs: the plugin starts it to sync the isolated project the running IDE belongs
+ * to from outside. The helper stops that IDE through the stop request, syncs and relaunches it, and leaves a
+ * [SelfSyncResult] for the relaunched IDE to report. See [USAGE].
  */
 fun main(args: Array<String>) {
-    // Initialize Koin DI
     KoinInit.init()
+    exitProcess(run(args))
+}
 
-    val argMap = parseArgs(args)
+internal const val EXIT_OK = 0
+internal const val EXIT_FAILURE = 1
+internal const val EXIT_USAGE = 2
 
-    val idePath = argMap["ide"] ?: error("--ide <ide-path> is required")
-    val allProjects = "all-projects" in argMap
-    val pathString = argMap["path"]
-
-    if (!allProjects && pathString == null) {
-        error("Either --path or --all-projects is required")
+/**
+ * Runs one sync for [args] and returns the exit code: [EXIT_OK] when synced, [EXIT_FAILURE] when anything after
+ * argument parsing fails, [EXIT_USAGE] for invalid arguments (usage printed to stderr). Once the project is known,
+ * the outcome is written to its [SelfSyncResultStore].
+ */
+internal fun run(
+    args: Array<String>,
+    registry: IdeRegistry = IdeRegistry.getInstance(),
+    launcherFor: (IdeConfigRepository) -> ProjectLauncher = { ProjectLauncher.getInstance(it) },
+): Int {
+    val parsed = try {
+        parseArgs(args)
+    } catch (e: UsageException) {
+        System.err.println("sync-helper: ${e.message}")
+        System.err.println(USAGE)
+        return EXIT_USAGE
     }
-    if (allProjects && pathString != null) {
-        error("Cannot specify both --path and --all-projects")
-    }
+    println("[sync-helper] base dir ${IdeRegistry.getDefaultBaseDir()}, args ${args.joinToString(" ")}")
 
-    val syncAll = "all" in argMap
-    val syncVmOptions = syncAll || "vmoptions" in argMap
-    val syncConfig = syncAll || "config" in argMap
-    val syncPlugins = syncAll || "plugins" in argMap
+    val repository = registry.findRepository(parsed.idePath)
+        ?: return fail("No Project Juggler data for IDE ${parsed.idePath}")
+    val projectManager = ProjectManager.getInstance(repository)
+    val project = projectManager.get(projectManager.resolvePath(parsed.projectPath))
+        ?: return fail("Project not found: ${parsed.projectPath}")
 
-    val ideRegistry = IdeRegistry.getInstance()
-    val installation = IdeInstallation(idePath, "IDE")
-    val ideConfigRepository = ideRegistry.getRepository(installation)
-    val projectLauncher = ProjectLauncher.getInstance(ideConfigRepository)
-
-    val syncOptions = SyncOptions(
+    var restartError: String? = null
+    val options = SyncOptions(
         stopIfRunning = true,
         autoRestart = true,
-        shutdownTimeout = 60
+        shutdownTimeout = 60,
+        onProgress = { progress ->
+            println("[sync-helper] ${describe(progress)}")
+            if (progress is SyncProgress.Error) restartError = progress.message
+        },
     )
+    val syncTypes = SyncTypeNames.of(parsed.syncVmOptions, parsed.syncConfig, parsed.syncPlugins)
 
-    val projectManager = ProjectManager.getInstance(ideConfigRepository)
-    val projects: List<ProjectMetadata> = if (allProjects) {
-        projectManager.listSyncable().also {
-            if (it.isEmpty()) error("No tracked projects found")
-        }
-    } else {
-        val projectPath = projectManager.resolvePath(pathString!!)
-        val project = projectManager.get(projectPath)
-            ?: error("Project not found: $pathString")
-        listOf(project)
-    }
-
-    for (project in projects) {
-        projectLauncher.syncProject(
-            project,
-            syncVmOptions,
-            syncConfig,
-            syncPlugins,
-            syncOptions
+    return try {
+        launcherFor(repository).syncProject(
+            project, parsed.syncVmOptions, parsed.syncConfig, parsed.syncPlugins, options,
         )
+        println("[sync-helper] Synced ${syncTypes.joinToString(", ")} for ${project.name}")
+        writeResult(repository, project, SelfSyncResult(now(), syncTypes, succeeded = true, restartError = restartError))
+        EXIT_OK
+    } catch (e: Throwable) {
+        e.printStackTrace()
+        val message = e.message ?: e.javaClass.name
+        writeResult(
+            repository, project,
+            SelfSyncResult(now(), syncTypes, succeeded = false, message = message, restartError = restartError),
+        )
+        EXIT_FAILURE
     }
 }
 
-private fun parseArgs(args: Array<String>): Map<String, String?> {
-    val result = mutableMapOf<String, String?>()
-    var i = 0
-    while (i < args.size) {
-        when (val arg = args[i]) {
-            "--ide" -> if (i + 1 < args.size) result["ide"] = args[++i]
-            "--path" -> if (i + 1 < args.size) result["path"] = args[++i]
-            "--all-projects" -> result["all-projects"] = null
-            "--all" -> result["all"] = null
-            "--vmoptions" -> result["vmoptions"] = null
-            "--config" -> result["config"] = null
-            "--plugins" -> result["plugins"] = null
-        }
-        i++
-    }
-    return result
+private fun fail(message: String): Int {
+    System.err.println("sync-helper: $message")
+    return EXIT_FAILURE
 }
+
+/** Writes [result] for [project]; a failure is printed and does not change the exit code. */
+private fun writeResult(repository: IdeConfigRepository, project: ProjectMetadata, result: SelfSyncResult) {
+    try {
+        SelfSyncResultStore.getInstance(repository).write(project, result)
+    } catch (e: Throwable) {
+        System.err.println("sync-helper: failed to write the sync result for ${project.name}")
+        e.printStackTrace()
+    }
+}
+
+private fun describe(progress: SyncProgress): String = when (progress) {
+    is SyncProgress.Stopping -> "Waiting for the IDE to stop (${progress.secondsElapsed}s)"
+    SyncProgress.Syncing -> "Syncing"
+    SyncProgress.Restarting -> "Restarting the IDE"
+    is SyncProgress.Error -> "Error: ${progress.message}"
+}
+
+private fun now(): String = Instant.now().toString()

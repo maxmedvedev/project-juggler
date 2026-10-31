@@ -231,6 +231,12 @@ Opus 5.5 at the current effort, 4 sessions, in this order (each one depends on t
    `sync-helper/build.gradle.kts`, `core/src/testFixtures` (`KoinTestExtension`, `createTempDir`), the
    `SelfSyncResultStore` from session 1. Done when `./gradlew :sync-helper:test :plugin:compileKotlin` passes (the
    plugin still compiles; it passes `--all-projects` until session 3, which is acceptable in between). ~20%.
+   **Done** in `make the sync-helper strict and report its result`. Notes for later sessions: a new public
+   `SyncTypeNames.of(syncVmOptions, syncConfig, syncPlugins)` builds the `syncTypes` list (used by
+   `ProjectLauncher.syncProject` and the helper; reuse it in the plugin). A value flag followed by a `--` token
+   counts as missing its value. Exit codes are `EXIT_OK`/`EXIT_FAILURE`/`EXIT_USAGE` (internal consts in
+   `SyncHelperMain.kt`). The helper prints the base dir and args as its first stdout line, so the manual check can
+   read the base dir from `sync-helper.log`.
 3. **Plugin launch and planning.** Implements `BundledSyncHelper`, `Sync.kt` (no self-exit, `onFinished`, keep the
    `Process`; for now `reportHelperExit` only logs and shows `notification.self.sync.helper.exited` on a non-zero
    exit), `SyncPlanner`, `SyncAllProjectsAction`, the reworded bundle text, and their tests. Reads first:

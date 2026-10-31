@@ -77,11 +77,7 @@ class ProjectLauncher internal constructor(
             )
         }
 
-        val syncTypes = buildList {
-            if (syncVmOptions) add(SyncTypeNames.VM_OPTIONS)
-            if (syncConfig) add(SyncTypeNames.CONFIG)
-            if (syncPlugins) add(SyncTypeNames.PLUGINS)
-        }
+        val syncTypes = SyncTypeNames.of(syncVmOptions, syncConfig, syncPlugins)
 
         doWithLock(project, options, syncTypes) {
             doSync(project, syncVmOptions, syncConfig, syncPlugins)

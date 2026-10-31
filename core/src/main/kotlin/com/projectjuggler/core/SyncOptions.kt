@@ -51,6 +51,13 @@ object SyncTypeNames {
     const val VM_OPTIONS = "vmoptions"
     const val CONFIG = "config"
     const val PLUGINS = "plugins"
+
+    /** The names of the selected parts, in the order vmoptions, config, plugins. */
+    fun of(syncVmOptions: Boolean, syncConfig: Boolean, syncPlugins: Boolean): List<String> = buildList {
+        if (syncVmOptions) add(VM_OPTIONS)
+        if (syncConfig) add(CONFIG)
+        if (syncPlugins) add(PLUGINS)
+    }
 }
 
 /**
