@@ -75,30 +75,31 @@ private fun launchOrFocusUnderProgress(project: Project?, projectPath: ProjectPa
     val repository = IdeInstallationService.currentIdeConfigRepository
     val notificationHandler = IntelliJNotificationHandler(project)
 
-    for (step in planLaunch(repository, projectPath, PathManager.getConfigDir())) {
-        when (step) {
-            LaunchStep.OPEN_IN_CURRENT_IDE -> openProjectInCurrentIde(projectPath, project)
-            LaunchStep.FOCUS -> focusExistingProject(
-                projectPath = projectPath,
-                ideConfigRepository = repository,
-                notificationHandler = notificationHandler
-            )
+    when (planLaunch(repository, projectPath, PathManager.getConfigDir())) {
+        LaunchStep.OPEN_IN_CURRENT_IDE -> openProjectInCurrentIde(projectPath, project)
+        LaunchStep.FOCUS -> focusExistingProject(
+            projectPath = projectPath,
+            ideConfigRepository = repository,
+            notificationHandler = notificationHandler
+        )
 
-            LaunchStep.LAUNCH -> launchProject(
-                projectPath = projectPath,
-                ideConfigRepository = repository,
-                notificationHandler = notificationHandler
-            )
-        }
+        LaunchStep.LAUNCH -> launchProject(
+            projectPath = projectPath,
+            ideConfigRepository = repository,
+            notificationHandler = notificationHandler
+        )
     }
 }
 
 /**
- * Opens a project using standard IntelliJ APIs in the current IDE instance.
- * This opens the project in a new window within the same IDE process.
+ * Opens a project in the current IDE instance using standard IntelliJ APIs.
+ * If the project is already open here, its frame is focused; otherwise it opens in a new window within the same
+ * IDE process (`forceOpenInNewFrame` skips the platform's own "already open" check, hence the explicit lookup).
  */
 private fun openProjectInCurrentIde(projectPath: ProjectPath, currentProject: Project?) {
     application.executeOnPooledThread {
-        ProjectUtil.openOrImport(projectPath.path, currentProject, true)
+        ProjectUtil.findProject(projectPath.path)
+            ?.let { application.invokeLater { ProjectUtil.focusProjectWindow(it) } }
+            ?: ProjectUtil.openOrImport(projectPath.path, currentProject, true)
     }
 }

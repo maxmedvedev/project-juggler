@@ -47,14 +47,10 @@ Actions are thin; all run `update` on BGT. None requires an open project (`e.pro
 ### 4.2 `launchOrFocusProject(project, path)` (`actions/Launch.kt`)
 
 1. If `MainProjectService.shouldPromptForMainProject(repo, PathManager.getConfigDir())` (no main project, not suppressed, running in main instance): on EDT show the main-project prompt (§4.3), then on a pooled thread:
-   - `SetAsMain`: `setMainProject` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, `notification.success.set.main`) and open the project in the current IDE via `ProjectUtil.openOrImport(path, currentProject, forceOpenInNewFrame = true)`.
+   - `SetAsMain`: `setMainProject` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, `notification.success.set.main`) and open the project in the current IDE (`openProjectInCurrentIde`, focuses it if already open).
    - `OpenIsolated`: continue to step 2.
    - `Cancelled`: nothing.
-2. Otherwise queue a non-cancellable `Task.Backgroundable` titled `progress.opening.project` that runs, in order, the steps returned by `planLaunch(repo, path, PathManager.getConfigDir())` (`services/LaunchProject.kt`):
-   - `OPEN_IN_CURRENT_IDE` when the project is registered and its isolated `config` dir equals the current config dir, i.e. the user is reopening the project that this isolated IDE was started for: open it in the current IDE with `ProjectUtil.openOrImport` (asynchronous, on a pooled thread). It is always followed by one of the next two steps (gap 1).
-   - `FOCUS` when `ProjectLockUtils.isProjectOpen(repo, path)`: `focusExistingProject` (§4.4). Otherwise `LAUNCH`: `launchProject` (§4.5).
-
-`planLaunch` computes all steps before any runs. It calls `DirectoryManager.ensureProjectDirectories` for a registered project, so checking creates the isolated directories as a side effect.
+2. Otherwise queue a non-cancellable `Task.Backgroundable` titled `progress.opening.project` that runs the step returned by `planLaunch(repo, path, PathManager.getConfigDir())` (`services/LaunchProject.kt`). `planLaunch` picks one step. If the project belongs to the current IDE (`belongsToCurrentIde`: the main project in the main instance, or an isolated project whose `<projRoot>/config` is `PathManager.getConfigDir()`), open it here (`OPEN_IN_CURRENT_IDE`): focus its frame if already open (`ProjectUtil.findProject`), else `ProjectUtil.openOrImport` in a new frame (on a pooled thread). Else the main project is always launched (`LAUNCH`, `launchMain`; a running main IDE opens or focuses it). Else focus when `ProjectLockUtils.isProjectOpen(repo, path)` (`FOCUS`, `focusExistingProject`, §4.4), launch otherwise (`LAUNCH`, `launchProject`, §4.5).
 
 ### 4.3 Main-project prompt (`MainProjectPromptService`)
 
@@ -240,7 +236,8 @@ Covered, by spec:
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests |
 | `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args |
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, failure and cancellation |
-| `services/LaunchPlanTest` | `planLaunch` steps and its directory side effect |
+| `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, no directories created |
+| `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects |
 | `services/LaunchProjectTest` | launch, crash and start-failure notifications |
 | `services/FocusExistingProjectTest` | each focus outcome and its message |
 | `services/MainProjectActionsTest` | `setMainProject`, `clearMainProject` |
@@ -252,13 +249,12 @@ Covered, by spec:
 | `services/OpenProjectCopyTest` | `validateProjectCopy`, `createAndLaunchProjectCopy` success and worktree failure |
 | `services/IdeInstallationServiceTest` (test application) | current installation and repository in the sandbox IDE, auto-populated base paths, `VMOptionsCopy` files |
 
-Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `ProjectUtil.openOrImport`, `WindowFocuser` (core), and the actions and startup activities themselves.
+Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `WindowFocuser` (core), and the actions and startup activities themselves.
 
-Gaps pinned by tests (the test name carries the number): 1 (`LaunchPlanTest`), 2 (`IsolatedInstanceTest`), 8 (`RecentProjectPopupBuilderTest`), 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
+Gaps pinned by tests (the test name carries the number): 2 (`IsolatedInstanceTest`), 8 (`RecentProjectPopupBuilderTest`), 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
 
 ## Known gaps
 
-1. `launchOrFocusUnderProgress` does not return after `isSameIdeInstance` opens the project in-process, so it also runs the focus/launch branch. In practice the isolated `.lock` exists, so it tries to focus its own window.
 2. `IsolatedInstance.projectIdFromConfigPath` (used by sync planning and `ShutdownSignalService`) splits the path on `/`; on Windows (`\`) isolated detection fails, so self-shutdown sync and stop signals never trigger there.
 3. Hardcoded user-visible strings: self-shutdown notifications ("IntelliJ will close to sync ... and reopen automatically...", "Failed to initiate self-shutdown sync: ..."), "Open with <IDE>" label, `"Unknown error"` fallbacks. `SyncType.displayName` values are also hardcoded and interpolated into bundle messages.
 4. `performSelfShutdownSync` catches `Exception`, not `Throwable` (as do `performSyncWithProgress` and `ShutdownSignalService`'s metadata load and polling). `launchProject` catches `Throwable` without rethrowing `ControlFlowException`.
