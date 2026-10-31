@@ -4,17 +4,21 @@
     <vendor>Max Medvedev</vendor>
 
     <description><![CDATA[
-        Allows opening any project in a new IntelliJ IDEA instance with an isolated configuration.
-        It helps keep your IDE caches clean and free of unnecessary stuff.<br>
+        Opens any project in its own IntelliJ instance with an isolated configuration: separate config, system,
+        logs and plugins directories per project, copied from your main IDE on first open. Caches of one project
+        never slow down another.<br>
         <br>
-        Use `Cmd+Shift+P`/`Ctrl+Shift+P` to open the Recent Juggled Projects ("Recent Juggled Projects" action).<br>
-        Use "Browse..." to open a new project.<br>
-        Use recent project items to reopen a project or switch to an already opened project.<br>
+        Press <code>Cmd+Shift+P</code>/<code>Ctrl+Shift+P</code> for "Recent Juggled Projects": reopen or switch to a
+        project, browse for a new one, or open it with another installed IDE.<br>
         <br>
-        <p>Details:</p>
         <ul>
-            <li>The configuration is copied from the main IJ instance.</li>
-            <li>Each project is open with the same configuration each time.</li>
+            <li>Sync VM options, configuration or plugins from the main IDE to one or all projects; a running
+                instance closes and reopens by itself, including the one you are working in.</li>
+            <li>Mark one project as the main project; it opens in the main IDE with the base settings.</li>
+            <li>"Open a Project Copy" creates a git worktree on a new branch and opens it isolated.</li>
+            <li>Offers a plugin sync after an IDE update, warns when the stored base paths drift, and imports
+                recent projects from the IDE.</li>
+            <li>Settings | Tools | Project Juggler holds the main project, base paths and limits.</li>
         </ul>
     ]]></description>
 
@@ -59,7 +63,7 @@
         <action id="com.projectjuggler.plugin.OpenProjectCopy"
                 class="com.projectjuggler.plugin.actions.OpenProjectCopyAction"
                 icon="AllIcons.Actions.Copy">
-            <add-to-group group-id="FileMenu" anchor="after" relative-to-action="com.projectjuggler.plugin.OpenWithProjectJuggler"/>
+            <add-to-group group-id="FileMenu" anchor="after" relative-to-action="com.projectjuggler.plugin.ShowRecentProjects"/>
         </action>
     </actions>
 </idea-plugin>

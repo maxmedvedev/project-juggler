@@ -57,7 +57,7 @@ Actions are thin; all run `update` on BGT. `actionPerformed` shows choosers/dial
 
 ### 4.3 Main-project prompt (`MainProjectPromptService`)
 
-Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" checkbox. Result mapping: Yes -> `SetAsMain`, No -> `OpenIsolated`, anything else -> `Cancelled`. When the checkbox is selected and the exit code is not Cancel, `dontAskAboutMainProject = true` is persisted before returning. The settings page's "Ask to choose a main project" checkbox (§7a) turns it back off. Must be called on EDT; the dialog has no parent project.
+Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" checkbox. Result mapping: Yes -> `SetAsMain`, No -> `OpenIsolated`, anything else -> `Cancelled`. When the checkbox is selected and the exit code is not Cancel, `dontAskAboutMainProject = true` is persisted before returning (a config write on EDT, gap 18). The settings page's "Ask to choose a main project" checkbox (§7a) turns it back off. Must be called on EDT; the dialog has no parent project.
 
 ### 4.4 Focus (`services/FocusExistingProject.kt`)
 
@@ -146,7 +146,7 @@ On a pooled thread, `SyncPlanner.forAllProjects(repo, syncType)`:
 
 ### 6.3 `IsolatedInstance` (`services/IsolatedInstance.kt`)
 
-`projectIdFromConfigPath(configPath)` splits the path on both `/` and `\` (the value is written by `Path.toString()` on the launching OS) and returns `<id>` when it contains `projects/<id>/config`, null otherwise. `currentProjectId()` applies it to the `idea.config.path` system property. `isCurrentProject(repo, path, currentProjectId = currentProjectId())` is true when the target project's id from metadata equals the current id; false when the property is absent or the target has no metadata. This is the test for "syncing this would stop me". `SyncPlanner` and `ShutdownSignalService` (§10) both use it.
+`projectIdFromConfigPath(configPath)` splits the path on both `/` and `\` (the value is written by `Path.toString()` on the launching OS) and returns `<id>` from the first `projects` segment followed by `<id>/config`, null otherwise (gap 17). `currentProjectId()` applies it to the `idea.config.path` system property. `isCurrentProject(repo, path, currentProjectId = currentProjectId())` is true when the target project's id from metadata equals the current id; false when the property is absent or the target has no metadata. This is the test for "syncing this would stop me". `SyncPlanner` and `ShutdownSignalService` (§10) both use it.
 
 ### 6.4 `performSyncWithProgress`
 
@@ -158,7 +158,7 @@ Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `s
 
 1. Info notification (passed by the caller).
 2. A non-cancellable `Task.Backgroundable` titled `progress.sync.helper.starting` subscribes an `AppLifecycleListener` on the application message bus that records `appWillBeClosed`, then calls `BundledSyncHelper.start(helperArgs)` (§9): it extracts if needed, starts the helper on the IDE's JVM with stdout and stderr redirected to `<IDE log dir>/sync-helper.log` (`PathManager.getLogDir()`, overwritten per run; `<projRoot>/logs` in an isolated instance) and stdin closed, and keeps the `Process`. The IDE does not exit by itself: the helper finds it running (`config/.lock`), writes `stop-request.json`, and `ShutdownSignalService` (§10) closes it; the helper then syncs and relaunches it (sync-helper-spec §4).
-3. `process.onExit()` disconnects the listener and calls `reportHelperExit`: when the app is closing (`appWillBeClosed` seen) or disposed, nothing (the relaunched IDE reports at startup, §10b); otherwise the helper exited while this IDE still runs (it failed before stopping it, or the 60 s shutdown timed out), and `reportSelfSyncResult` (§10b) reports the result file or the exit code for `IsolatedInstance.currentProjectId()`. `Application.isExitInProgress` is not used because it is internal API.
+3. `process.onExit()` disconnects the listener and calls `reportHelperExit`: when the app is closing (`appWillBeClosed` seen) or disposed, nothing (the relaunched IDE reports at startup, §10b); otherwise the helper exited while this IDE still runs (it failed before stopping it, or the 60 s shutdown timed out), and `reportSelfSyncResult` (§10b) reports the result file or the exit code for `IsolatedInstance.currentProjectId()`. `Application.isExitInProgress` is not used because it is internal API. The disconnect runs outside `reportHelperExit`'s `try`, so a failure there is swallowed by the future (gap 19).
 4. `onThrowable` (any failure in extraction or spawn) -> logged warning and `notification.error.sync.self.shutdown.failed`; the IDE keeps running. Cancellation cannot happen (non-cancellable).
 
 ## 7. IDE path drift (`IdePathSyncDetector`)
@@ -340,3 +340,6 @@ Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 ## Known gaps
 
 16. Sync all projects with no syncable target (only the main project tracked) still runs an in-process sync of zero projects and reports success for 0 projects.
+17. `IsolatedInstance.projectIdFromConfigPath` uses the first `projects` segment of `idea.config.path`. When `<base>` itself contains a `projects` segment (e.g. `-Dproject.juggler.base.dir=~/projects/pj`), the id is null and an isolated instance behaves as the main one: no stop-request polling, a self-sync is planned in process, and `autoPopulateIfNeeded` may store isolated dirs as base paths. Three different tests decide "isolated": this parser, `DirectoryManager.isIsolatedConfigDir` on `PathManager.getConfigDir()` and `MainProjectService.isRunningInMainInstance`.
+18. `showMainProjectPrompt` writes `dontAskAboutMainProject` to `config.json` on EDT (§4.3).
+19. In `performSelfShutdownSync`, `connection.disconnect()` in the `onExit` callback runs outside the guarded block; if the application is disposed by then, the exception is lost in the `CompletableFuture` and nothing is logged (§6.5).
