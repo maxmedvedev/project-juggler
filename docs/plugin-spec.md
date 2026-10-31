@@ -166,11 +166,11 @@ It is only invoked from the popup item; nothing checks at startup despite the cl
 
 ## 8. Open a Project Copy (git worktree)
 
-`OpenProjectCopyAction`, all on the calling thread until the final step:
+`OpenProjectCopyAction` shows `OpenProjectCopyDialog`, then hands the input to a pooled thread:
 
-1. Folder chooser for source (`file.chooser.source.*`), folder chooser for destination (`file.chooser.destination.*`), input dialog for branch name (`input.dialog.branch.*`). Cancel or blank branch aborts silently.
-2. Resolve both paths with `ProjectManager.resolvePath`, then `validateProjectCopy(source, dest)` (`services/OpenProjectCopy.kt`) returns the message of the first failing check, shown as an error notification: source is a directory (`notification.error.not.directory`), source is a git repo (`GitWorktreeManager.isGitRepository`, `notification.error.not.git.repository`), destination does not exist (`notification.error.destination.exists`). The messages name the resolved paths.
-3. `notification.info.worktree.started`, then on a pooled thread `createAndLaunchProjectCopy(repo, source, dest, branch, IntelliJNotificationHandler(project))`: `GitWorktreeManager.createWorktree(source, dest, branch, null)` and `launcher.launch(dest)` (no `onFailure`, no main-project prompt, no focus check). Success -> `notification.success.worktree.launched` (destination name, branch); any `Throwable` -> `notification.error.worktree.failed` plus a logged error; `ControlFlowException` is rethrown. The default launcher is resolved before the `try`.
+1. `OpenProjectCopyDialog` (`dialog.project.copy.*`, a `DialogWrapper`) has three fields: source repository (text with folder browse, `file.chooser.source.*`), new branch, and worktree folder. The worktree folder follows `suggestDestination(source, branch)` = `<source parent>/<source name>-<branch with '/' replaced by '-'>` until the user edits it; its browse button (`file.chooser.destination.*`) picks the *parent* folder and appends the current (or suggested) folder name, since a folder chooser cannot select a folder that does not exist yet. Cancel does nothing. No Koin, no I/O while the dialog is open.
+2. On OK, `doValidate` runs `validateProjectCopyInput` (`services/OpenProjectCopy.kt`) and shows the first failure inline on its field; the dialog stays open. Checks in field order, values trimmed, paths resolved with `PathUtils.resolveAbsolute` (same as `ProjectManager.resolvePath`): blank source (`dialog.project.copy.error.blank.source`), unparsable path (`dialog.project.copy.error.invalid.path`), source is a directory (`notification.error.not.directory`), source is a git repo (`GitWorktreeManager.isGitRepository`, a `.git` stat; `notification.error.not.git.repository`), blank branch, blank or unparsable destination, destination does not exist (`notification.error.destination.exists`). Messages name the trimmed text as typed. These are at most three local file stats and never a git process, so they run on EDT by design.
+3. On a pooled thread, `openProjectCopy(input, IntelliJNotificationHandler(project))` re-validates (authoritative; an `Invalid` result becomes an error notification and stops), posts `notification.info.worktree.started` (source folder name), resolves the repository (`KoinInit.init(pluginModule)`, `IdeInstallationService.currentIdeConfigRepository`) and calls `createAndLaunchProjectCopy(repo, request, handler)`: `GitWorktreeManager.createWorktree(source, dest, branch, null)` and `launcher.launch(dest)` (no `onFailure`, no main-project prompt, no focus check). Success -> `notification.success.worktree.launched` (destination name, branch); any `Throwable` in either function -> `notification.error.worktree.failed` plus a logged error; control-flow exceptions are rethrown. The default launcher is resolved before the `try`.
 
 ## 9. Bundled sync-helper (`BundledSyncHelper`)
 
@@ -207,7 +207,9 @@ Because the build number is stored before the checks, only the first project ope
 | File choosers, `Messages` dialogs, main-project prompt | EDT (dialogs) |
 | `showFileChooserAndLaunch` config I/O (`resolvePath`, Koin init) | caller (EDT for actions) |
 | `launchOrFocusUnderProgress`, `performSyncWithProgress` | `Task.Backgroundable` |
-| Popup building, import, remove, worktree | pooled thread |
+| Open a Project Copy dialog validation (local stats) | EDT |
+| Popup building, import, remove | pooled thread |
+| Open a Project Copy worktree validation, creation, launch, Koin init | pooled thread |
 | Set/Unset main project config write and stale-entry cleanup | pooled thread |
 | `ShutdownSignalService` polling | `Dispatchers.IO` coroutine |
 | `PluginSyncOnUpdateActivity` (`syncPluginsOnIdeUpdate`), `StaleMainProjectCleanupActivity` cleanup | `Dispatchers.IO` |
@@ -249,16 +251,15 @@ Covered, by spec:
 | `services/IdePathSyncDetectorTest` | `detectMismatches`, `updatePaths`, `autoPopulateIfNeeded` |
 | `services/SyncPluginsOnIdeUpdateTest` | main-instance check, build bookkeeping, plugin sync of isolated projects only, per-project and outer failures |
 | `services/StaleMainProjectCleanupTest` | `cleanStaleMainProjectEntryIfMainInstance` in isolated and main instances |
-| `services/OpenProjectCopyTest` | `validateProjectCopy`, `createAndLaunchProjectCopy` success and worktree failure |
+| `services/OpenProjectCopyTest` | `validateProjectCopyInput` per field and check, `suggestDestination`, `openProjectCopy` re-check failure, `createAndLaunchProjectCopy` success and worktree failure |
 | `services/IdeInstallationServiceTest` (test application) | current installation and repository in the sandbox IDE, auto-populated base paths, `VMOptionsCopy` files |
 
-Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `WindowFocuser` (core), and the actions and startup activities themselves.
+Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
 
 Gaps pinned by tests (the test name carries the number): 8 (`RecentProjectPopupBuilderTest`), 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
 
 ## Known gaps
 
-5. `OpenProjectCopyAction` uses a folder chooser for the destination, which can only select existing directories, while the validation requires the destination not to exist. The user must type a new path into the chooser for the flow to succeed. Validation and git checks run on EDT.
 6. `OpenWithIdeSubAction` is unimplemented (`TODO()`); multi-IDE launching is not reachable from the UI even though the data model supports it.
 7. Remove Project has no confirmation and deletes the whole isolated directory; the popup is reshown before deletion finishes, so a project may still appear briefly. `removeRecentProject` removes from recents twice (eagerly and inside `cleanProject`).
 8. Popup shows up to 20 recents while core caps the index at `maxRecentProjects` (10 by default), so the limit is effectively 10. The main project item's `isOpen` relies on `isProjectOpen`, which is false when `baseConfigPath` is unset.

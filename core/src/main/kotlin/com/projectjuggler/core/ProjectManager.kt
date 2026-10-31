@@ -99,15 +99,9 @@ class ProjectManager internal constructor(
      * @param rawPath The raw path string (may contain tildes, relative paths)
      * @return The resolved Path object with tilde expansion applied
      */
-    fun resolvePath(rawPath: String): ProjectPath {
-        val path = Path.of(rawPath)
-        val resolved = PathUtils.expandTilde(path)
-
-        // Normalize to absolute canonical path for consistent ID generation
-        val normalized = resolved.toAbsolutePath().normalize()
-
-        return ProjectPath(normalized.toString())
-    }
+    fun resolvePath(rawPath: String): ProjectPath =
+        // Normalized absolute path for consistent ID generation
+        ProjectPath(PathUtils.resolveAbsolute(rawPath).toString())
 
     /**
      * Validates that a raw path string resolves to an existing filesystem path.

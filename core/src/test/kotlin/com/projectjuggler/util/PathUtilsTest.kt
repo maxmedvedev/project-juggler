@@ -1,5 +1,6 @@
 package com.projectjuggler.util
 
+import com.projectjuggler.platform.Platform
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.nulls.shouldBeNull
@@ -101,5 +102,16 @@ class PathUtilsTest : StringSpec({
 
     "projectRoot should return null for a parentless path" {
         PathUtils.projectRoot(Path("MODULE.bazel")).shouldBeNull()
+    }
+
+    "resolveAbsolute should return an absolute normalized path" {
+        val result = PathUtils.resolveAbsolute("a/../b")
+
+        result.isAbsolute shouldBe true
+        result shouldBe Path("b").toAbsolutePath()
+    }
+
+    "resolveAbsolute should expand a standalone tilde".config(enabled = Platform.isUnix()) {
+        PathUtils.resolveAbsolute("~") shouldBe Path(System.getProperty("user.home")).toAbsolutePath().normalize()
     }
 })

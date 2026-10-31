@@ -42,6 +42,14 @@ object PathUtils {
     }
 
     /**
+     * Resolves a raw path string the way every user-entered path is resolved: tilde expansion,
+     * then absolute, then normalized.
+     *
+     * @throws java.nio.file.InvalidPathException if [rawPath] is not a valid path
+     */
+    fun resolveAbsolute(rawPath: String): Path = expandTilde(Path.of(rawPath)).toAbsolutePath().normalize()
+
+    /**
      * The directory a project is rooted at.
      *
      * Projects can be opened by selecting a file (e.g. `MODULE.bazel`) instead of a directory; in
