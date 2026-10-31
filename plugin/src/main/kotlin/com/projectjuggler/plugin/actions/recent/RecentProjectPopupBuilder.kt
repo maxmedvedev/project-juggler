@@ -1,6 +1,5 @@
 package com.projectjuggler.plugin.actions.recent
 
-import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.util.application
@@ -15,6 +14,7 @@ import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.CurrentIdePaths
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IdePathSyncDetector
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.util.GitUtils
@@ -36,7 +36,7 @@ internal class RecentProjectPopupBuilder(
                 popup.showInFocusCenter()
             }
         } catch (ex: Throwable) {
-            if (ex is ControlFlowException) throw ex
+            ex.rethrowIfControlFlow()
 
             val message = ProjectJugglerBundle.message("notification.error.recent.projects.load.failed", ex.userMessage())
             showErrorNotification(message, project)

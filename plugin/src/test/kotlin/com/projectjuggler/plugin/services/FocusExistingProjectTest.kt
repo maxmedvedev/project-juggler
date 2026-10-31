@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.services
 
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.di.KoinTestExtension
@@ -10,6 +11,7 @@ import com.projectjuggler.plugin.test.testRepository
 import com.projectjuggler.process.WindowFocuser
 import com.projectjuggler.test.createTempDir
 import com.projectjuggler.util.ProjectLockUtils
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -97,5 +99,28 @@ class FocusExistingProjectTest : StringSpec({
         focusAndCollectErrors(repository) shouldContainExactly listOf(
             ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, "boom")
         )
+    }
+
+    "an error that is not an exception is reported too" {
+        val repository = newRepository()
+        markIsolatedInstanceOpen(repository, projectPath)
+        mockkObject(WindowFocuser)
+        every { WindowFocuser.focus(livePid) } throws AssertionError("x")
+
+        focusAndCollectErrors(repository) shouldContainExactly listOf(
+            ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, "x")
+        )
+    }
+
+    "a control-flow exception while focusing propagates without a notification" {
+        val repository = newRepository()
+        markIsolatedInstanceOpen(repository, projectPath)
+        mockkObject(WindowFocuser)
+        every { WindowFocuser.focus(livePid) } throws ProcessCanceledException()
+        val handler = RecordingNotificationHandler()
+
+        shouldThrow<ProcessCanceledException> { focusExistingProject(projectPath, repository, handler) }
+
+        handler.errors.shouldBeEmpty()
     }
 })

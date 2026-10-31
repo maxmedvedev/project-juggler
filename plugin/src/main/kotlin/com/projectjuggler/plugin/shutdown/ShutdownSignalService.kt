@@ -8,9 +8,9 @@ import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.di.pluginModule
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IsolatedInstance
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,7 +57,8 @@ class ShutdownSignalService(scope: CoroutineScope) {
         // Load the ProjectMetadata from the config repository
         return try {
             IdeInstallationService.currentIdeConfigRepository.loadProjectMetadata(projectId)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            e.rethrowIfControlFlow()
             log.error("Error loading project metadata for ID: ${projectId.id}", e)
             null
         }
@@ -75,8 +76,8 @@ class ShutdownSignalService(scope: CoroutineScope) {
             while (isActive) {
                 try {
                     checkForStopSignal(project)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
+                } catch (e: Throwable) {
+                    e.rethrowIfControlFlow()
                     log.error("Error checking for stop signal", e)
                 }
 
@@ -105,8 +106,8 @@ class ShutdownSignalService(scope: CoroutineScope) {
             withContext(Dispatchers.Main) {
                 initiateGracefulShutdown(signal)
             }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
+        } catch (e: Throwable) {
+            e.rethrowIfControlFlow()
             log.error("Error processing stop signal", e)
         }
     }
@@ -131,6 +132,7 @@ class ShutdownSignalService(scope: CoroutineScope) {
             val signalManager = ShutdownSignalManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
             signalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)
         } catch (e: Throwable) {
+            e.rethrowIfControlFlow()
             log.error("Error cleaning up stale signals", e)
         }
     }

@@ -6,7 +6,8 @@ Conventions:
 
 - "Current IDE" is the IntelliJ process the plugin runs in. "Current repository" is `IdeInstallationService.currentIdeConfigRepository`, the `IdeConfigRepository` for that installation.
 - "Main instance" is an IDE whose config dir is the base config dir (core-spec §7.2). "Isolated instance" is an IDE launched by Project Juggler with `idea.config.path` under `<projRoot>/config`.
-- Message keys refer to `messages/ProjectJugglerBundle.properties`. Any user-visible string not listed there is hardcoded in code and flagged in the gaps.
+- Message keys refer to `messages/ProjectJugglerBundle.properties`. Any user-visible string not listed there is hardcoded in code and flagged in the gaps. Exceptions without a message are shown as `error.unknown`.
+- Every `catch` takes `Throwable`, calls `rethrowIfControlFlow()` (`plugin/Utils.kt`) first, so `ControlFlowException` and `CancellationException` always propagate, and logs; sites that also notify the user log a warning.
 - `<base>`, `<ideDir>`, `<projRoot>` as in the core spec.
 
 ## 1. Scope and packaging
@@ -58,11 +59,11 @@ Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" c
 
 ### 4.4 Focus (`services/FocusExistingProject.kt`)
 
-`readPidFromLock` -> null means `notification.error.focus.no.pid`. `isProcessRunning(pid)` false means `notification.error.focus.process.not.found`. Then `WindowFocuser.focus(pid)`; each non-`Success` result maps to one error message (`focus.process.not.found`, `focus.window.not.found`, `focus.failed`, `focus.tool.missing`). Any other exception -> `focus.exception`. `ControlFlowException` is rethrown. Success is silent.
+`readPidFromLock` -> null means `notification.error.focus.no.pid`. `isProcessRunning(pid)` false means `notification.error.focus.process.not.found`. Then `WindowFocuser.focus(pid)`; each non-`Success` result maps to one error message (`focus.process.not.found`, `focus.window.not.found`, `focus.failed`, `focus.tool.missing`). Any other `Throwable` -> `focus.exception` (logged as a warning). `ControlFlowException` is rethrown. Success is silent.
 
 ### 4.5 Launch (`services/LaunchProject.kt`)
 
-`launchProject(path, repo, notificationHandler, launcher = ProjectLauncher.getInstance(repo))` calls `launcher.launch(path, onFailure)`. On a `LaunchFailure` within the core's 10 s window, `notification.error.launch.crashed` with project name, exit code and up to 500 chars of stderr (or stdout, or `&lt;No output&gt;`). Any `Throwable` from `launch` -> `notification.error.launch.failed` (a failure to resolve the default launcher propagates, it is evaluated before the `try`). Core decides between main launch and isolated launch (core-spec §7).
+`launchProject(path, repo, notificationHandler, launcher = ProjectLauncher.getInstance(repo))` calls `launcher.launch(path, onFailure)`. On a `LaunchFailure` within the core's 10 s window, `notification.error.launch.crashed` with project name, exit code and up to 500 chars of stderr (or stdout, or `&lt;No output&gt;` (`notification.error.launch.no.output`)). Any `Throwable` from `launch` except `ControlFlowException` -> `notification.error.launch.failed` (logged as a warning) (a failure to resolve the default launcher propagates, it is evaluated before the `try`). Core decides between main launch and isolated launch (core-spec §7).
 
 ### 4.6 Notifications
 
@@ -119,7 +120,7 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
 ## 6. Sync from the plugin (`actions/Sync.kt`)
 
-`SyncType` is a sealed class: `All`, `VmOptions`, `Config`, `Plugins`, with `displayName` ("all settings", "VM options", "configuration", "plugins"), `cliFlag` (`--all`, `--vmoptions`, `--config`, `--plugins`, the sync-helper flag) and three derived booleans passed to `ProjectLauncher.syncProject`.
+`SyncType` is a sealed class: `All`, `VmOptions`, `Config`, `Plugins`, with `displayName` from bundle keys `sync.type.*` ("all settings", "VM options", "configuration", "plugins"), `cliFlag` (`--all`, `--vmoptions`, `--config`, `--plugins`, the sync-helper flag) and three derived booleans passed to `ProjectLauncher.syncProject`.
 
 Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarget` and dispatch on it: `InProcess(projects)` -> `performSyncWithProgress`, `SelfShutdown(helperArgs)` -> `performSelfShutdownSync` (§6.5), `NoTarget` -> nothing. `helperArgs` is `--ide <executablePath> (--path <projectPath> | --all-projects) <cliFlag>`.
 
@@ -127,14 +128,14 @@ Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarge
 
 `SyncPlanner.forProject(repo, path, syncType)`:
 
-- If `IsolatedInstance.isCurrentProject(repo, path)` (§6.3): `SelfShutdown` with helper args `--ide <executablePath> --path <projectPath> <cliFlag>`.
+- If `IsolatedInstance.isCurrentProject(repo, path)` (§6.3): `SelfShutdown` with helper args `--ide <executablePath> --path <projectPath> <cliFlag>`; the info text is `notification.info.sync.self.shutdown.project`.
 - Else load metadata (`NoTarget` if missing, the action silently returns) and `InProcess` for that one project. Title `progress.sync.project.type`, success `notification.success.sync.single.project.type`, failure `notification.error.sync.settings.failed`.
 
 ### 6.2 All projects (`SyncAllProjectsAction`)
 
 `SyncPlanner.forAllProjects(repo, syncType)`:
 
-- Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If any target's id is the current isolated project id, `SelfShutdown` with `--ide <executablePath> --all-projects <cliFlag>`.
+- Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If any target's id is the current isolated project id, `SelfShutdown` with `--ide <executablePath> --all-projects <cliFlag>`; the info text is `notification.info.sync.self.shutdown.all`.
 - Else `InProcess` over the targets, possibly empty (gap 16). Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed`.
 
 ### 6.3 `IsolatedInstance` (`services/IsolatedInstance.kt`)
@@ -143,21 +144,21 @@ Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarge
 
 ### 6.4 `performSyncWithProgress`
 
-Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one. The first exception propagates out of `syncProjects`, aborting the remaining projects; the task catches `Exception`, rethrows `ControlFlowException` and shows the error notification. Projects that are running are stopped via the signal protocol and restarted (core-spec §8).
+Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one. The first `Throwable` propagates out of `syncProjects`, aborting the remaining projects; the task rethrows `ControlFlowException`, logs a warning and shows the error notification. Projects that are running are stopped via the signal protocol and restarted (core-spec §8).
 
 ### 6.5 Self-shutdown sync (`performSelfShutdownSync`)
 
-1. Info notification (hardcoded text, see gaps).
+1. Info notification (passed by the caller).
 2. `BundledSyncHelper.getExecutable()` (§9).
 3. Start `<executable> <helperArgs>` (the `SyncType.cliFlag` is already the last helper arg) with inherited IO, no wait.
 4. `Thread.sleep(100)`, then `ApplicationManager.getApplication().exit()` on EDT. The IDE exits; the helper detects the lock release, syncs and relaunches.
-5. Any `Exception` -> hardcoded error notification. The IDE does not exit in that case.
+5. Any `Throwable` except `ControlFlowException` -> `notification.error.sync.self.shutdown.failed`, logged as a warning. The IDE does not exit in that case.
 
 ## 7. IDE path drift (`IdePathSyncDetector`)
 
 Stored base paths can go stale after an IDE update or relocation. The running IDE's paths are a `CurrentIdePaths(configDir, pluginsDir, vmOptionsFile)` (`services/CurrentIdePaths.kt`); `CurrentIdePaths.detect()` reads `PathManager.getConfigDir()`, `PathManager.getPluginsDir()` and `VMOptionsCopy.getUserOptionsFile() ?: getPlatformOptionsFile()`. It is the default argument of `detectMismatches`, `updatePaths` and `autoPopulateIfNeeded` (§2), so it is evaluated before their `try`.
 
-`detectMismatches(repo, current)` returns an empty list when `current.configDir` is under `repo.baseDir` (isolated instance). (Core's `DirectoryManager.isIsolatedConfigDir` implements the stricter, normalized `<ideDir>/projects/` rule; this check could delegate to it.) Otherwise it compares, as strings, `baseConfigPath`, `basePluginsPath` and `baseVmOptionsPath` to the three current paths, each only when the stored value is non-null. Labels: "Config", "Plugins", "VM Options".
+`detectMismatches(repo, current)` returns an empty list when `current.configDir` is under `repo.baseDir` (isolated instance). (Core's `DirectoryManager.isIsolatedConfigDir` implements the stricter, normalized `<ideDir>/projects/` rule; this check could delegate to it.) Otherwise it compares, as strings, `baseConfigPath`, `basePluginsPath` and `baseVmOptionsPath` to the three current paths, each only when the stored value is non-null. Labels come from `ide.path.kind.*` ("Config", "Plugins", "VM Options").
 
 `updatePaths(repo, notificationHandler, current)` overwrites config and plugins paths, overwrites the vmoptions path only if the current file exists, refreshes the vmoptions hash when it exists, and notifies `notification.success.paths.updated` or `notification.error.paths.update.failed` (plus a logged error) through the handler; `UpdatePathsAction` passes `IntelliJNotificationHandler(project)`.
 
@@ -180,7 +181,7 @@ The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one 
 ## 10. Shutdown signal handling (`shutdown/`)
 
 - `ShutdownSignalServiceStartupActivity` is a `ProjectActivity`; it only instantiates the app-level `ShutdownSignalService`. The service therefore starts when the first project opens, not at application start.
-- `ShutdownSignalService.init`: init Koin; `IsolatedInstance.currentProjectId()` (§6.3); load its metadata from the current repository (`Exception` caught and logged). If this is not an isolated instance (or metadata fails to load), monitoring is disabled and logged.
+- `ShutdownSignalService.init`: init Koin; `IsolatedInstance.currentProjectId()` (§6.3); load its metadata from the current repository (`Throwable` caught and logged). If this is not an isolated instance (or metadata fails to load), monitoring is disabled and logged.
 - Monitoring (coroutine on `Dispatchers.IO`): `ShutdownSignalManager.cleanupStaleSignals(project, 5)` once, then every 1 s `readStopRequest`. Whether to act is decided by `StopRequestTracker.shouldAct(signal)` (`shutdown/StopRequestTracker.kt`): true once per `requestId` (in-memory set) and only if its timestamp is at most 5 whole minutes old (the age is compared in minutes, so 5 min 59 s still counts); stale or unparseable timestamps are logged, never acted on and never remembered. Action: `ApplicationManager.getApplication().exit()` on the main dispatcher, which runs the normal save/confirm flow. `autoRestart` and `syncTypes` in the signal are logged but otherwise unused; restart is the sync initiator's job. Errors are logged and polling continues.
 
 ## 10a. Stale main-project entry cleanup (`startup/StaleMainProjectCleanupActivity`)
@@ -226,6 +227,8 @@ Covered, by spec:
 
 | Spec | Covers |
 |---|---|
+| `UtilsTest` | `rethrowIfControlFlow`, `userMessage` |
+| `ProjectJugglerBundleTest` | formerly hardcoded keys are present, `SyncType` names come from the bundle |
 | `actions/recent/SyncTypeTest` | sync booleans, `cliFlag`, `displayName` per type |
 | `actions/recent/RecentProjectPopupBuilderTest` | `buildItems`: item order, main project, filtering, path-mismatch item, git branch, `isOpen`, toggle text |
 | `actions/recent/RecentProjectPopupTest` | `projectSubActions`, speed-search and list texts |
@@ -238,8 +241,8 @@ Covered, by spec:
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, failure and cancellation |
 | `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, no directories created |
 | `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects |
-| `services/LaunchProjectTest` | launch, crash and start-failure notifications |
-| `services/FocusExistingProjectTest` | each focus outcome and its message |
+| `services/LaunchProjectTest` | launch, crash and start-failure notifications, control-flow exceptions propagate |
+| `services/FocusExistingProjectTest` | each focus outcome and its message, non-`Exception` errors, control-flow exceptions propagate |
 | `services/MainProjectActionsTest` | `setMainProject`, `clearMainProject` |
 | `services/RemoveProjectTest` | `removeRecentProject` |
 | `services/RecentProjectsImportTest` | `importableProjects`, `importProjects` |
@@ -255,8 +258,6 @@ Gaps pinned by tests (the test name carries the number): 8 (`RecentProjectPopupB
 
 ## Known gaps
 
-3. Hardcoded user-visible strings: self-shutdown notifications ("IntelliJ will close to sync ... and reopen automatically...", "Failed to initiate self-shutdown sync: ..."), "Open with <IDE>" label, `"Unknown error"` fallbacks. `SyncType.displayName` values are also hardcoded and interpolated into bundle messages.
-4. `performSelfShutdownSync` catches `Exception`, not `Throwable` (as do `performSyncWithProgress` and `ShutdownSignalService`'s metadata load and polling). `launchProject` catches `Throwable` without rethrowing `ControlFlowException`.
 5. `OpenProjectCopyAction` uses a folder chooser for the destination, which can only select existing directories, while the validation requires the destination not to exist. The user must type a new path into the chooser for the flow to succeed. Validation and git checks run on EDT.
 6. `OpenWithIdeSubAction` is unimplemented (`TODO()`); multi-IDE launching is not reachable from the UI even though the data model supports it.
 7. Remove Project has no confirmation and deletes the whole isolated directory; the popup is reshown before deletion finishes, so a project may still appear briefly. `removeRecentProject` removes from recents twice (eagerly and inside `cleanProject`).

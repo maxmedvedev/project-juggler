@@ -1,8 +1,8 @@
 package com.projectjuggler.plugin.shutdown
 
-import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.core.StopRequestSignal
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -34,7 +34,7 @@ internal class StopRequestTracker(
         val signalTime = try {
             Instant.parse(signal.timestamp)
         } catch (e: Throwable) {
-            if (e is ControlFlowException) throw e
+            e.rethrowIfControlFlow()
             log.warn("Stop signal ${signal.requestId} has an unparseable timestamp: ${signal.timestamp}", e)
             return false
         }

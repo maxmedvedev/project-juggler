@@ -7,6 +7,7 @@ import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import org.koin.core.context.GlobalContext
 import java.nio.file.Files
 import java.nio.file.Path
@@ -75,7 +76,8 @@ class IdeInstallationService internal constructor(
             return if (Files.exists(executablePath)) {
                 executablePath
             } else null
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            e.rethrowIfControlFlow()
             logger<IdeInstallationService>().error("Failed to get IntelliJ executable path", e)
             return null
         }

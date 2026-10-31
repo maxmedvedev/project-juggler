@@ -2,6 +2,7 @@ package com.projectjuggler.plugin.util
 
 import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.platform.Platform
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -46,7 +47,8 @@ object BundledSyncHelper {
         if (Platform.current() != Platform.WINDOWS) {
             try {
                 executable.toFile().setExecutable(true)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                e.rethrowIfControlFlow()
                 log.warn("Failed to make sync-helper executable", e)
             }
         }
@@ -81,7 +83,8 @@ object BundledSyncHelper {
             extractDirectory(classLoader, "$resourceBasePath/lib", tempDir.resolve("lib"))
 
             return tempDir
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            e.rethrowIfControlFlow()
             log.error("Failed to extract bundled sync-helper", e)
             throw IllegalStateException("Failed to extract bundled sync-helper distribution", e)
         }

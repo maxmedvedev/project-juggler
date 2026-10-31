@@ -1,15 +1,19 @@
 package com.projectjuggler.plugin.services
 
+import com.intellij.openapi.diagnostic.fileLogger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.process.describe
 import com.projectjuggler.util.ProjectLockUtils
 import java.nio.file.Path
+
+private val LOG = fileLogger()
 
 internal enum class LaunchStep { OPEN_IN_CURRENT_IDE, FOCUS, LAUNCH }
 
@@ -52,6 +56,8 @@ internal fun launchProject(
             notificationHandler.showErrorNotification(message)
         }
     } catch (ex: Throwable) {
+        ex.rethrowIfControlFlow()
+        LOG.warn("Failed to launch ${projectPath.name}", ex)
         val message =
             ProjectJugglerBundle.message("notification.error.launch.failed", ex.userMessage())
         notificationHandler.showErrorNotification(message)

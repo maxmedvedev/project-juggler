@@ -1,6 +1,5 @@
 package com.projectjuggler.plugin.services
 
-import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.fileLogger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.MainProjectService
@@ -8,6 +7,7 @@ import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
 import java.nio.file.Path
@@ -66,7 +66,7 @@ internal fun syncPluginsOnIdeUpdate(
                     syncOptions
                 )
             } catch (t: Throwable) {
-                if (t is ControlFlowException) throw t
+                t.rethrowIfControlFlow()
                 LOG.warn("Failed to sync plugins for project '${metadata.name}': ${t.message}", t)
             }
         }
@@ -75,7 +75,7 @@ internal fun syncPluginsOnIdeUpdate(
             ProjectJugglerBundle.message("notification.sync.on.update.complete", allProjects.size)
         )
     } catch (t: Throwable) {
-        if (t is ControlFlowException) throw t
+        t.rethrowIfControlFlow()
         LOG.error("Plugin sync on IDE update failed", t)
         notificationHandler.showErrorNotification(
             ProjectJugglerBundle.message("notification.sync.on.update.failed", t.userMessage())

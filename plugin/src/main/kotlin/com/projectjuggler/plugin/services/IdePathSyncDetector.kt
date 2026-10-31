@@ -1,11 +1,11 @@
 package com.projectjuggler.plugin.services
 
-import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
 import java.nio.file.Files
 
@@ -82,7 +82,7 @@ internal object IdePathSyncDetector {
             LOG.info("Updated IDE paths to current values")
             notificationHandler.showInfoNotification(ProjectJugglerBundle.message("notification.success.paths.updated"))
         } catch (e: Throwable) {
-            if (e is ControlFlowException) throw e
+            e.rethrowIfControlFlow()
             LOG.error("Failed to update IDE paths", e)
             notificationHandler.showErrorNotification(
                 ProjectJugglerBundle.message("notification.error.paths.update.failed", e.userMessage())
@@ -127,7 +127,7 @@ internal object IdePathSyncDetector {
 
             LOG.info("Auto-populated config for IDE: ${repository.installation.displayName}")
         } catch (e: Throwable) {
-            if (e is ControlFlowException) throw e
+            e.rethrowIfControlFlow()
             LOG.error("Failed to auto-populate config", e)
         }
     }

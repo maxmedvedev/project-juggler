@@ -1,13 +1,13 @@
 package com.projectjuggler.plugin.startup
 
 import com.intellij.openapi.application.PathManager
-import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.projectjuggler.core.ProjectCleaner
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.di.pluginModule
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.cleanStaleMainProjectEntryIfMainInstance
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +32,7 @@ internal class StaleMainProjectCleanupActivity : ProjectActivity {
                 }
             }
         } catch (t: Throwable) {
-            if (t is ControlFlowException) throw t
+            t.rethrowIfControlFlow()
             LOG.error("Stale main project cleanup failed", t)
         }
     }

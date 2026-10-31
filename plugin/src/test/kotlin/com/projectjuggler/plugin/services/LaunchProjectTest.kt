@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.services
 
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.test.RecordingNotificationHandler
@@ -7,6 +8,7 @@ import com.projectjuggler.plugin.test.testRepository
 import com.projectjuggler.process.LaunchFailure
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.test.createTempDir
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -97,5 +99,17 @@ class LaunchProjectTest : StringSpec({
                 ProjectJugglerBundle.message("error.unknown")
             )
         )
+    }
+
+    "a control-flow exception propagates without a notification" {
+        val launcher = mockk<ProjectLauncher> {
+            every { launch(any(), any()) } throws ProcessCanceledException()
+        }
+        val handler = RecordingNotificationHandler()
+
+        shouldThrow<ProcessCanceledException> { launchProject(projectPath, repository, handler, launcher) }
+
+        handler.errors.shouldBeEmpty()
+        handler.infos.shouldBeEmpty()
     }
 })

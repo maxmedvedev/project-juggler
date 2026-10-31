@@ -77,7 +77,7 @@ Plugin tests (`plugin/src/test`, details in `docs/plugin-spec.md` §13) target t
 - **Always deduplicate code** - Extract shared logic into reusable functions or classes
 - **Actions must not contain business logic** - Keep action classes thin; implement logic in `plugin/services` or core (e.g. `IdeInstallationService`, `launchProject`, `setMainProject`)
 - **Always use planning mode** - Work on all tasks in planning mode first before implementing
-- When doing try-catch, always catch `Throwable` and log it. If the exception is `ControlFlowException`, rethrow it without handling.
+- When doing try-catch, always catch `Throwable` and log it. If the exception is `ControlFlowException`, rethrow it without handling. Use `Throwable.rethrowIfControlFlow()` and `Throwable.userMessage()` from `plugin/Utils.kt`.
 - User-visible strings go in `messages/ProjectJugglerBundle.properties` via `ProjectJugglerBundle.message(...)`.
 
 ## MCP

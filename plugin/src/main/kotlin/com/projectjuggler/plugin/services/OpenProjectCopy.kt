@@ -1,11 +1,11 @@
 package com.projectjuggler.plugin.services
 
-import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.fileLogger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.util.GitWorktreeManager
@@ -57,7 +57,7 @@ internal fun createAndLaunchProjectCopy(
             ProjectJugglerBundle.message("notification.success.worktree.launched", destination.fileName, branchName)
         )
     } catch (t: Throwable) {
-        if (t is ControlFlowException) throw t
+        t.rethrowIfControlFlow()
         val message = ProjectJugglerBundle.message("notification.error.worktree.failed", t.userMessage())
         notificationHandler.showErrorNotification(message)
         LOG.error(message, t)

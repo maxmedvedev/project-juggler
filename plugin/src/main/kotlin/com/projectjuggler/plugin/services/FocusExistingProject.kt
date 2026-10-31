@@ -1,13 +1,16 @@
 package com.projectjuggler.plugin.services
 
-import com.intellij.openapi.diagnostic.ControlFlowException
+import com.intellij.openapi.diagnostic.fileLogger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.WindowFocuser
 import com.projectjuggler.util.ProjectLockUtils
+
+private val LOG = fileLogger()
 
 fun focusExistingProject(
     projectPath: ProjectPath,
@@ -59,11 +62,11 @@ fun focusExistingProject(
                 )
             }
         }
-    } catch (e: Exception) {
-        if (e is ControlFlowException) throw e
-
+    } catch (t: Throwable) {
+        t.rethrowIfControlFlow()
+        LOG.warn("Failed to focus project ${projectPath.name}", t)
         notificationHandler.showErrorNotification(
-            ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, e.userMessage()),
+            ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, t.userMessage()),
         )
     }
 }
