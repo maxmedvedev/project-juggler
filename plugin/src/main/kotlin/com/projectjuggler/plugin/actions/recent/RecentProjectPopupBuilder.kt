@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.actions.recent
 
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.util.application
@@ -14,12 +15,14 @@ import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.CurrentIdePaths
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IdePathSyncDetector
+import com.projectjuggler.plugin.services.openWithInstallations
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
 import java.nio.file.Files.exists
+import java.nio.file.Path
 
 internal class RecentProjectPopupBuilder(
     private val project: Project?,
@@ -29,10 +32,18 @@ internal class RecentProjectPopupBuilder(
         try {
             val ideConfigRepository = IdeInstallationService.currentIdeConfigRepository
             val itemsList = buildItems(ideConfigRepository, CurrentIdePaths.detect())
+            // Scans the filesystem for installations, hence here on the background thread
+            val service = IdeInstallationService.getInstance()
+            val openWith = openWithInstallations(
+                service.getAllInstallations(),
+                service.currentInstallation,
+                Path.of(PathManager.getHomePath()).toAbsolutePath().normalize(),
+                service::getRepository,
+            )
 
             // Show popup on EDT
             application.invokeLater {
-                val popup = RecentProjectPopup(itemsList, project)
+                val popup = RecentProjectPopup(itemsList, project, openWith)
                 popup.showInFocusCenter()
             }
         } catch (ex: Throwable) {

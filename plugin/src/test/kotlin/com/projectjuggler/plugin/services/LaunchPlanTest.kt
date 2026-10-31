@@ -1,6 +1,7 @@
 package com.projectjuggler.plugin.services
 
 import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.DirectoryManager
@@ -100,6 +101,24 @@ class LaunchPlanTest : StringSpec({
         val other = registerProject(repository, otherProjectDir)
 
         planLaunch(repository, metadata.path, ownConfigDir(repository, other.path)) shouldBe LaunchStep.LAUNCH
+    }
+
+    "another installation's repository plans against its own state" {
+        val repository = newRepository()
+        val otherRepository = IdeConfigRepository(
+            createTempDirectory(baseDir, "other-ide"),
+            IdeInstallation("/other/ide/bin/idea.sh", "Other IDE"),
+        )
+        setBaseConfigPath(otherRepository, createTempDirectory(baseDir, "other-main-config"))
+        val projectPath = ProjectPath(projectDir.toString())
+        val currentConfigDir = ownConfigDir(repository, registerProject(repository, otherProjectDir).path)
+
+        planLaunch(otherRepository, projectPath, currentConfigDir) shouldBe LaunchStep.LAUNCH
+
+        registerProject(otherRepository, projectDir)
+        markIsolatedInstanceOpen(otherRepository, projectPath)
+
+        planLaunch(otherRepository, projectPath, currentConfigDir) shouldBe LaunchStep.FOCUS
     }
 
     "planning creates nothing" {

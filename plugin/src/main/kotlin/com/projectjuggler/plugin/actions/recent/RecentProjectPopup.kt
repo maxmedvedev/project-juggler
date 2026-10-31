@@ -5,6 +5,7 @@ import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.popup.list.ListPopupImpl
 import com.intellij.ui.popup.list.PopupListElementRenderer
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import java.awt.Component
 import javax.swing.JList
@@ -12,9 +13,10 @@ import javax.swing.JList
 @Suppress("jol")
 internal class RecentProjectPopup(
     itemsList: List<RecentProjectPopupAction>,
-    project: Project?
+    project: Project?,
+    openWith: List<IdeInstallation>,
 ) :
-    ListPopupImpl(project, RecentProjectPopupStep(itemsList, project)) {
+    ListPopupImpl(project, RecentProjectPopupStep(itemsList, project, openWith)) {
     override fun getListElementRenderer(): PopupListElementRenderer<*> {
         @Suppress("UNCHECKED_CAST")
         return ProjectItemRenderer(this) as PopupListElementRenderer<*>
@@ -35,7 +37,8 @@ private class ProjectItemRenderer(popup: ListPopupImpl) : PopupListElementRender
 
 private class RecentProjectPopupStep(
     items: List<RecentProjectPopupAction>,
-    private val project: Project?
+    private val project: Project?,
+    private val openWith: List<IdeInstallation>,
 ) : BaseListPopupStep<RecentProjectPopupAction>(
     ProjectJugglerBundle.message("popup.recent.projects.title"),
     items
@@ -52,7 +55,7 @@ private class RecentProjectPopupStep(
     }
 
     private fun createProjectSubmenu(item: OpenRecentProjectAction): PopupStep<RecentProjectSubAction> {
-        val actions = projectSubActions(item)
+        val actions = projectSubActions(item, openWith)
 
         return object : BaseListPopupStep<RecentProjectSubAction>(null, actions) {
             override fun onChosen(selectedValue: RecentProjectSubAction, finalChoice: Boolean): PopupStep<*>? {
@@ -79,21 +82,16 @@ private class RecentProjectPopupStep(
 }
 
 /**
- * The sub-menu entries of a project item, in display order.
+ * The sub-menu entries of a project item, in display order. [openWith] are the other IDE installations offered as
+ * "Open with <IDE>" (see `openWithInstallations`).
  */
-internal fun projectSubActions(item: OpenRecentProjectAction): List<RecentProjectSubAction> {
-    val actions = mutableListOf<RecentProjectSubAction>(
-        OpenRecentProjectSubAction,
-        ToggleMainProjectSubAction,
-    )
-
-    // todo not implemented yet
-    // Add "Open with IDE X" for each available IDE (except current)
-//    IdeInstallationService.getInstance().getAllInstallations()
-//        .filter { it.executablePath != IdeInstallationService.getInstance().currentInstallation.executablePath }
-//        .forEach { installation ->
-//            actions.add(OpenWithIdeSubAction(installation))
-//        }
+internal fun projectSubActions(
+    item: OpenRecentProjectAction,
+    openWith: List<IdeInstallation> = emptyList(),
+): List<RecentProjectSubAction> {
+    val actions = mutableListOf<RecentProjectSubAction>(OpenRecentProjectSubAction)
+    openWith.mapTo(actions, ::OpenWithIdeSubAction)
+    actions.add(ToggleMainProjectSubAction)
 
     // The main project runs on base settings directly, so there is nothing to sync
     if (!item.isMainProject) {

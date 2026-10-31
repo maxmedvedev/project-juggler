@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.actions.recent
 
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.test.createTempDir
@@ -38,6 +39,44 @@ class RecentProjectPopupTest : StringSpec({
             ToggleMainProjectSubAction,
             RemoveProjectSubAction,
         )
+    }
+
+    val ideA = IdeInstallation("/apps/a/bin/idea.sh", "IDE A")
+    val ideB = IdeInstallation("/apps/b/bin/idea.sh", "IDE B")
+
+    "an isolated project offers open with each other IDE right after open" {
+        val item = OpenRecentProjectAction(projectPath, gitBranch = null)
+
+        projectSubActions(item, listOf(ideA, ideB)) shouldContainExactly listOf(
+            OpenRecentProjectSubAction,
+            OpenWithIdeSubAction(ideA),
+            OpenWithIdeSubAction(ideB),
+            ToggleMainProjectSubAction,
+            SyncSettingsSubAction(SyncType.All),
+            SyncSettingsSubAction(SyncType.VmOptions),
+            SyncSettingsSubAction(SyncType.Config),
+            SyncSettingsSubAction(SyncType.Plugins),
+            RemoveProjectSubAction,
+        )
+    }
+
+    "the main project offers open with each other IDE but nothing to sync" {
+        val item = OpenRecentProjectAction(projectPath, gitBranch = null, isMainProject = true)
+
+        projectSubActions(item, listOf(ideA, ideB)) shouldContainExactly listOf(
+            OpenRecentProjectSubAction,
+            OpenWithIdeSubAction(ideA),
+            OpenWithIdeSubAction(ideB),
+            ToggleMainProjectSubAction,
+            RemoveProjectSubAction,
+        )
+    }
+
+    "open with names the IDE" {
+        val item = OpenRecentProjectAction(projectPath, gitBranch = null)
+
+        OpenWithIdeSubAction(ideA).getTextFor(item) shouldBe
+            ProjectJugglerBundle.message("popup.recent.projects.action.open.with", ideA.displayName)
     }
 
     "speed search indexes name, branch and path" {

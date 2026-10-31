@@ -1,6 +1,8 @@
 package com.projectjuggler.plugin.services
 
 import com.intellij.openapi.progress.ProcessCanceledException
+import com.projectjuggler.config.IdeConfigRepository
+import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.test.RecordingNotificationHandler
@@ -38,6 +40,20 @@ class LaunchProjectTest : StringSpec({
         verify(exactly = 1) { launcher.launch(projectPath, any()) }
         handler.errors.shouldBeEmpty()
         handler.infos.shouldBeEmpty()
+    }
+
+    "launch uses the given repository's launcher" {
+        val otherRepository = IdeConfigRepository(
+            createTempDir("other-juggler"),
+            IdeInstallation("/other/ide/bin/idea.sh", "Other IDE"),
+        )
+        val launcher = mockk<ProjectLauncher>(relaxed = true)
+        val handler = RecordingNotificationHandler()
+
+        launchProject(projectPath, otherRepository, handler, launcher)
+
+        verify(exactly = 1) { launcher.launch(projectPath, any()) }
+        handler.errors.shouldBeEmpty()
     }
 
     "a crash reports the exit code and stderr" {

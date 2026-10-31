@@ -45,9 +45,11 @@ Actions are thin; all run `update` on BGT. None requires an open project (`e.pro
 
 `showFileChooserAndLaunch(project)`: single file-or-folder chooser (`file.chooser.title/description`). On selection, `ProjectManager.resolvePath(selectedFile.path)` (tilde expansion, absolute, normalized) and `launchOrFocusProject(project, path)`. Runs on the calling thread (EDT for actions).
 
-### 4.2 `launchOrFocusProject(project, path)` (`actions/Launch.kt`)
+### 4.2 `launchOrFocusProject(project, path, repository = current)` (`actions/Launch.kt`)
 
-1. If `MainProjectService.shouldPromptForMainProject(repo, PathManager.getConfigDir())` (no main project, not suppressed, running in main instance): on EDT show the main-project prompt (§4.3), then on a pooled thread:
+`repo` below is `repository`, the current installation's repository unless a caller (Open with <IDE>, §5.5) passes another installation's. The main-project prompt only runs for the current installation's repository.
+
+1. If `shouldPromptForMainProject(repo, currentRepo, PathManager.getConfigDir())` (`services/OpenWithIde.kt`: `repo` is the current installation's, and `MainProjectService.shouldPromptForMainProject`: no main project, not suppressed, running in main instance): on EDT show the main-project prompt (§4.3), then on a pooled thread:
    - `SetAsMain`: `setMainProject` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, `notification.success.set.main`) and open the project in the current IDE (`openProjectInCurrentIde`, focuses it if already open).
    - `OpenIsolated`: continue to step 2.
    - `Cancelled`: nothing.
@@ -84,13 +86,16 @@ Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" c
    4. Recent items that are not the main project.
    5. If there is at least one project (recent or main): `SyncAllProjectsAction` for All, VmOptions, Config, Plugins, then `ToggleSyncOnUpdateAction(syncPluginsOnIdeUpdate)`.
    6. Otherwise: `ImportRecentProjectsAction`.
-4. `show()` then shows `RecentProjectPopup` on EDT with `showInFocusCenter()`.
+4. On the same thread, `openWithInstallations` (`services/OpenWithIde.kt`) picks the other installations offered in the sub-menu (§5.2) from `IdeInstallationService.getAllInstallations()` (a filesystem scan).
+5. `show()` then shows `RecentProjectPopup` on EDT with `showInFocusCenter()`.
 
 Any `Throwable` (except `ControlFlowException`) -> `notification.error.recent.projects.load.failed` and a logged error.
 
 ### 5.2 Popup behavior (`RecentProjectPopup`)
 
-`ListPopupImpl` with title `popup.recent.projects.title`, speed search enabled. Speed-search index for a project item is `"<name> [<branch> ]<path>"`; for other items it is their label. Only `OpenRecentProjectAction` has a substep (right arrow / click on arrow): a sub-popup built by `projectSubActions(item)` with, in order, Open Project, Set/Unset Main Project, Sync All Settings, Sync VM Options, Sync Configuration, Sync Plugins, Remove Project. The four Sync entries are omitted for the main project item (`isMainProject`), since it runs on base settings and has nothing to sync. "Open with <other IDE>" sub-actions exist in code but are commented out and would throw `TODO()`.
+`ListPopupImpl` with title `popup.recent.projects.title`, speed search enabled. Speed-search index for a project item is `"<name> [<branch> ]<path>"`; for other items it is their label. Only `OpenRecentProjectAction` has a substep (right arrow / click on arrow): a sub-popup built by `projectSubActions(item, openWith)` with, in order, Open Project, Open with <IDE> (`popup.recent.projects.action.open.with`) for each other installation whose base settings are recorded (not the current one, sorted by name), Set/Unset Main Project, Sync All Settings, Sync VM Options, Sync Configuration, Sync Plugins, Remove Project. The four Sync entries are omitted for the main project item (`isMainProject`), since it runs on base settings and has nothing to sync.
+
+`openWithInstallations(all, current, currentHome, repositoryFor)` excludes an installation whose `directoryName` equals the current one's or whose executable lies under `PathManager.getHomePath()` (the same IDE keyed differently, gap 10), and keeps only those whose repository has `baseConfigPath` set, i.e. the plugin has run there once. Without it core would fall back to the newest `IntelliJIdea*` config dir and `PluginLocator` (core-spec), which may belong to another IDE version.
 
 Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
@@ -114,6 +119,7 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 | Sub-action | Behavior |
 |---|---|
 | Open Project | `launchOrFocusProject`. |
+| Open with <IDE> | `launchOrFocusProject` against that installation's repository (`IdeInstallationService.getRepository`); no main-project prompt; the project is tracked and recorded in that IDE's `<ideDir>`, the current IDE's recents are untouched. Focuses that IDE's running instance of the project, else `ProjectLauncher.launch` with that IDE's executable (its own main project goes through `launchMain`). |
 | Set / Unset Main Project | OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then on a pooled thread `setMainProject(path)` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, success notification) or `clearMainProject()` with a success notification. |
 | Sync All Settings / VM Options / Configuration / Plugins | §6.1 for this project. Not shown for the main project. |
 | Remove Project | On a pooled thread: `RecentProjectsIndex.remove(id)` then `ProjectCleaner.cleanProject(metadata)` (deletes `<projRoot>` recursively, core-spec §9). The popup is rebuilt immediately, in parallel with the deletion. No confirmation. |
@@ -233,7 +239,7 @@ Covered, by spec:
 | `ProjectJugglerBundleTest` | formerly hardcoded keys are present, `SyncType` names come from the bundle |
 | `actions/recent/SyncTypeTest` | sync booleans, `cliFlag`, `displayName` per type |
 | `actions/recent/RecentProjectPopupBuilderTest` | `buildItems`: item order, main project, filtering, path-mismatch item, git branch, `isOpen`, toggle text |
-| `actions/recent/RecentProjectPopupTest` | `projectSubActions`, speed-search and list texts |
+| `actions/recent/RecentProjectPopupTest` | `projectSubActions` (with and without Open with entries), speed-search and list texts |
 | `actions/recent/CompactPathTest` | `compactPath` |
 | `util/BundledSyncHelperTest` | extraction, caching, re-extraction |
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
@@ -241,7 +247,8 @@ Covered, by spec:
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests |
 | `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args |
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, failure and cancellation |
-| `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, no directories created |
+| `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
+| `services/OpenWithIdeTest` | `openWithInstallations` exclusions, base-settings filter and order; `shouldPromptForMainProject` per target repository |
 | `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects |
 | `services/LaunchProjectTest` | launch, crash and start-failure notifications, control-flow exceptions propagate |
 | `services/FocusExistingProjectTest` | each focus outcome and its message, non-`Exception` errors, control-flow exceptions propagate |
@@ -260,7 +267,6 @@ Gaps pinned by tests (the test name carries the number): 8 (`RecentProjectPopupB
 
 ## Known gaps
 
-6. `OpenWithIdeSubAction` is unimplemented (`TODO()`); multi-IDE launching is not reachable from the UI even though the data model supports it.
 7. Remove Project has no confirmation and deletes the whole isolated directory; the popup is reshown before deletion finishes, so a project may still appear briefly. `removeRecentProject` removes from recents twice (eagerly and inside `cleanProject`).
 8. Popup shows up to 20 recents while core caps the index at `maxRecentProjects` (10 by default), so the limit is effectively 10. The main project item's `isOpen` relies on `isProjectOpen`, which is false when `baseConfigPath` is unset.
 9. `IdePathSyncDetector` compares paths as raw strings and is only checked from the popup. `autoPopulateIfNeeded` runs the first time the repository is touched in whichever instance that is; if that is an isolated instance started by `sync-helper` with no prior config, the isolated dirs become the "base" paths.

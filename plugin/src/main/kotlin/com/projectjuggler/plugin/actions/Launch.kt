@@ -7,29 +7,30 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.util.application
 import com.projectjuggler.config.IdeConfigRepository
-import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.*
 import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 
 /**
- * Handles launching or focusing a project based on whether it's already open.
- * If main project is not set and running in main instance, prompts user to set this as main.
+ * Handles launching or focusing a project of [repository]'s IDE installation (the current one by default) based on
+ * whether it's already open.
+ * If main project is not set and running in main instance, prompts user to set this as main (only for the current
+ * installation's repository).
  * If project is open, attempts to focus the window.
  * If project is closed, launches it normally.
  */
 fun launchOrFocusProject(
     project: Project?,
-    projectPath: ProjectPath
+    projectPath: ProjectPath,
+    repository: IdeConfigRepository = IdeInstallationService.currentIdeConfigRepository,
 ) {
-    val repository = IdeInstallationService.currentIdeConfigRepository
     val currentConfigDir = PathManager.getConfigDir()
 
-    if (MainProjectService.shouldPromptForMainProject(repository, currentConfigDir)) {
+    if (shouldPromptForMainProject(repository, IdeInstallationService.currentIdeConfigRepository, currentConfigDir)) {
         askToOpenAsMainProject(projectPath, repository, project)
     } else {
-        launchOrFocusProjectImpl(project, projectPath)
+        launchOrFocusProjectImpl(project, projectPath, repository)
     }
 }
 
@@ -49,7 +50,7 @@ private fun askToOpenAsMainProject(
 
                 is MainProjectPromptResult.OpenIsolated -> {
                     // this is main IDE, so we
-                    launchOrFocusProjectImpl(project, projectPath)
+                    launchOrFocusProjectImpl(project, projectPath, repository)
                 }
 
                 is MainProjectPromptResult.Cancelled -> {
@@ -60,19 +61,18 @@ private fun askToOpenAsMainProject(
     }
 }
 
-private fun launchOrFocusProjectImpl(project: Project?, projectPath: ProjectPath) {
+private fun launchOrFocusProjectImpl(project: Project?, projectPath: ProjectPath, repository: IdeConfigRepository) {
     val task = object : Task.Backgroundable(
         project,
         ProjectJugglerBundle.message("progress.opening.project", projectPath.name),
         false
     ) {
-        override fun run(indicator: ProgressIndicator) = launchOrFocusUnderProgress(project, projectPath)
+        override fun run(indicator: ProgressIndicator) = launchOrFocusUnderProgress(project, projectPath, repository)
     }
     task.queue()
 }
 
-private fun launchOrFocusUnderProgress(project: Project?, projectPath: ProjectPath) {
-    val repository = IdeInstallationService.currentIdeConfigRepository
+private fun launchOrFocusUnderProgress(project: Project?, projectPath: ProjectPath, repository: IdeConfigRepository) {
     val notificationHandler = IntelliJNotificationHandler(project)
 
     when (planLaunch(repository, projectPath, PathManager.getConfigDir())) {
