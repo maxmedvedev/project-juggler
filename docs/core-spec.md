@@ -195,7 +195,7 @@ If the project is running and `stopIfRunning` is false, the sync proceeds agains
 
 ### 8.1 Expectations on the running IDE
 
-The isolated IDE (plugin side) is expected to poll `signals/stop-request.json`, exit gracefully when one appears, and thereby remove `config/.lock`. `ShutdownSignalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)` deletes files in `signals/` other than `sync-in-progress.lock` whose embedded timestamp is older than the limit, and any such file that does not parse as a stop request.
+The isolated IDE (plugin side) is expected to poll `signals/stop-request.json`, exit gracefully when one appears, and thereby remove `config/.lock`. `ShutdownSignalManager.cleanupStaleSignals(project, maxAgeMinutes = 5)` deletes files in `signals/` other than `sync-in-progress.lock` whose embedded timestamp is older than the limit, and any such file that does not parse as a stop request. The plugin acts on a request only while its age is at most `timeoutSeconds`.
 
 ### 8.2 Self-sync
 

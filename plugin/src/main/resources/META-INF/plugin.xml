@@ -31,6 +31,11 @@
         <postStartupActivity implementation="com.projectjuggler.plugin.startup.IdePathsCheckActivity"/>
     </extensions>
 
+    <applicationListeners>
+        <listener class="com.projectjuggler.plugin.shutdown.ShutdownSignalAppListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
     <actions resource-bundle="messages.ProjectJugglerBundle">
         <action id="com.projectjuggler.plugin.OpenWithProjectJuggler"
                 class="com.projectjuggler.plugin.actions.OpenWithProjectJugglerAction"

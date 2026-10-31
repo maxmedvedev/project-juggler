@@ -16,11 +16,11 @@ Conventions:
 - Depends on `:core` and Koin. Tests: Kotest in `plugin/src/test`, see §13.
 - `processResources` depends on `:sync-helper:installDist` and copies the distribution into plugin resources under `sync-helper/` (`bin/`, `lib/`). This is what `BundledSyncHelper` extracts at runtime (§9).
 - `runIde` passes `-Dproject.juggler.base.dir=/Users/max/.project-juggler-test` (a machine-specific absolute path).
-- Registered extensions: one notification group `project-juggler.notifications` (balloon), four `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
+- Registered extensions: one notification group `project-juggler.notifications` (balloon), four `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`), one `applicationListeners` entry (`ShutdownSignalAppListener` on topic `com.intellij.ide.AppLifecycleListener`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
 
 ## 2. Initialization and DI
 
-- `KoinInit.init(pluginModule)` is called lazily at the entry of every action (`actionPerformed`), inside `ShutdownSignalService.init`, and in the two startup activities (`PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`). It is idempotent, so the first caller wins; there is no single startup hook.
+- `KoinInit.init(pluginModule)` is called lazily at the entry of every action (`actionPerformed`), inside the `ShutdownSignalService.start()` coroutine, and in the two startup activities (`PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`). It is idempotent, so the first caller wins; there is no single startup hook.
 - `pluginModule` declares one singleton: `IdeInstallationService(IdeRegistry)`. Access is through `IdeInstallationService.getInstance()` (Koin `GlobalContext`) or the shortcut `IdeInstallationService.currentIdeConfigRepository`.
 - `IdeInstallationService`:
   - `currentInstallation` (lazy): `currentIdeExecutable(homePath, ApplicationNamesInfo.scriptName, platform)` (`services/CurrentIdeExecutable.kt`) resolves `<home>/MacOS/<script>` (macOS), `<home>/bin/<script>.sh` (Linux), `<home>/bin/<script>64.exe` (Windows), so PyCharm, Android Studio etc. get their own launcher. When the file does not exist a warning is logged (launches from this IDE will fail) and the path is used anyway. Then `IntelliJLocator.findInstallation(path)`. The home directory is never the key.
@@ -194,9 +194,9 @@ The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one 
 
 ## 10. Shutdown signal handling (`shutdown/`)
 
-- `ShutdownSignalServiceStartupActivity` is a `ProjectActivity`; it only instantiates the app-level `ShutdownSignalService`. The service therefore starts when the first project opens, not at application start.
-- `ShutdownSignalService.init`: init Koin; `IsolatedInstance.currentProjectId()` (§6.3); load its metadata from the current repository (`Throwable` caught and logged). If this is not an isolated instance (or metadata fails to load), monitoring is disabled and logged.
-- Monitoring (coroutine on `Dispatchers.IO`): `ShutdownSignalManager.cleanupStaleSignals(project, 5)` once, then every 1 s `readStopRequest`. Whether to act is decided by `StopRequestTracker.shouldAct(signal)` (`shutdown/StopRequestTracker.kt`): true once per `requestId` (in-memory set) and only if its timestamp is at most 5 whole minutes old (the age is compared in minutes, so 5 min 59 s still counts); stale or unparseable timestamps are logged, never acted on and never remembered. Action: `ApplicationManager.getApplication().exit()` on the main dispatcher, which runs the normal save/confirm flow. `autoRestart` and `syncTypes` in the signal are logged but otherwise unused; restart is the sync initiator's job. Errors are logged and polling continues.
+- `ShutdownSignalAppListener.appFrameCreated` (an `AppLifecycleListener`, fired on every start before IntelliJ chooses between opening a project and the welcome screen) calls `ShutdownSignalService.start()` at application start, so an isolated IDE on the welcome screen or with its project closed is monitored. `ShutdownSignalServiceStartupActivity` (`ProjectActivity`) calls it too, as the fallback for dynamic plugin loading, where `appFrameCreated` does not fire. `start()` is idempotent (`AtomicBoolean`); the constructor does no work. Koin init, detection and polling run in one `Dispatchers.IO` coroutine.
+- Detection: init Koin; `IsolatedInstance.currentProjectId()` (§6.3); load its metadata from the current repository (`Throwable` caught and logged, for detection as a whole and for the metadata load). If this is not an isolated instance (or detection fails), monitoring is disabled and logged.
+- Monitoring (coroutine on `Dispatchers.IO`): `ShutdownSignalManager.cleanupStaleSignals(project, 5)` once, then every 1 s `readStopRequest`. Whether to act is decided by `StopRequestTracker.shouldAct(signal)` (`shutdown/StopRequestTracker.kt`): true once per `requestId` (in-memory set) and only while the request's age is at most its `timeoutSeconds` (5 minutes when `timeoutSeconds <= 0`), compared exactly; after that the requester has given up. Stale or unparseable requests are logged once per `requestId`, never acted on and never remembered as processed. Action, on the main dispatcher: log `requestId`, `autoRestart`, `syncTypes`, `timeoutSeconds`, then `ApplicationManagerEx.getApplicationEx().exit(force = false, exitConfirmed = true)`: no "Confirm exit" dialog (an unattended IDE would block the requester until its timeout), settings are still saved, and IntelliJ still asks when background tasks run. `autoRestart` and `syncTypes` are informational; restart is the requester's job (core-spec §8 step 5). Errors are logged and polling continues.
 
 ## 10a. Stale main-project entry cleanup (`startup/StaleMainProjectCleanupActivity`)
 
@@ -227,7 +227,7 @@ Because the build number is stored before the checks, only the first project ope
 | Popup building, import | pooled thread |
 | Open a Project Copy worktree validation, creation, launch, Koin init | pooled thread |
 | Set/Unset main project config write and stale-entry cleanup | pooled thread |
-| `ShutdownSignalService` polling | `Dispatchers.IO` coroutine |
+| `ShutdownSignalService` start and polling | `Dispatchers.IO` coroutine, from app start |
 | `PluginSyncOnUpdateActivity` (`syncPluginsOnIdeUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
 | `IdePathsCheckActivity` "Update paths" | pooled thread |
 
@@ -255,7 +255,8 @@ Covered, by spec:
 | `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, `start` output in the log file |
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
 | `services/IsolatedInstanceTest` | `projectIdFromConfigPath`, `isCurrentProject` |
-| `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests |
+| `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests; age against `timeoutSeconds` and the 5-minute fallback |
+| `shutdown/ShutdownSignalRegistrationTest` | `plugin.xml` registers `ShutdownSignalAppListener` on the `AppLifecycleListener` topic |
 | `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args |
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, failure and cancellation |
 | `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
@@ -275,13 +276,12 @@ Covered, by spec:
 | `services/CurrentIdeExecutableTest` | `currentIdeExecutable` per platform and script name |
 | `services/IdeInstallationServiceTest` (test application) | current installation keyed on the script-name launcher, adoption of a legacy home-keyed dir, repository in the sandbox IDE, auto-populated base paths, `VMOptionsCopy` files |
 
-Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
+Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `start()` and exit, `ShutdownSignalAppListener` itself, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
 
 Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 
 ## Known gaps
 
-12. `ShutdownSignalService` starts only after a project is opened; an isolated IDE sitting on the welcome screen ignores stop requests, so stop-and-sync times out against it. The JSON `autoRestart`/`timeoutSeconds` fields are not honored by the receiver.
 13. `PluginSyncOnUpdateActivity` performs network-free but potentially long sync work (stopping and restarting every isolated IDE) on first project open with only a balloon as notice and no cancel. `performSyncWithProgress` aborts the whole batch on the first failure, unlike the update activity which continues.
 14. `KoinInit.init` is called on EDT in several actions (marked `todo move to BGT`). `ToggleMainProjectSubAction` performs config file I/O under a file lock on EDT. `ImportRecentProjectsAction` casts `RecentProjectsManager` to `RecentProjectsManagerBase`, an implementation class.
 15. `runIde` hardcodes a user-specific base dir. The plugin has no settings page or startup health check for missing base paths.
