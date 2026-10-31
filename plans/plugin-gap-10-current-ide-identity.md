@@ -144,7 +144,7 @@ installed: `buildPlugin`, install the zip there, open the popup; `<base>/v2/` ge
 
 Fable 5.1, default effort.
 
-1. **Core registry** (~15%). Reads: this plan, `CLAUDE.md`, `IdeRegistry.kt`, `IdeConfigRepository.kt`,
+1. **Done** in `resolve ide dirs by executable path and adopt legacy dirs`. **Core registry** (~15%). Reads: this plan, `CLAUDE.md`, `IdeRegistry.kt`, `IdeConfigRepository.kt`,
    `IdeInstallation.kt`, `IdeRegistryTest.kt`, `util/ProjectLockUtils.kt`. Does: core Implementation and core Tests,
    core-spec edits. Commit, e.g. `resolve ide dirs by executable path and adopt legacy dirs`. Marks this entry
    `**Done** in <subject>`.

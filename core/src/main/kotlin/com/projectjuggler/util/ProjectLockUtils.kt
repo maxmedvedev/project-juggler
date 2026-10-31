@@ -4,7 +4,10 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.DirectoryManager
+import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 
@@ -40,6 +43,18 @@ object ProjectLockUtils {
             isLockLive(isolatedLockFile(ideConfigRepository, projectPath))
         } catch (e: Throwable) {
             false
+        }
+    }
+
+    /**
+     * Whether any project of the repository has an isolated `config/.lock` file, live or not. Used before
+     * moving an ide dir, where even a stale lock is a reason to leave it alone.
+     */
+    fun hasIsolatedInstanceLock(ideConfigRepository: IdeConfigRepository): Boolean {
+        val projectsDir = ideConfigRepository.baseDir.resolve("projects")
+        if (!projectsDir.isDirectory()) return false
+        return Files.list(projectsDir).use { stream ->
+            stream.anyMatch { it.resolve("config").resolve(LOCK_FILE).exists() }
         }
     }
 
