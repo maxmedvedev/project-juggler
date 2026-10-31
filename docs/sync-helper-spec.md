@@ -2,8 +2,8 @@
 
 This document describes what the `sync-helper` module does today, as observed from the code, and the contract between it
 and the `plugin` that spawns it. It builds on [core-spec.md](core-spec.md); anything about the sync protocol itself
-(locks, stop requests, copying) is specified there in §8 and only referenced here. Questionable behavior is described
-as-is and listed under [Known gaps](#known-gaps).
+(locks, stop requests, copying, relaunch) is specified there in §8 and only referenced here. Questionable behavior is
+described as-is and listed under [Known gaps](#known-gaps).
 
 Conventions follow the core spec: `<base>`, `<ideDir>`, `<projRoot>`.
 
@@ -11,74 +11,79 @@ Conventions follow the core spec: `<base>`, `<ideDir>`, `<projRoot>`.
 
 A running IDE cannot sync its own isolated state: it would have to stop itself, copy files into the directories it is
 using, and start again. `sync-helper` is a minimal standalone JVM program that performs `ProjectLauncher.syncProject`
-from outside the IDE process with `stopIfRunning = true, autoRestart = true`. It exists only for this self-sync case;
-syncing a *different* project is done in-process by the plugin (`performSyncWithProgress`).
+for one project from outside the IDE process with `stopIfRunning = true, autoRestart = true`, and leaves a result file
+for the IDE to report. It exists only for this self-sync case; syncing a *different* project is done in-process by the
+plugin (`performSyncWithProgress`).
 
 ## 2. Module shape
 
-- Single source file: `SyncHelperMain.kt`, top-level `main`, class `com.projectjuggler.synchelper.SyncHelperMainKt`.
+- Sources: `SyncHelperArgs.kt` (argument parsing, `USAGE`) and `SyncHelperMain.kt` (`main`, `run`), class
+  `com.projectjuggler.synchelper.SyncHelperMainKt`.
 - Dependencies: `:core` and `koin-core`. No IntelliJ Platform dependency. JDK 17 toolchain.
 - Built with the Gradle `application` plugin, `applicationName = "sync-helper"`. `installDist` produces
-  `build/install/sync-helper/{bin,lib}` with the standard start scripts `bin/sync-helper` (Unix) and
-  `bin/sync-helper.bat` (Windows).
-- No tests.
+  `build/install/sync-helper/{bin,lib}`. The start scripts in `bin/` are kept for manual runs; the plugin does not use
+  them (§5.3).
+- Tests: `SyncHelperArgsTest` (pure parsing) and `SyncHelperRunTest` (`run` against a real registry under the test base
+  dir with a mocked `ProjectLauncher`). The `test` task sets `project.juggler.base.dir` to
+  `sync-helper/build/project-juggler-test`.
 
 ## 3. Command line
 
 ```
-sync-helper --ide <ide-path> --path <project-path>  [--all|--vmoptions|--config|--plugins]
-sync-helper --ide <ide-path> --all-projects         [--all|--vmoptions|--config|--plugins]
+sync-helper --ide <ide-path> --path <project-path> (--all | --vmoptions | --config | --plugins)...
 ```
 
-| Argument         | Takes value | Meaning                                                                         |
-|------------------|-------------|---------------------------------------------------------------------------------|
-| `--ide`          | yes         | `IdeInstallation.executablePath` of the IDE whose repository to use. Required.  |
-| `--path`         | yes         | A tracked project path. `~` is expanded, the path is normalized and must exist. |
-| `--all-projects` | no          | Sync every project under `<ideDir>/projects/` except the main project.          |
-| `--all`          | no          | vmoptions + config + plugins.                                                   |
-| `--vmoptions`    | no          | Regenerate `idea.vmoptions`.                                                    |
-| `--config`       | no          | Wipe and recopy `config/`.                                                      |
-| `--plugins`      | no          | Wipe and recopy `plugins/`.                                                     |
+| Argument      | Takes value | Meaning                                                                         |
+|---------------|-------------|---------------------------------------------------------------------------------|
+| `--ide`       | yes         | `IdeInstallation.executablePath` of the IDE whose repository to use. Required.  |
+| `--path`      | yes         | A tracked project path. `~` is expanded and the path normalized. Required.      |
+| `--all`       | no          | vmoptions + config + plugins.                                                   |
+| `--vmoptions` | no          | Regenerate `idea.vmoptions`.                                                    |
+| `--config`    | no          | Wipe and recopy `config/`.                                                      |
+| `--plugins`   | no          | Wipe and recopy `plugins/`.                                                     |
 
-Parsing rules:
+Parsing rules (`parseArgs`, each violation is a `UsageException`):
 
-- Arguments are scanned left to right. Unknown tokens are ignored silently. A value flag at the very end with no value
-  is ignored.
-- Repeated value flags: the last occurrence wins.
-- Sync-type flags are additive; `--all` implies the other three.
-- Validation (each failure is `error(...)`, i.e. `IllegalStateException`, see §6):
-    - `--ide` missing: `--ide <ide-path> is required`
-    - neither `--path` nor `--all-projects`: `Either --path or --all-projects is required`
-    - both given: `Cannot specify both --path and --all-projects`
-- No sync-type flag at all is accepted and results in a sync that copies nothing (it still stops and restarts the IDE if
-  running).
+- At least one sync-type flag, `--ide` and `--path` are required. Sync-type flags are additive; `--all` implies the
+  other three.
+- Unknown tokens (including the removed `--all-projects`) are rejected.
+- A value flag at the end, or followed by a token starting with `--`, is missing its value.
+- `--ide` or `--path` given twice is rejected.
 
-## 4. Execution
+### Exit codes
 
-1. `KoinInit.init()` with no extra modules (core modules only, core-spec §5).
-2. Parse arguments.
-3. Build `IdeInstallation(idePath, "IDE")`. The display name is fixed to `"IDE"`, so its `directoryName` (`IDE-<id8>`)
-   differs from the plugin's dir name.
-4. `IdeRegistry.getInstance().getRepository(installation)` -> `IdeConfigRepository` rooted at `<base>/v2/<ideDir>`.
-   Resolution is by executable path (core-spec §4): the plugin's dir for the same executable is found whatever its
-   display name, so this is the same `<ideDir>` as the plugin's `currentIdeConfigRepository`. `<base>` is
-   `-Dproject.juggler.base.dir` if set in *this* JVM, else `~/.project-juggler`. Nothing is written to `config.json` by
-   the helper itself.
-5. `ProjectLauncher.getInstance(repository)`.
-6. Target selection:
-    - `--path`: `ProjectManager.resolvePath(raw)` then `ProjectManager.get(path)`; a missing `metadata.json` is
-      `error("Project not found: <raw>")`.
-    - `--all-projects`: `ProjectManager.listSyncable()` (all tracked projects minus the main project); an empty list is
-      `error("No tracked projects found")`. Directory order is whatever `Files.list` returns (unspecified).
-7. For each target, sequentially:
-   `syncProject(project, syncVmOptions, syncConfig, syncPlugins, SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60))`.
-   `onProgress` is the no-op default, so the helper prints no progress of its own; the only output is what core prints
-   (`IntelliJLauncher`, `ProcessLauncherImpl`).
-8. `main` returns. No explicit `exitProcess`; the JVM ends when non-daemon threads finish (core-spec §7.3: the
-   launcher's 10 s crash-watch thread keeps it alive up to 10 s after the last restart).
+| Code | Meaning |
+|------|---------|
+| `0`  | Synced. |
+| `1`  | Anything after the arguments parsed failed: no ideDir for `--ide`, unknown project, or the sync itself. |
+| `2`  | Usage error; the message and `USAGE` are printed to stderr. |
 
-Per-project behavior is exactly core-spec §8 with both booleans set. In particular, the IDE is only restarted if
-`isProjectOpen` was true when the helper looked (`config/.lock` present).
+`main` is `KoinInit.init(); exitProcess(run(args))`, so the JVM always ends with the returned code.
+
+## 4. Execution (`run`)
+
+1. Parse the arguments (§3). Print the base dir and the arguments as the first stdout line.
+2. `IdeRegistry.findRepository(idePath)` (core-spec §4): the registered `<ideDir>` whose stored installation has that
+   executable path, whatever its display name. The helper never creates an ideDir; without one it fails with
+   "No Project Juggler data for IDE <path>" (exit 1, no result file). `<base>` is `-Dproject.juggler.base.dir` if set in
+   *this* JVM (the plugin forwards its own value, §5.3), else `~/.project-juggler`.
+3. `ProjectManager.resolvePath(raw)` and `get(path)`; a missing `metadata.json` fails with "Project not found: <raw>"
+   (exit 1, no result file).
+4. `ProjectLauncher.syncProject(project, …, SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60,
+   onProgress = …))`, i.e. core-spec §8: if the IDE runs (`config/.lock`), write `signals/stop-request.json`, wait for
+   the IDE to exit, sync, and relaunch it, also when the sync failed. `onProgress` prints one line per event to stdout
+   and keeps the last `SyncProgress.Error` message as `restartError`.
+5. Write `<projRoot>/self-sync-result.json` (`SelfSyncResultStore`, core-spec §3) and return:
+   - success: `SelfSyncResult(succeeded = true, restartError)`, exit 0;
+   - a `Throwable` from step 4 (shutdown timeout, held sync lock, main project, missing base path, copy `IOException`):
+     the stack trace is printed, then `SelfSyncResult(succeeded = false, message = <message, or the class name>,
+     restartError)`, exit 1.
+
+   `syncTypes` in the result lists the requested parts (`SyncTypeNames.of`). A failure to write the result is printed
+   and does not change the exit code.
+
+The main project is never isolated, so the plugin never sends it; if it is passed, core's `SyncException` ends up in the
+result file and the exit code is 1.
 
 ## 5. Plugin contract (`BundledSyncHelper`, `Sync.kt`)
 
@@ -88,95 +93,99 @@ Per-project behavior is exactly core-spec §8 with both booleans set. In particu
 `sync-helper/build/install/sync-helper/` into plugin resources under `sync-helper/`, so the plugin jar contains
 `sync-helper/bin/*` and `sync-helper/lib/*.jar`.
 
-### 5.2 Extraction (`BundledSyncHelper.getExecutable()`)
+### 5.2 Extraction (`BundledSyncHelper.getInstallDir()`)
 
 - Must not run on EDT (`@RequiresBackgroundThread`); `@Synchronized`, so parallel calls extract once.
 - Root: `PathManager.getSystemDir()/project-juggler/sync-helper/` of the running IDE (`<projRoot>/system/...` in an
   isolated instance). Target: `<root>/<fingerprint>`, the fingerprint being 16 hex chars of a SHA-256 over the names,
   sizes and CRCs of the bundled `sync-helper/bin` and `sync-helper/lib` files (file hashes in dev mode), so it changes
-  with the helper's content even when the plugin version does not. Jar resources are walked by enumerating the jar
-  entries with the prefix; file-system resources (dev mode) with `Files.walk`.
-- Executable is `bin/sync-helper.bat` on Windows, `bin/sync-helper` otherwise. If it exists in the target, it is reused
-  (across IDE sessions too) without extraction.
-- Otherwise the files are extracted into `<root>/<fingerprint>.tmp-*`, the executable bit is set on Unix (failure only
-  logs a warning), and the dir is moved to the target with `ATOMIC_MOVE`. Missing resource or executable, or any
-  extraction failure, deletes the temp dir and throws `IllegalStateException`.
-- After an extraction, other entries of the root (old fingerprints, leftover temp dirs) and, once per JVM, legacy
-  `java.io.tmpdir/sync-helper-*` dirs of earlier versions (with `bin/` and `lib/sync-helper.jar`, last modified over 1
-  hour ago) are deleted, best effort.
+  with the helper's content even when the plugin version does not.
+- `lib/sync-helper.jar` marks a complete extraction. If it exists in the target, the target is reused (across IDE
+  sessions too) without extraction.
+- Otherwise the files are extracted into `<root>/<fingerprint>.tmp-*` and the dir is moved to the target with
+  `ATOMIC_MOVE`. A missing resource or jar, or any extraction failure, deletes the temp dir and throws
+  `IllegalStateException`.
+- After an extraction, other entries of the root and, once per JVM, legacy `java.io.tmpdir/sync-helper-*` dirs of
+  earlier versions (with `bin/` and `lib/sync-helper.jar`, last modified over 1 hour ago) are deleted, best effort.
 
-### 5.3 Decision to use the helper
+### 5.3 Command line (`BundledSyncHelper.command`, `start`)
 
-`isCurrentProject(repo, path)` is true iff the running IDE is isolated (its `idea.config.path` contains
-`.../projects/<id>/config` with either separator) and `<id>` equals the id of `ProjectManager.get(path)`. Callers:
+The helper runs on the IDE's own JVM, bypassing the start scripts:
 
-- `SyncSettingsSubAction` (Recent Projects popup, sync one project): if the target is the current project, spawn the
-  helper with `--ide <currentIde.executablePath> --path <pathString>`; otherwise sync in-process.
-- `SyncAllProjectsAction`: if any target is the current project, spawn with
-  `--ide <currentIde.executablePath> --all-projects`; otherwise in-process.
+```
+<java.home>/bin/java[.exe] -cp <installDir>/lib/* [-Dproject.juggler.base.dir=<value>] com.projectjuggler.synchelper.SyncHelperMainKt <args>
+```
 
-The sync-type flag is appended from `SyncType`: `All -> --all`, `VmOptions -> --vmoptions`, `Config -> --config`,
-`Plugins -> --plugins`. Exactly one is passed.
+- `java.home` is the running IDE's JBR, so no system `java` is needed. `JAVA_HOME` is not set, because the relaunched
+  IDE inherits the helper's environment (its terminals and Gradle runs would see the JBR).
+- `-Dproject.juggler.base.dir` is passed when the IDE has that property (e.g. under `runIde`), so the helper uses the
+  same `<base>`.
+- `java -cp` expands the `*` itself; no shell is involved.
+- stdout and stderr go to `<IDE log dir>/sync-helper.log` (overwritten per run; `<projRoot>/logs` in an isolated
+  instance, next to `idea.log`), stdin is closed. The helper otherwise inherits the IDE's environment (including
+  `IDEA_VM_OPTIONS` pointing at the isolated vmoptions file).
 
-### 5.4 Spawn and self-exit (`performSelfShutdownSync`)
+### 5.4 Decision to use the helper (`SyncPlanner`)
+
+`IsolatedInstance.isCurrentProject(repo, path)` is true iff the running IDE is isolated (its `idea.config.path`
+contains `.../projects/<id>/config` with either separator) and `<id>` equals the id of `ProjectManager.get(path)`.
+The helper arguments are always `--ide <currentIde.executablePath> --path <project> <flag>`, the flag from `SyncType`
+(`All -> --all`, `VmOptions -> --vmoptions`, `Config -> --config`, `Plugins -> --plugins`).
+
+- `SyncSettingsSubAction` (sync one project): `SyncPlanner.forProject` gives `SelfShutdown` for the current project,
+  otherwise an in-process sync.
+- `SyncAllProjectsAction`: `SyncPlanner.forAllProjects` gives `SelfShutdown(helperArgs, others)` when the current
+  project is among the syncable ones. The `others` sync in-process first (`performSyncWithProgress`, with progress,
+  past failures, and its own success/failure notification); its `onFinished` then starts the self-sync for the current
+  project. Cancelling the in-process part, or an exception from it, skips the self-sync.
+
+### 5.5 Spawn and process watching (`performSelfShutdownSync`)
 
 1. Show an info notification ("IntelliJ will close to sync ... and reopen automatically...").
-2. In a non-cancellable `Task.Backgroundable` ("Starting sync helper..."): `BundledSyncHelper.start(args)`, which calls
-   `getExecutable()` and runs `ProcessBuilder(exe, *args)` with stdout and stderr redirected to
-   `<IDE log dir>/sync-helper.log` (overwritten per run; `<projRoot>/logs` in an isolated instance, next to `idea.log`)
-   and stdin closed. The helper inherits the IDE's environment (including `IDEA_VM_OPTIONS` pointing at the isolated
-   vmoptions file).
-3. `Thread.sleep(100)` in the task.
-4. On success, `Application.exit()` on EDT.
-5. Any failure is logged as a warning and shows an error notification "Failed to initiate self-shutdown sync: ..."; the
-   IDE keeps running.
+2. In a non-cancellable `Task.Backgroundable` ("Starting sync helper..."), subscribe an `AppLifecycleListener` that
+   records `appWillBeClosed`, then `BundledSyncHelper.start(args)` and keep the `Process`. The IDE does not exit by
+   itself: the helper finds it running, writes the stop request, and `ShutdownSignalService` closes it (core-spec
+   §8.1).
+3. `process.onExit()`: disconnect the listener and, unless the app is closing or disposed, call
+   `reportSelfSyncResult(repository, currentProjectId, exitCode, logFile, …)` (§6). If the IDE is closing, the helper
+   stopped it, and the relaunched IDE reports at startup instead.
+4. A failure to start the helper is logged as a warning and shows "Failed to initiate self-shutdown sync: ..."; the IDE
+   keeps running.
 
-The IDE's own exit removes `config/.lock`. The helper, started ~100 ms earlier, sees the lock (if the IDE has not
-finished exiting yet), writes `signals/stop-request.json`, which `ShutdownSignalService` may also act on, and then waits
-for the lock to disappear before syncing and relaunching.
+## 6. Result reporting
 
-## 6. Exit codes and errors
+`SelfSyncResult` (`<projRoot>/self-sync-result.json`, core-spec §3) carries `timestamp`, `syncTypes`, `succeeded`,
+`message` and `restartError`. The plugin's `reportSelfSyncResult` consumes it (reads and deletes it) and shows:
 
-- Successful run: exit 0 after all targets are synced (and the JVM's non-daemon threads finish).
-- Any uncaught exception (argument validation, `Project not found`, `SyncException` from a held lock or shutdown
-  timeout, `IllegalStateException` for a missing base path, `IOException` during copying) terminates the JVM with exit
-  code 1 and a stack trace on stderr. There is no error handling in `main`.
-- With `--all-projects`, a failure on one project stops the loop; later projects are not synced. The failing project's
-  `signals/` dir and sync lock are still cleaned by `doWithLock`'s finally block; already-synced projects are left
-  synced.
-- Nobody reads the exit code: the plugin does not keep the `Process` handle, and the IDE that would show a notification
-  has exited. Output, including the stack trace, is in the IDE's `sync-helper.log` (§5.4).
+| Situation | Notification |
+|-----------|--------------|
+| `succeeded` | info "Synced <types> for <name>" |
+| `restartError` set | additionally error "Failed to reopen <name> after the sync: <error>. Details: <log>" |
+| not `succeeded` | error "Sync of <types> for <name> failed: <message>. Details: <log>" |
+| no result, helper exit code not 0 | error "sync-helper exited with code <n>. Details: <log>" |
+| no result at startup, or exit code 0 | nothing |
+
+`<types>` are the `SyncType` display names (all three read as "all settings"), `<log>` is the IDE's
+`sync-helper.log`. It runs in two places:
+
+- When the helper exits while the IDE still runs (§5.5): the helper failed before stopping the IDE (usage error, no
+  ideDir, unknown project, JVM failure) or hit the 60 s shutdown timeout (e.g. a blocking dialog), and the IDE was not
+  stopped.
+- At startup of an isolated instance (`SelfSyncResultActivity`, `exitCode = null`): the relaunched IDE shows the
+  outcome of the sync that stopped it. A relaunch that failed (`launch` threw, `restartError`) is shown at the next
+  manual start.
 
 ## 7. Environment and portability
 
-- The start script resolves Java via `JAVA_HOME`, then `java` on `PATH`. The IDE's bundled JBR is not used.
-- `-Dproject.juggler.base.dir` is **not** forwarded by the plugin, so the helper always uses `~/.project-juggler` unless
-  the environment sets `JAVA_OPTS`/`SYNC_HELPER_OPTS` (standard `application` script hooks).
-- Runs on macOS, Linux and Windows wherever `core` does; it has no platform-specific code of its own.
+- Needs only the JVM of the IDE that starts it; runs on macOS, Linux and Windows wherever `core` does and has no
+  platform-specific code of its own.
+- A manual run through `bin/sync-helper` needs a system `java` (`JAVA_HOME`/`PATH`) and `-Dproject.juggler.base.dir`
+  through `JAVA_OPTS`/`SYNC_HELPER_OPTS` for a non-default base dir.
 
 ## Known gaps
 
-1. **Restart race.** If the IDE finishes exiting before the helper's first `isProjectOpen` check (the plugin only waits
-   100 ms, and JVM startup of the helper is slower than that on most machines), `wasRunning` is false, the sync runs,
-   and the IDE is *not* restarted despite the notification promising it. Conversely, if the IDE is still running, both
-   the plugin's `Application.exit()` and the helper's stop request try to close it.
-2. `project.juggler.base.dir` is not propagated from the IDE to the helper. Under `runIde` the plugin uses
-   `~/.project-juggler-test` while the helper syncs `~/.project-juggler`, so self-sync in the sandbox operates on the
-   wrong tree (and will fail with `Project not found`).
-3. `--path <main project>` fails with `SyncException` from core (core-spec §8 step 0); the helper has no special
-   handling and exits 1.
-4. Output goes to `<IDE log dir>/sync-helper.log`, but nothing surfaces it; errors (lock held, shutdown timeout, missing
-   base paths) are still invisible unless the user opens the file. The IDE simply does not come back.
-5. No `exitProcess`: the helper lingers up to 10 s after the last relaunch because of the non-daemon crash-watch thread.
-   One sync-type-less invocation (`--ide X --path Y` with no type flag) is accepted and does a stop/restart with no
-   copying.
-6. Unknown arguments are ignored, so a typo like `--plugin` silently produces an empty sync.
-7. `--all-projects` is not transactional and has unspecified order; the current project may be restarted before the
-   others are synced, and a failure midway leaves the set half-synced with no report.
-8. The helper requires a system `java`. On a machine with only the IDE's JBR, extraction succeeds but the script fails
-   at startup, again invisibly.
-10. The placeholder display name `"IDE"` is persisted only if the helper creates a new ideDir (no plugin ran for that
-    executable); resolution goes through `IdeRegistry.getRepository` by executable path.
-11. `.github/workflows/release.yml` still references a `:cli` module; there is no release artifact for `sync-helper`
-    outside the plugin zip.
-12. Untested: argument parsing and target selection.
+1. A crash of the relaunched IDE after it started is not reported: the helper exits right after launching, before
+   core's crash watch (core-spec §7.3) can report a `SyncProgress.Error`.
+2. The `bin/` start scripts are bundled and extracted but unused by the plugin.
+3. A result file nobody consumes stays in `<projRoot>` if the user never opens that project isolated again; a later
+   self-sync overwrites it.

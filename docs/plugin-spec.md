@@ -15,8 +15,8 @@ Conventions:
 - Plugin id `maxmedvedev.project-juggler`, name "Project Juggler", depends only on `com.intellij.modules.platform`. Version is set in `plugin/build.gradle.kts` (`0.0.6`); `sinceBuild` 251, built against `intellijIdea("2025.1.1")`, JVM toolchain 17.
 - Depends on `:core` and Koin. Tests: Kotest in `plugin/src/test`, see §13.
 - `processResources` depends on `:sync-helper:installDist` and copies the distribution into plugin resources under `sync-helper/` (`bin/`, `lib/`). This is what `BundledSyncHelper` extracts at runtime (§9).
-- `runIde` passes `-Dproject.juggler.base.dir=<repo>/plugin/build/project-juggler-sandbox` (absolute, next to `build/idea-sandbox` whose paths it stores, removed by `clean`); `-PprojectJuggler.baseDir=<dir>` passes that dir instead. `sync-helper` spawned from the sandbox still ignores the property (sync-helper-spec gap 2).
-- Registered extensions: one notification group `project-juggler.notifications` (balloon), four `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`), one `applicationConfigurable` (`settings.ProjectJugglerConfigurable`, id `com.projectjuggler.plugin.settings`, parent `tools`, §7a), one `applicationListeners` entry (`ShutdownSignalAppListener` on topic `com.intellij.ide.AppLifecycleListener`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
+- `runIde` passes `-Dproject.juggler.base.dir=<repo>/plugin/build/project-juggler-sandbox` (absolute, next to `build/idea-sandbox` whose paths it stores, removed by `clean`); `-PprojectJuggler.baseDir=<dir>` passes that dir instead. `sync-helper` spawned from the sandbox gets the same value (§9).
+- Registered extensions: one notification group `project-juggler.notifications` (balloon), five `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`, `SelfSyncResultActivity`), one `applicationConfigurable` (`settings.ProjectJugglerConfigurable`, id `com.projectjuggler.plugin.settings`, parent `tools`, §7a), one `applicationListeners` entry (`ShutdownSignalAppListener` on topic `com.intellij.ide.AppLifecycleListener`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
 
 ## 2. Initialization and DI
 
@@ -128,7 +128,7 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
 `SyncType` is a sealed class: `All`, `VmOptions`, `Config`, `Plugins`, with `displayName` from bundle keys `sync.type.*` ("all settings", "VM options", "configuration", "plugins"), `cliFlag` (`--all`, `--vmoptions`, `--config`, `--plugins`, the sync-helper flag) and three derived booleans passed to `ProjectLauncher.syncProject`.
 
-Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarget` on a pooled thread and dispatch on it there: `InProcess(projects)` -> `performSyncWithProgress`, `SelfShutdown(helperArgs)` -> `performSelfShutdownSync` (§6.5), `NoTarget` -> nothing. `helperArgs` is `--ide <executablePath> (--path <projectPath> | --all-projects) <cliFlag>`.
+Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarget` on a pooled thread and dispatch on it there: `InProcess(projects)` -> `performSyncWithProgress`, `SelfShutdown(helperArgs, others)` -> `performSelfShutdownSync` (§6.5), after an in-process sync of `others` when there are any (§6.2), `NoTarget` -> nothing. `helperArgs` is always `--ide <executablePath> --path <current project path> <cliFlag>`.
 
 ### 6.1 Single project (`SyncSettingsSubAction`)
 
@@ -141,7 +141,7 @@ On a pooled thread, `SyncPlanner.forProject(repo, path, syncType)`:
 
 On a pooled thread, `SyncPlanner.forAllProjects(repo, syncType)`:
 
-- Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If any target's id is the current isolated project id, `SelfShutdown` with `--ide <executablePath> --all-projects <cliFlag>`; the info text is `notification.info.sync.self.shutdown.all`.
+- Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If one target's id is the current isolated project id, `SelfShutdown` with `--ide <executablePath> --path <current project path> <cliFlag>` and `others` = the remaining targets. The action syncs `others` in process first (`performSyncWithProgress` with the titles and notifications below), and its `onFinished` (on the task's pooled thread, also when some projects failed) starts the self-sync with the info text `notification.info.sync.self.shutdown.all`. Cancelling, or an exception outside the per-project loop, skips the self-sync. With no `others`, the self-sync starts directly.
 - Else `InProcess` over the targets, possibly empty (gap 16). Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed` (with the `sync.failure.summary` of the failed projects; the others are still synced).
 
 ### 6.3 `IsolatedInstance` (`services/IsolatedInstance.kt`)
@@ -150,16 +150,16 @@ On a pooled thread, `SyncPlanner.forAllProjects(repo, syncType)`:
 
 ### 6.4 `performSyncWithProgress`
 
-Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one, then `syncProject`. A `Throwable` from one project is logged as a warning and recorded as a `SyncFailure`, and the loop continues with the next project; control-flow exceptions (`ProcessCanceledException`) propagate. `syncProjects` returns a `SyncBatchResult(synced, failures)`. The task shows the caller's success notification only when no project failed; otherwise one error notification, the caller's error text with the detail from `describeFailures(result, total)`: the bare message (`userMessage()`) for a one-project batch, else `sync.failure.summary` ("N of M projects failed: <name>: <message>; ..."). A failure outside the projects (e.g. resolving the launcher) is logged as a warning and reported with its message through the same error text. Cancel is checked between projects only, never from the `Stopping` callback: cancelling during the stop wait would make core's `finally` delete `stop-request.json` while the target may already be exiting, leaving it stopped and never restarted; the wait is bounded by the 60 s timeout. Cancellation shows no notification. Projects that are running are stopped via the signal protocol and restarted (core-spec §8).
+Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one, then `syncProject`. A `Throwable` from one project is logged as a warning and recorded as a `SyncFailure`, and the loop continues with the next project; control-flow exceptions (`ProcessCanceledException`) propagate. `syncProjects` returns a `SyncBatchResult(synced, failures)`. The task shows the caller's success notification only when no project failed; otherwise one error notification, the caller's error text with the detail from `describeFailures(result, total)`: the bare message (`userMessage()`) for a one-project batch, else `sync.failure.summary` ("N of M projects failed: <name>: <message>; ..."). A failure outside the projects (e.g. resolving the launcher) is logged as a warning and reported with its message through the same error text. Cancel is checked between projects only, never from the `Stopping` callback: cancelling during the stop wait would make core's `finally` delete `stop-request.json` while the target may already be exiting, leaving it stopped and never restarted; the wait is bounded by the 60 s timeout. Cancellation shows no notification. Projects that are running are stopped via the signal protocol and restarted, also when their sync failed (core-spec §8). An optional `onFinished` runs at the end of the task after the notification, but not on cancellation or when the sync threw outside the per-project loop.
 
 ### 6.5 Self-shutdown sync (`performSelfShutdownSync`)
 
 `@RequiresBackgroundThread`; both callers run it from their pooled-thread planning.
 
 1. Info notification (passed by the caller).
-2. A non-cancellable `Task.Backgroundable` titled `progress.sync.helper.starting` calls `BundledSyncHelper.start(helperArgs)` (§9; the `SyncType.cliFlag` is already the last helper arg): it extracts if needed, starts `<executable> <helperArgs>` with stdout and stderr redirected to `<IDE log dir>/sync-helper.log` (`PathManager.getLogDir()`, overwritten per run; `<projRoot>/logs` in an isolated instance) and stdin closed, and does not wait. Then the task sleeps 100 ms.
-3. `onSuccess`: `ApplicationManager.getApplication().exit()` on EDT. The IDE exits; the helper detects the lock release, syncs and relaunches.
-4. `onThrowable` (any failure in extraction or spawn) -> logged warning and `notification.error.sync.self.shutdown.failed`; the IDE does not exit in that case. Cancellation cannot happen (non-cancellable); a `ProcessCanceledException` would go to `onCancel` and also keep the IDE running.
+2. A non-cancellable `Task.Backgroundable` titled `progress.sync.helper.starting` subscribes an `AppLifecycleListener` on the application message bus that records `appWillBeClosed`, then calls `BundledSyncHelper.start(helperArgs)` (§9): it extracts if needed, starts the helper on the IDE's JVM with stdout and stderr redirected to `<IDE log dir>/sync-helper.log` (`PathManager.getLogDir()`, overwritten per run; `<projRoot>/logs` in an isolated instance) and stdin closed, and keeps the `Process`. The IDE does not exit by itself: the helper finds it running (`config/.lock`), writes `stop-request.json`, and `ShutdownSignalService` (§10) closes it; the helper then syncs and relaunches it (sync-helper-spec §4).
+3. `process.onExit()` disconnects the listener and calls `reportHelperExit`: when the app is closing (`appWillBeClosed` seen) or disposed, nothing (the relaunched IDE reports at startup, §10b); otherwise the helper exited while this IDE still runs (it failed before stopping it, or the 60 s shutdown timed out), and `reportSelfSyncResult` (§10b) reports the result file or the exit code for `IsolatedInstance.currentProjectId()`. `Application.isExitInProgress` is not used because it is internal API.
+4. `onThrowable` (any failure in extraction or spawn) -> logged warning and `notification.error.sync.self.shutdown.failed`; the IDE keeps running. Cancellation cannot happen (non-cancellable).
 
 ## 7. IDE path drift (`IdePathSyncDetector`)
 
@@ -213,16 +213,18 @@ All fields except the main project go into one `repository.update`; `maxRecentPr
 
 ## 9. Bundled sync-helper (`BundledSyncHelper`)
 
-`getExecutable()` (`@RequiresBackgroundThread`, `@Synchronized` inside) works under the root `PathManager.getSystemDir()/project-juggler/sync-helper/` of the running IDE (`<projRoot>/system/...` in an isolated instance, so `ProjectCleaner` removes it with the project). Only this IDE process uses that root.
+`getInstallDir()` (`@RequiresBackgroundThread`, `@Synchronized` inside) works under the root `PathManager.getSystemDir()/project-juggler/sync-helper/` of the running IDE (`<projRoot>/system/...` in an isolated instance, so `ProjectCleaner` removes it with the project). Only this IDE process uses that root.
 
 - The extraction directory is `<root>/<fingerprint>`, where the fingerprint is the first 16 hex chars of a SHA-256 over the sorted `<relative path>:<content id>` of every regular file under `sync-helper/bin` and `sync-helper/lib` in plugin resources (content id: size and CRC from the jar's central directory, no decompression; in dev mode with a file URL, a SHA-256 of the file). It is computed once per class load. Fingerprint and extraction walk the same entry list, from `jar:` URLs (JAR entries with the prefix) or file URLs (`Files.walk`).
-- Executable is `bin/sync-helper.bat` on Windows, `bin/sync-helper` elsewhere. If it exists under `<root>/<fingerprint>`, it is returned without extraction (also across IDE sessions); if that directory was deleted, the next call re-extracts.
-- Otherwise the files are extracted into `<root>/<fingerprint>.tmp-*`, the executable is checked and made executable on Unix, an incomplete `<root>/<fingerprint>` is deleted, and the temp dir is moved into place with `ATOMIC_MOVE`, so a crash mid-extraction never leaves a directory that looks complete. If the move fails but a complete target exists, the temp dir is deleted and the target used. Any other failure deletes the temp dir, logs an error and throws `IllegalStateException` (also for a missing resource or executable).
+- `lib/sync-helper.jar` marks a complete extraction. If it exists under `<root>/<fingerprint>`, that directory is returned without extraction (also across IDE sessions); if it was deleted, the next call re-extracts.
+- Otherwise the files are extracted into `<root>/<fingerprint>.tmp-*`, the jar is checked, an incomplete `<root>/<fingerprint>` is deleted, and the temp dir is moved into place with `ATOMIC_MOVE`, so a crash mid-extraction never leaves a directory that looks complete. If the move fails but a complete target exists, the temp dir is deleted and the target used. Any other failure deletes the temp dir, logs an error and throws `IllegalStateException` (also for a missing resource or jar). No executable bit is set; `bin/` is extracted for manual runs only.
 - After an extraction, every other entry of the root (old fingerprints, leftover `*.tmp-*`) is deleted recursively, and once per JVM the legacy `java.io.tmpdir/sync-helper-*` directories of earlier versions are deleted when they contain `bin/` and `lib/sync-helper.jar` and were last modified more than 1 hour ago (an older plugin in another IDE may be mid-sync from one). Each deletion is best effort: failures are logged at info.
 
-`start(args, logFile = <log dir>/sync-helper.log)` (`@RequiresBackgroundThread`) creates the log dir, starts `<getExecutable()> <args>` with `redirectErrorStream(true)` into `logFile` (overwritten), closes the process's stdin and logs the command line and log file at info. It returns the `Process`; `performSelfShutdownSync` does not keep it.
+`command(installDir, javaHome, baseDir, args, platform = Platform.current())` is `<javaHome>/bin/java[.exe] -cp <installDir>/lib/* [-Dproject.juggler.base.dir=<baseDir>] com.projectjuggler.synchelper.SyncHelperMainKt <args>` (`MAIN_CLASS`). `java -cp` expands the `*` itself, so no shell is involved. The start scripts are bypassed: running on the IDE's JVM needs no system `java`, and setting no `JAVA_HOME` keeps the JBR out of the relaunched IDE's environment, which it inherits from the helper.
 
-The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one of `--path <project>` or `--all-projects`; any of `--all`, `--vmoptions`, `--config`, `--plugins` (none means nothing is synced but the stop/restart cycle still runs). It builds `IdeInstallation(idePath, "IDE")`, resolves the repository, and runs `syncProject` with `STOP_AND_RESTART` semantics and a 60 s timeout for each project. Unknown args are ignored.
+`start(args, logFile = <log dir>/sync-helper.log)` (`@RequiresBackgroundThread`) builds `command(getInstallDir(), System.getProperty("java.home"), System.getProperty("project.juggler.base.dir"), args)`, creates the log dir, starts it with `redirectErrorStream(true)` into `logFile` (overwritten), closes the process's stdin and logs the command line and log file at info. It returns the `Process`, which `performSelfShutdownSync` watches (§6.5).
+
+The helper's CLI contract: `--ide <path> --path <project> (--all | --vmoptions | --config | --plugins)...`, strict parsing, exit codes 0 (synced), 1 (failure), 2 (usage); it only uses an existing ideDir (`IdeRegistry.findRepository`) and writes `<projRoot>/self-sync-result.json`. See [sync-helper-spec.md](sync-helper-spec.md).
 
 ## 10. Shutdown signal handling (`shutdown/`)
 
@@ -233,6 +235,19 @@ The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one 
 ## 10a. Stale main-project entry cleanup (`startup/StaleMainProjectCleanupActivity`)
 
 `ProjectActivity`, so it runs per project open. On `Dispatchers.IO` it calls `cleanStaleMainProjectEntryIfMainInstance(repo, PathManager.getConfigDir())` (`services/StaleMainProjectCleanup.kt`): null unless `isRunningInMainInstance`, else `ProjectCleaner.cleanStaleMainProjectEntry()` (core-spec §9). The activity logs the removed entry, if any. Any `Throwable` is logged; `ControlFlowException` is rethrown. Together with the call in `setMainProject`, this guarantees the main project does not keep a `projects/<id>/` entry once its isolated instance has exited.
+
+## 10b. Self-sync result (`services/SelfSyncReport.kt`, `startup/SelfSyncResultActivity`)
+
+`reportSelfSyncResult(repository, projectId, exitCode, logFile, notifications)` consumes the project's `SelfSyncResult` (`SelfSyncResultStore.consume`, core-spec §8.2) and shows, through the `NotificationHandler`:
+
+- `succeeded`: info `notification.self.sync.succeeded` ("Synced <types> for <name>"), plus error `notification.self.sync.restart.failed` when `restartError` is set;
+- not `succeeded`: error `notification.self.sync.failed` ("Sync of <types> for <name> failed: <message>. Details: <log>"), plus the restart error as above; a result without a message reads `notification.self.sync.unknown.error`;
+- no result (or no metadata for the id) and `exitCode` neither null nor 0: error `notification.self.sync.helper.exited`;
+- no result and `exitCode` null or 0: nothing.
+
+`<types>` maps the result's `syncTypes` back through `SyncType`: all three give `SyncType.All.displayName`, otherwise the display names joined with ", ". `<name>` is the project's display name, `<log>` the `sync-helper.log` path. Any `Throwable` is logged as a warning; `ControlFlowException` is rethrown.
+
+`SelfSyncResultActivity` (`ProjectActivity`, so it runs per project open) does nothing unless `IsolatedInstance.currentProjectId()` is set; then, on `Dispatchers.IO`, it calls `reportSelfSyncResult(currentRepository, id, exitCode = null, PathManager.getLogDir()/sync-helper.log, IntelliJNotificationHandler(project))`. Because the file is consumed, the result shows once, in the first project window of the relaunched IDE. Other failures are logged as errors.
 
 ## 11. Plugin sync on IDE update (`startup/PluginSyncOnUpdateActivity`)
 
@@ -261,7 +276,8 @@ Because the build number is stored before the checks, only the first project ope
 | Open a Project Copy worktree validation, creation, launch | pooled thread |
 | Set/Unset main project config write and stale-entry cleanup | pooled thread |
 | `ShutdownSignalService` start and polling | `Dispatchers.IO` coroutine, from app start |
-| `PluginSyncOnUpdateActivity` checks (`pluginSyncTargetsAfterUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
+| `PluginSyncOnUpdateActivity` checks (`pluginSyncTargetsAfterUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check, `SelfSyncResultActivity` report | `Dispatchers.IO` |
+| Self-sync report after the helper exits while the IDE runs | the `Process.onExit()` completion thread |
 | `PluginSyncOnUpdateActivity` offered sync ("Sync plugins") | `Task.Backgroundable` |
 | `IdePathsCheckActivity` "Update paths" / "Use current IDE paths" | pooled thread |
 | Settings page load (`createComponent`, `reset`), validation (path stats) and save of `config.json` (`apply`) | EDT (`Configurable` methods are EDT-bound) |
@@ -290,12 +306,13 @@ Covered, by spec:
 | `di/PluginKoinTest` | `IdeInstallationService.getInstance()` starts Koin, returns one instance, loads `pluginModule` into a Koin started without it |
 | `services/PlatformRecentProjectsTest` | recent paths and icon fallbacks for another `RecentProjectsManager`, paths from `RecentProjectsManagerBase` |
 | `actions/recent/CompactPathTest` | `compactPath` |
-| `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, `start` output in the log file |
+| `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, jar marker, `command` on Unix and Windows with and without a base dir, `start` output in the log file |
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
 | `services/IsolatedInstanceTest` | `projectIdFromConfigPath`, `isCurrentProject` |
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests; age against `timeoutSeconds` and the 5-minute fallback |
 | `shutdown/ShutdownSignalRegistrationTest` | `plugin.xml` registers `ShutdownSignalAppListener` on the `AppLifecycleListener` topic (`pluginXml()` in `PluginTestSupport.kt`) |
-| `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args |
+| `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args; with the current project, `--path <current>` and `others` without it; the main project excluded |
+| `services/SelfSyncReportTest` (test application) | every `reportSelfSyncResult` case (success, all types, restart error, failure, helper exit code, nothing at startup or exit 0, unknown project) and that the result is consumed |
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, continuing past failures, cancellation before each project and from a project's sync, `describeFailures` |
 | `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
 | `services/OpenWithIdeTest` | `openWithInstallations` exclusions, base-settings filter and order; `shouldPromptForMainProject` per target repository |
@@ -316,7 +333,7 @@ Covered, by spec:
 | `services/CurrentIdeExecutableTest` | `currentIdeExecutable` per platform and script name |
 | `services/IdeInstallationServiceTest` (test application) | current installation keyed on the script-name launcher, adoption of a legacy home-keyed dir, repository in the sandbox IDE, auto-populated base paths, `VMOptionsCopy` files |
 
-Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `start()` and exit, `ShutdownSignalAppListener` itself, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, the settings page's apply and validation through the dialog (the logic is covered by `JugglerSettingsTest`), and the actions and startup activities themselves.
+Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn, stop through `ShutdownSignalService`, relaunch and the startup notification; checked by hand in the sandbox IDE), the `ShutdownSignalService` polling loop, `start()` and exit, `ShutdownSignalAppListener` itself, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, the settings page's apply and validation through the dialog (the logic is covered by `JugglerSettingsTest`), and the actions and startup activities themselves.
 
 Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 

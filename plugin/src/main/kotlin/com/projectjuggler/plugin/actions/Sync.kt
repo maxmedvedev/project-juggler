@@ -14,13 +14,16 @@ import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.recent.SyncType
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.IsolatedInstance
 import com.projectjuggler.plugin.services.SyncProgressSink
 import com.projectjuggler.plugin.services.describeFailures
+import com.projectjuggler.plugin.services.reportSelfSyncResult
 import com.projectjuggler.plugin.services.syncProjects
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.plugin.util.BundledSyncHelper
+import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 import com.projectjuggler.process.ProjectLauncher
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
@@ -77,18 +80,27 @@ fun performSelfShutdownSync(
 
 /**
  * Reports a sync-helper that exited while this IDE is still running, i.e. before it stopped the IDE or after a
- * shutdown timeout. When the IDE is exiting (the helper stopped it), the relaunched IDE reports at startup instead.
+ * shutdown timeout, through [reportSelfSyncResult] for the current isolated project. When the IDE is exiting (the
+ * helper stopped it), the relaunched IDE reports at startup instead (`SelfSyncResultActivity`).
  */
 private fun reportHelperExit(project: Project?, exitCode: Int, logFile: Path, appClosing: Boolean) {
     try {
         if (appClosing || ApplicationManager.getApplication().isDisposed) return
         LOG.info("sync-helper exited with code $exitCode while the IDE is running; output in $logFile")
-        if (exitCode != 0) {
-            showErrorNotification(
-                ProjectJugglerBundle.message("notification.self.sync.helper.exited", exitCode, logFile.toString()),
-                project?.takeUnless { it.isDisposed }
-            )
+        val notifications = IntelliJNotificationHandler(project?.takeUnless { it.isDisposed })
+        val projectId = IsolatedInstance.currentProjectId()
+        if (projectId == null) {
+            // Self-sync only runs in an isolated instance; without a project id there is no result file to read.
+            if (exitCode != 0) {
+                notifications.showErrorNotification(
+                    ProjectJugglerBundle.message("notification.self.sync.helper.exited", exitCode, logFile.toString())
+                )
+            }
+            return
         }
+        reportSelfSyncResult(
+            IdeInstallationService.currentIdeConfigRepository, projectId, exitCode, logFile, notifications
+        )
     } catch (t: Throwable) {
         t.rethrowIfControlFlow()
         LOG.warn("Failed to report the sync-helper exit", t)

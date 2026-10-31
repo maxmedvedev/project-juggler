@@ -29,6 +29,7 @@
         <postStartupActivity implementation="com.projectjuggler.plugin.startup.PluginSyncOnUpdateActivity"/>
         <postStartupActivity implementation="com.projectjuggler.plugin.startup.StaleMainProjectCleanupActivity"/>
         <postStartupActivity implementation="com.projectjuggler.plugin.startup.IdePathsCheckActivity"/>
+        <postStartupActivity implementation="com.projectjuggler.plugin.startup.SelfSyncResultActivity"/>
         <applicationConfigurable parentId="tools"
                                  instance="com.projectjuggler.plugin.settings.ProjectJugglerConfigurable"
                                  id="com.projectjuggler.plugin.settings"

@@ -56,6 +56,7 @@ Invariant: the id is the on-disk directory name for the project's isolated state
           metadata.json                     # ProjectMetadata
           idea.vmoptions                    # generated, see §6
           config/  system/  logs/  plugins/ # isolated IDE dirs
+          self-sync-result.json             # SelfSyncResult, §8.2
           signals/
             stop-request.json               # §8
             sync-in-progress.lock           # permanent, §8
@@ -98,7 +99,8 @@ Newest first, truncated to `maxRecentProjects` on every `recordOpen`. An empty o
 
 ## 4. Repository and registry
 
-- `IdeRegistry` (singleton) lists installations: registered ones are `v2/*` directories whose `config.json` parses and has a non-blank `installation.executablePath` (`IdeConfigRepository.loadFromDir` returns null otherwise, so corrupt dirs are omitted); `getAllInstallations()` is detected (§10) plus registered, deduplicated by `executablePath`. `getRepository(installation)` resolves, in order: (1) `v2/<installation.directoryName>` when it has a `config.json`, with the given installation; (2) the first registered dir whose stored `installation.executablePath` equals the given one (another display name, e.g. `sync-helper`'s `"IDE"`), with the stored installation, so its scope keys on the real dir name; (3) a new `v2/<installation.directoryName>`. Nothing is created until the first write.
+- `IdeRegistry` (singleton) lists installations: registered ones are `v2/*` directories whose `config.json` parses and has a non-blank `installation.executablePath` (`IdeConfigRepository.loadFromDir` returns null otherwise, so corrupt dirs are omitted); `getAllInstallations()` is detected (§10) plus registered, deduplicated by `executablePath`. `getRepository(installation)` resolves, in order: (1) `v2/<installation.directoryName>` when it has a `config.json`, with the given installation; (2) the first registered dir whose stored `installation.executablePath` equals the given one (another display name), with the stored installation, so its scope keys on the real dir name (`findRepository`); (3) a new `v2/<installation.directoryName>`. Nothing is created until the first write.
+- `findRepository(executablePath)` returns the first registered dir whose stored `installation.executablePath` equals the given one, with the stored installation, or null. It never creates a dir; `sync-helper` uses it so it only works on data the plugin already has.
 - `adoptLegacyRepository(installation, legacyExecutablePaths)` moves one dir registered under a legacy executable path (the plugin passes the IDE home directory older versions keyed on) to `v2/<installation.directoryName>` and stores `installation` in its `config.json`; `projects/` and `recent.json` move with it. It returns null and changes nothing unless the target dir does not exist, exactly one registered dir matches, and none of that dir's `projects/*/config/.lock` files exists (`ProjectLockUtils.hasIsolatedInstanceLock`, live or stale). A failed move is rethrown as `IllegalStateException` naming both paths. Isolated `idea.vmoptions` files keep the old absolute paths until the next launch rewrites their marker block (§6).
 - `IdeConfigRepository` exposes `load()`, `save()`, `update(transform)` (one lock held across read, transform and write, so concurrent updates from other processes are not lost; a corrupt file is transformed from the default), `saveProjectMetadata`, `loadProjectMetadata(path|id)` (null when missing or corrupt), `loadAllProjects()` (unsorted, skips dirs without a readable `metadata.json`), `deleteProjectMetadata(path)` (removes only the JSON file).
 - `ProjectManager` wraps metadata operations: `registerOrUpdate` increments `openCount`, sets `lastOpened = now`, preserves `debugPort` and `baseVmOptionsHash`; `listAll()` sorts by `lastOpened` descending; `listSyncable()` returns all tracked projects except the main project (§8); `ensureDebugPort` allocates and persists a port when missing; `debugPortFor(project, basePath?)` calls `ensureDebugPort` when `VMOptionsGenerator.containsJdwp(basePath)`, otherwise returns the stored `debugPort` without allocating; `updateBaseVmOptionsHash(project, hash)` reloads the stored metadata (so a just-saved `debugPort` is kept), sets the hash and saves; `remove(path)` deletes metadata only; `get(path)` and `resolvePath(string)` as above.
@@ -108,7 +110,7 @@ Newest first, truncated to `maxRecentProjects` on every `recordOpen`. An empty o
 Koin, started once by `KoinInit.init(vararg extraModules)` (idempotent; extra modules are loaded onto a running Koin).
 
 - `coreModule`: true singletons `IdeRegistry`, `ProcessLauncher` (`ProcessLauncherImpl`).
-- `ideScopedModule`: a Koin scope with qualifier `IDE_SCOPE`. `IdeScopeManager.getScope(repository)` creates one scope per `IdeConfigRepository.installation.directoryName` and `declare`s the repository into it. Scoped services: `ProjectManager`, `DirectoryManager`, `BaseVMOptionsTracker`, `ShutdownSignalManager`, `RecentProjectsIndex`, `IntelliJLauncher`, `ProjectLauncher`, `ProjectCleaner`.
+- `ideScopedModule`: a Koin scope with qualifier `IDE_SCOPE`. `IdeScopeManager.getScope(repository)` creates one scope per `IdeConfigRepository.installation.directoryName` and `declare`s the repository into it. Scoped services: `ProjectManager`, `DirectoryManager`, `BaseVMOptionsTracker`, `ShutdownSignalManager`, `SelfSyncResultStore`, `RecentProjectsIndex`, `IntelliJLauncher`, `ProjectLauncher`, `ProjectCleaner`.
 
 Contract for callers: service constructors are `internal`; obtain instances via `X.getInstance(repository)`, which resolves `repository.getScope().get()`. Two repositories for the same installation share a scope and therefore the same service instances. `KoinInit.stop()` closes all scopes and stops Koin.
 
@@ -183,12 +185,12 @@ Sequence:
    { "requestId": "<uuid>", "timestamp": "<ISO instant>", "requestedBy": "system",
      "autoRestart": true, "syncTypes": ["vmoptions", "config"], "timeoutSeconds": <shutdownTimeout> }
    ```
-   then poll `isProjectOpen` once per second up to `shutdownTimeout`, emitting `SyncProgress.Stopping(seconds)`. On success sleep 500 ms; on timeout throw `SyncException` (the request file is left for cleanup in step 6). `syncTypes` lists the requested parts in the order vmoptions, config, plugins; `timeoutSeconds` is `SyncOptions.shutdownTimeout`.
+   then poll `isProjectOpen` once per second up to `shutdownTimeout`, emitting `SyncProgress.Stopping(seconds)`. On success sleep 500 ms and count the IDE as *stopped*; on timeout throw `SyncException` (the request file is left for cleanup in step 6; the IDE still runs, so it is not stopped and step 5 does not relaunch it). `syncTypes` lists the requested parts in the order vmoptions, config, plugins; `timeoutSeconds` is `SyncOptions.shutdownTimeout`.
 4. Emit `Syncing`, then `ensureProjectDirectories` and:
    - vmoptions: require an existing base vmoptions file (else `IllegalStateException`); `debugPortFor` (allocates only when the base contains `-agentlib:jdwp=`); `generate(..., forceRegenerate = true)`; persist `computeBaseHash(base)` via `updateBaseVmOptionsHash`.
    - config: wipe `<projRoot>/config/` contents **except the excluded entries** and recopy base config with the §7.1 exclusions. A running isolated IDE therefore keeps its `.lock` and its own recent projects lists.
    - plugins: wipe `<projRoot>/plugins/` and recopy base plugins.
-5. If `wasRunning && stopIfRunning && autoRestart`: emit `Restarting` and call `ProjectLauncher.launch(project.path, onFailure)` (metadata, recents and vmoptions-hash bookkeeping as in §7.1). A crash within 10 s is reported as `SyncProgress.Error("IntelliJ exited with code <n> after restart of '<name>': <output>")`, possibly after `syncProject` has returned, so `onProgress` consumers must tolerate a late `Error`; exceptions from `launch` become `SyncProgress.Error("Failed to restart IntelliJ: ...")` as well. Neither fails the sync.
+5. If step 3 stopped the IDE and `autoRestart` is set, relaunch it whatever the outcome of step 4 (in a `finally`; an exception from step 4 propagates after the relaunch, so a failed sync does not leave the IDE closed): emit `Restarting` and call `ProjectLauncher.launch(project.path, onFailure)` (metadata, recents and vmoptions-hash bookkeeping as in §7.1). A crash within 10 s is reported as `SyncProgress.Error("IntelliJ exited with code <n> after restart of '<name>': <output>")`, possibly after `syncProject` has returned, so `onProgress` consumers must tolerate a late `Error`; exceptions from `launch` become `SyncProgress.Error("Failed to restart IntelliJ: ...")` as well. Neither fails the sync.
 6. Always: delete every file in `signals/` except `sync-in-progress.lock`, then release the sync lock. The lock file is never deleted.
 
 If the project is running and `stopIfRunning` is false, the sync proceeds against a live IDE.
@@ -199,7 +201,9 @@ The isolated IDE (plugin side) is expected to poll `signals/stop-request.json`, 
 
 ### 8.2 Self-sync
 
-A process cannot sync its own IDE while running. The expected pattern (used by the plugin and implemented by `sync-helper`) is to spawn an external process that runs `ProjectLauncher.syncProject` with `stopIfRunning = true, autoRestart = true`.
+A process cannot sync its own IDE while running. The expected pattern (used by the plugin and implemented by `sync-helper`, see [sync-helper-spec.md](sync-helper-spec.md)) is to spawn an external process that runs `ProjectLauncher.syncProject` with `stopIfRunning = true, autoRestart = true`. The running IDE is stopped through the stop request like any other (§8.1), not by exiting itself.
+
+The external process records the outcome with `SelfSyncResultStore.write(project, SelfSyncResult)` in `<projRoot>/self-sync-result.json`, outside `signals/` because step 6 empties that dir. `SelfSyncResult` is `{ timestamp, syncTypes, succeeded, message?, restartError? }`: `syncTypes` uses the stop-request names (`SyncTypeNames.of`), `message` is the failure message when `succeeded` is false, `restartError` the last `SyncProgress.Error` seen. `consume(project)` reads and deletes the file under `FileLockUtils.withFileLock`; a missing, empty or corrupt file gives null (a corrupt one is deleted, logged to stderr). Both use the stop request's JSON settings (`ShutdownSignalManager.json`). `SelfSyncResultStore.getInstance(repository)` resolves it from the IDE scope.
 
 ## 9. Cleaning and removal
 
