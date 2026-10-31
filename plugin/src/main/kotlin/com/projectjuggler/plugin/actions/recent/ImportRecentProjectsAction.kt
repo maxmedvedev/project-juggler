@@ -1,14 +1,14 @@
 package com.projectjuggler.plugin.actions.recent
 
-import com.intellij.ide.RecentProjectsManager
-import com.intellij.ide.RecentProjectsManagerBase
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
+import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.PlatformRecentProjects
 import com.projectjuggler.plugin.services.importProjects
 import com.projectjuggler.plugin.services.importableProjects
 
@@ -18,7 +18,11 @@ object ImportRecentProjectsAction : RecentProjectPopupAction {
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
         step.doFinalStep {
-            importRecentProjects(project)
+            application.executeOnPooledThread {
+                // Filtering stats every recent path, hence off the EDT
+                val projects = importableProjects(PlatformRecentProjects.recentPaths())
+                application.invokeLater { confirmAndImport(project, projects) }
+            }
         }
         return PopupStep.FINAL_CHOICE
     }
@@ -26,11 +30,8 @@ object ImportRecentProjectsAction : RecentProjectPopupAction {
     override fun getTextFor(): String =
         ProjectJugglerBundle.message("popup.import.recent.projects.label")
 
-    private fun importRecentProjects(project: Project?) {
-        // Get IntelliJ's recent projects
-        val manager = RecentProjectsManager.getInstance() as RecentProjectsManagerBase
-        val projects = importableProjects(manager.getRecentPaths())
-
+    /** Runs on EDT: asks for confirmation, then imports on a pooled thread and reshows the popup. */
+    private fun confirmAndImport(project: Project?, projects: List<ProjectPath>) {
         if (projects.isEmpty()) {
             Messages.showInfoMessage(
                 project,

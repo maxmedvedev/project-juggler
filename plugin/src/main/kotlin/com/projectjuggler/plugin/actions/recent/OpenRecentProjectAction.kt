@@ -3,6 +3,7 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.intellij.util.application
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.actions.launchOrFocusProject
 
@@ -17,7 +18,7 @@ data class OpenRecentProjectAction(
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
         step.doFinalStep {
-            launchOrFocusProject(project, projectPath)
+            application.executeOnPooledThread { launchOrFocusProject(project, projectPath) }
         }
         return PopupStep.FINAL_CHOICE
     }

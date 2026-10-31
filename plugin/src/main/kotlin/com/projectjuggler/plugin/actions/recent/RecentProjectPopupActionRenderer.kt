@@ -1,8 +1,6 @@
 package com.projectjuggler.plugin.actions.recent
 
 import com.intellij.icons.AllIcons
-import com.intellij.ide.RecentProjectsManager
-import com.intellij.ide.RecentProjectsManagerBase
 import com.intellij.ui.IconManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleColoredComponent
@@ -13,6 +11,7 @@ import com.intellij.util.ui.UIUtil
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.icons.ProjectJugglerIcons
+import com.projectjuggler.plugin.services.PlatformRecentProjects
 import java.awt.BorderLayout
 import java.awt.BorderLayout.CENTER
 import java.awt.BorderLayout.WEST
@@ -23,8 +22,6 @@ import javax.swing.BoxLayout.Y_AXIS
 import kotlin.io.path.absolutePathString
 
 internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProjectPopupAction> {
-    private val recentProjectsManager = RecentProjectsManager.getInstance() as RecentProjectsManagerBase
-
     override fun getListCellRendererComponent(
         list: JList<out RecentProjectPopupAction>,
         value: RecentProjectPopupAction?,
@@ -56,8 +53,8 @@ internal class RecentProjectPopupActionRenderer : ListCellRenderer<RecentProject
         panel.accessibleContext.accessibleName = path.name
         panel.border = empty(4, 6)
 
-        // Get project icon using IntelliJ's icon helper
-        var projectIcon = recentProjectsManager.getProjectIcon(path.path.absolutePathString(), true)
+        // The platform's project icon, or the generic one when the recent projects manager does not provide it
+        var projectIcon = PlatformRecentProjects.projectIcon(path.path.absolutePathString())
 
         // Add green dot badge if project is currently open
         if (value.isOpen) {

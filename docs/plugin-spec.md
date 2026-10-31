@@ -20,7 +20,7 @@ Conventions:
 
 ## 2. Initialization and DI
 
-- `KoinInit.init(pluginModule)` is called lazily at the entry of every action (`actionPerformed`), inside the `ShutdownSignalService.start()` coroutine, and in the two startup activities (`PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`). It is idempotent, so the first caller wins; there is no single startup hook.
+- `KoinInit.init(pluginModule)` is called lazily by `IdeInstallationService.getInstance()` (`ensurePluginKoin` in `di/PluginModule.kt`: only when `IdeInstallationService` is not registered yet, which also covers a Koin started without `pluginModule`); no other call site. Every plugin path reaches Koin through `IdeInstallationService`, so this works on any thread and on dynamic plugin load without a startup hook.
 - `pluginModule` declares one singleton: `IdeInstallationService(IdeRegistry)`. Access is through `IdeInstallationService.getInstance()` (Koin `GlobalContext`) or the shortcut `IdeInstallationService.currentIdeConfigRepository`.
 - `IdeInstallationService`:
   - `currentInstallation` (lazy): `currentIdeExecutable(homePath, ApplicationNamesInfo.scriptName, platform)` (`services/CurrentIdeExecutable.kt`) resolves `<home>/MacOS/<script>` (macOS), `<home>/bin/<script>.sh` (Linux), `<home>/bin/<script>64.exe` (Windows), so PyCharm, Android Studio etc. get their own launcher. When the file does not exist a warning is logged (launches from this IDE will fail) and the path is used anyway. Then `IntelliJLocator.findInstallation(path)`. The home directory is never the key.
@@ -31,23 +31,23 @@ Conventions:
 
 ## 3. Entry points (actions)
 
-Actions are thin; all run `update` on BGT. None requires an open project (`e.project` may be null and is used only as the parent for dialogs, progress and notifications).
+Actions are thin; all run `update` on BGT. `actionPerformed` shows choosers/dialogs on EDT and does all config I/O on a pooled thread. None requires an open project (`e.project` may be null and is used only as the parent for dialogs, progress and notifications).
 
 | Action id | Behavior |
 |---|---|
 | `OpenWithProjectJuggler` | Always enabled. Runs `showFileChooserAndLaunch` (§4.1). |
-| `ShowRecentProjects` | On a pooled thread, init Koin and `RecentProjectPopupBuilder(project).show()` (§5). |
+| `ShowRecentProjects` | On a pooled thread, `RecentProjectPopupBuilder(project).show()` (§5). |
 | `OpenProjectCopy` | Git worktree flow (§8). |
 
 ## 4. Launch flow
 
 ### 4.1 File chooser
 
-`showFileChooserAndLaunch(project)`: single file-or-folder chooser (`file.chooser.title/description`). On selection, `ProjectManager.resolvePath(selectedFile.path)` (tilde expansion, absolute, normalized) and `launchOrFocusProject(project, path)`. Runs on the calling thread (EDT for actions).
+`showFileChooserAndLaunch(project)`: single file-or-folder chooser (`file.chooser.title/description`). The chooser runs on EDT; on selection, on a pooled thread, `ProjectManager.resolvePath(selectedFile.path)` (tilde expansion, absolute, normalized) and `launchOrFocusProject(project, path)`.
 
 ### 4.2 `launchOrFocusProject(project, path, repository = current)` (`actions/Launch.kt`)
 
-`repo` below is `repository`, the current installation's repository unless a caller (Open with <IDE>, §5.5) passes another installation's. The main-project prompt only runs for the current installation's repository.
+`@RequiresBackgroundThread`: it reads the repository, so every caller (file chooser, popup items) calls it on a pooled thread; the prompt hops to EDT by itself. `repo` below is `repository`, the current installation's repository unless a caller (Open with <IDE>, §5.5) passes another installation's. The main-project prompt only runs for the current installation's repository.
 
 1. If `shouldPromptForMainProject(repo, currentRepo, PathManager.getConfigDir())` (`services/OpenWithIde.kt`: `repo` is the current installation's, and `MainProjectService.shouldPromptForMainProject`: no main project, not suppressed, running in main instance): on EDT show the main-project prompt (§4.3), then on a pooled thread:
    - `SetAsMain`: `setMainProject` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, `notification.success.set.main`) and open the project in the current IDE (`openProjectInCurrentIde`, focuses it if already open).
@@ -101,26 +101,26 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
 ### 5.3 Rendering (`RecentProjectPopupActionRenderer`)
 
-- Project item: IntelliJ's project icon (`RecentProjectsManagerBase.getProjectIcon`), with a green badge (`0x5CB85C`) when `isOpen` and a dimmed star (`icons/starDimmed.svg`) beneath when `isMainProject`. Three lines: name, `[branch]` (grayed, small; omitted when null), compacted path (`compactPath(path, home)`: home replaced by `~`; otherwise if longer than 60 chars, `.../<parent>/<name>`).
+- Project item: IntelliJ's project icon (`PlatformRecentProjects.projectIcon`, `services/PlatformRecentProjects.kt`: `RecentProjectsManagerBase.getProjectIcon` through a safe cast, `AllIcons.Nodes.IdeaProject` when the manager is another implementation), with a green badge (`0x5CB85C`) when `isOpen` and a dimmed star (`icons/starDimmed.svg`) beneath when `isMainProject`. Three lines: name, `[branch]` (grayed, small; omitted when null), compacted path (`compactPath(path, home)`: home replaced by `~`; otherwise if longer than 60 chars, `.../<parent>/<name>`).
 - Action items: icon + label, with a top separator for "Sync all projects" and "Import recent projects...". Icons: Browse = `Nodes.Folder`, sync and toggle = `Actions.Refresh`, import = `ToolbarDecorator.Import`, update paths = `General.Warning`.
 
 ### 5.4 Top-level popup actions
 
 | Item | Behavior |
 |---|---|
-| Browse... | `showFileChooserAndLaunch` after the popup closes. |
+| Browse... | `showFileChooserAndLaunch` (§4.1) after the popup closes. |
 | Sync ... (all projects) | §6.2 with `syncType`. |
-| Offer plugin sync on IDE update | Toggles `syncPluginsOnIdeUpdate` via `repository.update`, then rebuilds and reshows the popup. Label shows a check mark prefix when enabled. When on, an IDE update offers a plugin sync (§11) rather than running one. |
-| Import recent projects from IntelliJ... | Reads `RecentProjectsManagerBase.getRecentPaths()`, keeps existing directories; if none, info dialog `dialog.import.projects.no.projects`; else Yes/No confirm with count. The path filter is `importableProjects(paths)` (`services/RecentProjectsImport.kt`). On Yes, on a pooled thread `importProjects(repo, projects)` runs `ProjectManager.registerOrUpdate` and `RecentProjectsIndex.recordOpen` per project, then the popup is reshown. Import does not launch anything or create isolated dirs. |
-| IDE paths out of sync | `IdePathSyncDetector.updatePaths` then reshow (§7). |
+| Offer plugin sync on IDE update | On a pooled thread, toggles `syncPluginsOnIdeUpdate` via `repository.update`, then rebuilds and reshows the popup. Label shows a check mark prefix when enabled. When on, an IDE update offers a plugin sync (§11) rather than running one. |
+| Import recent projects from IntelliJ... | On a pooled thread, reads `PlatformRecentProjects.recentPaths()` (`RecentProjectsManagerBase.getRecentPaths()` through a safe cast; empty for another manager implementation, logged once at info) and keeps existing directories; then on EDT: if none, info dialog `dialog.import.projects.no.projects`; else Yes/No confirm with count. The path filter is `importableProjects(paths)` (`services/RecentProjectsImport.kt`). On Yes, on a pooled thread `importProjects(repo, projects)` runs `ProjectManager.registerOrUpdate` and `RecentProjectsIndex.recordOpen` per project, then the popup is reshown. Import does not launch anything or create isolated dirs. |
+| IDE paths out of sync | On a pooled thread, `IdePathSyncDetector.updatePaths` then reshow (§7). |
 
 ### 5.5 Per-project sub-actions
 
 | Sub-action | Behavior |
 |---|---|
-| Open Project | `launchOrFocusProject`. |
-| Open with <IDE> | `launchOrFocusProject` against that installation's repository (`IdeInstallationService.getRepository`); no main-project prompt; the project is tracked and recorded in that IDE's `<ideDir>`, the current IDE's recents are untouched. Focuses that IDE's running instance of the project, else `ProjectLauncher.launch` with that IDE's executable (its own main project goes through `launchMain`). |
-| Set / Unset Main Project | OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then on a pooled thread `setMainProject(path)` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, success notification) or `clearMainProject()` with a success notification. |
+| Open Project | `launchOrFocusProject` on a pooled thread. |
+| Open with <IDE> | On a pooled thread, `launchOrFocusProject` against that installation's repository (`IdeInstallationService.getRepository`); no main-project prompt; the project is tracked and recorded in that IDE's `<ideDir>`, the current IDE's recents are untouched. Focuses that IDE's running instance of the project, else `ProjectLauncher.launch` with that IDE's executable (its own main project goes through `launchMain`). |
+| Set / Unset Main Project | Label and confirm text follow `item.isMainProject` (computed when the popup was built, no config read). OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then on a pooled thread `setMainProject(path)` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, success notification) or `clearMainProject()` with a success notification. |
 | Sync All Settings / VM Options / Configuration / Plugins | §6.1 for this project. Not shown for the main project. |
 | Remove Project | OK/Cancel warning dialog (`dialog.confirm.remove.project.*`, naming the project and `<projRoot>`) on EDT after the popup closes; Cancel does nothing. On OK, a non-cancellable background task (`progress.removing.project`) runs `removeRecentProject`: an unknown project is a no-op; it refuses with `notification.error.remove.project.running` while the isolated instance is open (`isIsolatedInstanceOpen`); otherwise `ProjectCleaner.cleanProject(metadata)` (removes the recent entry, then deletes `<projRoot>` recursively, core-spec §9); a failure shows `notification.error.remove.project.failed` and is logged as a warning (the recent entry is already gone). The popup is reshown from the task when it finishes. Not offered for the main project. |
 
@@ -128,18 +128,18 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 
 `SyncType` is a sealed class: `All`, `VmOptions`, `Config`, `Plugins`, with `displayName` from bundle keys `sync.type.*` ("all settings", "VM options", "configuration", "plugins"), `cliFlag` (`--all`, `--vmoptions`, `--config`, `--plugins`, the sync-helper flag) and three derived booleans passed to `ProjectLauncher.syncProject`.
 
-Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarget` and dispatch on it: `InProcess(projects)` -> `performSyncWithProgress`, `SelfShutdown(helperArgs)` -> `performSelfShutdownSync` (§6.5), `NoTarget` -> nothing. `helperArgs` is `--ide <executablePath> (--path <projectPath> | --all-projects) <cliFlag>`.
+Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarget` on a pooled thread and dispatch on it there: `InProcess(projects)` -> `performSyncWithProgress`, `SelfShutdown(helperArgs)` -> `performSelfShutdownSync` (§6.5), `NoTarget` -> nothing. `helperArgs` is `--ide <executablePath> (--path <projectPath> | --all-projects) <cliFlag>`.
 
 ### 6.1 Single project (`SyncSettingsSubAction`)
 
-`SyncPlanner.forProject(repo, path, syncType)`:
+On a pooled thread, `SyncPlanner.forProject(repo, path, syncType)`:
 
 - If `IsolatedInstance.isCurrentProject(repo, path)` (§6.3): `SelfShutdown` with helper args `--ide <executablePath> --path <projectPath> <cliFlag>`; the info text is `notification.info.sync.self.shutdown.project`.
 - Else load metadata (`NoTarget` if missing, the action silently returns) and `InProcess` for that one project. Title `progress.sync.project.type`, success `notification.success.sync.single.project.type`, failure `notification.error.sync.settings.failed` (with the project's error message).
 
 ### 6.2 All projects (`SyncAllProjectsAction`)
 
-`SyncPlanner.forAllProjects(repo, syncType)`:
+On a pooled thread, `SyncPlanner.forAllProjects(repo, syncType)`:
 
 - Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If any target's id is the current isolated project id, `SelfShutdown` with `--ide <executablePath> --all-projects <cliFlag>`; the info text is `notification.info.sync.self.shutdown.all`.
 - Else `InProcess` over the targets, possibly empty (gap 16). Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed` (with the `sync.failure.summary` of the failed projects; the others are still synced).
@@ -153,6 +153,8 @@ Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarge
 Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one, then `syncProject`. A `Throwable` from one project is logged as a warning and recorded as a `SyncFailure`, and the loop continues with the next project; control-flow exceptions (`ProcessCanceledException`) propagate. `syncProjects` returns a `SyncBatchResult(synced, failures)`. The task shows the caller's success notification only when no project failed; otherwise one error notification, the caller's error text with the detail from `describeFailures(result, total)`: the bare message (`userMessage()`) for a one-project batch, else `sync.failure.summary` ("N of M projects failed: <name>: <message>; ..."). A failure outside the projects (e.g. resolving the launcher) is logged as a warning and reported with its message through the same error text. Cancel is checked between projects only, never from the `Stopping` callback: cancelling during the stop wait would make core's `finally` delete `stop-request.json` while the target may already be exiting, leaving it stopped and never restarted; the wait is bounded by the 60 s timeout. Cancellation shows no notification. Projects that are running are stopped via the signal protocol and restarted (core-spec §8).
 
 ### 6.5 Self-shutdown sync (`performSelfShutdownSync`)
+
+`@RequiresBackgroundThread`; both callers run it from their pooled-thread planning.
 
 1. Info notification (passed by the caller).
 2. A non-cancellable `Task.Backgroundable` titled `progress.sync.helper.starting` calls `BundledSyncHelper.start(helperArgs)` (§9; the `SyncType.cliFlag` is already the last helper arg): it extracts if needed, starts `<executable> <helperArgs>` with stdout and stderr redirected to `<IDE log dir>/sync-helper.log` (`PathManager.getLogDir()`, overwritten per run; `<projRoot>/logs` in an isolated instance) and stdin closed, and does not wait. Then the task sleeps 100 ms.
@@ -169,7 +171,7 @@ The three base paths are the `IdePathKind` entries `CONFIG`, `PLUGINS`, `VM_OPTI
 
 `updatePaths(repo, notificationHandler, current)` overwrites config and plugins paths, overwrites the vmoptions path only if the current file exists, refreshes the vmoptions hash when it exists, and notifies `notification.success.paths.updated` or `notification.error.paths.update.failed` (plus a logged error) through the handler; `UpdatePathsAction` passes `IntelliJNotificationHandler(project)`.
 
-It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheckActivity` (`ProjectActivity`) inits Koin and, on `Dispatchers.IO`, calls `IdePathsStartupCheck.mismatchesToReport(repo, CurrentIdePaths.detect())`, which returns the mismatches only on its first call per IDE session (an `AtomicBoolean`) and is empty in an isolated instance. When non-empty the activity shows a warning balloon `notification.paths.out.of.sync` with the kinds and an expiring "Update paths" action (`notification.action.update.paths`, via `showNotification(..., actions)` in `Utils.kt`) that runs `updatePaths(repo, IntelliJNotificationHandler(project), CurrentIdePaths.detect())` on a pooled thread. Stored paths are never changed without that click. Any `Throwable` is logged; `ControlFlowException` is rethrown. An IDE that stays on the welcome screen runs no project activity and gets no balloon; the popup item still covers it.
+It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheckActivity` (`ProjectActivity`), on `Dispatchers.IO`, calls `IdePathsStartupCheck.mismatchesToReport(repo, CurrentIdePaths.detect())`, which returns the mismatches only on its first call per IDE session (an `AtomicBoolean`) and is empty in an isolated instance. When non-empty the activity shows a warning balloon `notification.paths.out.of.sync` with the kinds and an expiring "Update paths" action (`notification.action.update.paths`, via `showNotification(..., actions)` in `Utils.kt`) that runs `updatePaths(repo, IntelliJNotificationHandler(project), CurrentIdePaths.detect())` on a pooled thread. Stored paths are never changed without that click. Any `Throwable` is logged; `ControlFlowException` is rethrown. An IDE that stays on the welcome screen runs no project activity and gets no balloon; the popup item still covers it.
 
 ## 8. Open a Project Copy (git worktree)
 
@@ -177,7 +179,7 @@ It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheck
 
 1. `OpenProjectCopyDialog` (`dialog.project.copy.*`, a `DialogWrapper`) has three fields: source repository (text with folder browse, `file.chooser.source.*`), new branch, and worktree folder. The worktree folder follows `suggestDestination(source, branch)` = `<source parent>/<source name>-<branch with '/' replaced by '-'>` until the user edits it; its browse button (`file.chooser.destination.*`) picks the *parent* folder and appends the current (or suggested) folder name, since a folder chooser cannot select a folder that does not exist yet. Cancel does nothing. No Koin, no I/O while the dialog is open.
 2. On OK, `doValidate` runs `validateProjectCopyInput` (`services/OpenProjectCopy.kt`) and shows the first failure inline on its field; the dialog stays open. Checks in field order, values trimmed, paths resolved with `PathUtils.resolveAbsolute` (same as `ProjectManager.resolvePath`): blank source (`dialog.project.copy.error.blank.source`), unparsable path (`dialog.project.copy.error.invalid.path`), source is a directory (`notification.error.not.directory`), source is a git repo (`GitWorktreeManager.isGitRepository`, a `.git` stat; `notification.error.not.git.repository`), blank branch, blank or unparsable destination, destination does not exist (`notification.error.destination.exists`). Messages name the trimmed text as typed. These are at most three local file stats and never a git process, so they run on EDT by design.
-3. On a pooled thread, `openProjectCopy(input, IntelliJNotificationHandler(project))` re-validates (authoritative; an `Invalid` result becomes an error notification and stops), posts `notification.info.worktree.started` (source folder name), resolves the repository (`KoinInit.init(pluginModule)`, `IdeInstallationService.currentIdeConfigRepository`) and calls `createAndLaunchProjectCopy(repo, request, handler)`: `GitWorktreeManager.createWorktree(source, dest, branch, null)` and `launcher.launch(dest)` (no `onFailure`, no main-project prompt, no focus check). Success -> `notification.success.worktree.launched` (destination name, branch); any `Throwable` in either function -> `notification.error.worktree.failed` plus a logged error; control-flow exceptions are rethrown. The default launcher is resolved before the `try`.
+3. On a pooled thread, `openProjectCopy(input, IntelliJNotificationHandler(project))` re-validates (authoritative; an `Invalid` result becomes an error notification and stops), posts `notification.info.worktree.started` (source folder name), resolves the repository (`IdeInstallationService.currentIdeConfigRepository`) and calls `createAndLaunchProjectCopy(repo, request, handler)`: `GitWorktreeManager.createWorktree(source, dest, branch, null)` and `launcher.launch(dest)` (no `onFailure`, no main-project prompt, no focus check). Success -> `notification.success.worktree.launched` (destination name, branch); any `Throwable` in either function -> `notification.error.worktree.failed` plus a logged error; control-flow exceptions are rethrown. The default launcher is resolved before the `try`.
 
 ## 9. Bundled sync-helper (`BundledSyncHelper`)
 
@@ -194,17 +196,17 @@ The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one 
 
 ## 10. Shutdown signal handling (`shutdown/`)
 
-- `ShutdownSignalAppListener.appFrameCreated` (an `AppLifecycleListener`, fired on every start before IntelliJ chooses between opening a project and the welcome screen) calls `ShutdownSignalService.start()` at application start, so an isolated IDE on the welcome screen or with its project closed is monitored. `ShutdownSignalServiceStartupActivity` (`ProjectActivity`) calls it too, as the fallback for dynamic plugin loading, where `appFrameCreated` does not fire. `start()` is idempotent (`AtomicBoolean`); the constructor does no work. Koin init, detection and polling run in one `Dispatchers.IO` coroutine.
-- Detection: init Koin; `IsolatedInstance.currentProjectId()` (§6.3); load its metadata from the current repository (`Throwable` caught and logged, for detection as a whole and for the metadata load). If this is not an isolated instance (or detection fails), monitoring is disabled and logged.
+- `ShutdownSignalAppListener.appFrameCreated` (an `AppLifecycleListener`, fired on every start before IntelliJ chooses between opening a project and the welcome screen) calls `ShutdownSignalService.start()` at application start, so an isolated IDE on the welcome screen or with its project closed is monitored. `ShutdownSignalServiceStartupActivity` (`ProjectActivity`) calls it too, as the fallback for dynamic plugin loading, where `appFrameCreated` does not fire. `start()` is idempotent (`AtomicBoolean`); the constructor does no work. Detection and polling run in one `Dispatchers.IO` coroutine.
+- Detection: `IsolatedInstance.currentProjectId()` (§6.3); load its metadata from the current repository (`Throwable` caught and logged, for detection as a whole and for the metadata load). If this is not an isolated instance (or detection fails), monitoring is disabled and logged.
 - Monitoring (coroutine on `Dispatchers.IO`): `ShutdownSignalManager.cleanupStaleSignals(project, 5)` once, then every 1 s `readStopRequest`. Whether to act is decided by `StopRequestTracker.shouldAct(signal)` (`shutdown/StopRequestTracker.kt`): true once per `requestId` (in-memory set) and only while the request's age is at most its `timeoutSeconds` (5 minutes when `timeoutSeconds <= 0`), compared exactly; after that the requester has given up. Stale or unparseable requests are logged once per `requestId`, never acted on and never remembered as processed. Action, on the main dispatcher: log `requestId`, `autoRestart`, `syncTypes`, `timeoutSeconds`, then `ApplicationManagerEx.getApplicationEx().exit(force = false, exitConfirmed = true)`: no "Confirm exit" dialog (an unattended IDE would block the requester until its timeout), settings are still saved, and IntelliJ still asks when background tasks run. `autoRestart` and `syncTypes` are informational; restart is the requester's job (core-spec §8 step 5). Errors are logged and polling continues.
 
 ## 10a. Stale main-project entry cleanup (`startup/StaleMainProjectCleanupActivity`)
 
-`ProjectActivity`, so it runs per project open. Init Koin, then on `Dispatchers.IO` call `cleanStaleMainProjectEntryIfMainInstance(repo, PathManager.getConfigDir())` (`services/StaleMainProjectCleanup.kt`): null unless `isRunningInMainInstance`, else `ProjectCleaner.cleanStaleMainProjectEntry()` (core-spec §9). The activity logs the removed entry, if any. Any `Throwable` is logged; `ControlFlowException` is rethrown. Together with the call in `setMainProject`, this guarantees the main project does not keep a `projects/<id>/` entry once its isolated instance has exited.
+`ProjectActivity`, so it runs per project open. On `Dispatchers.IO` it calls `cleanStaleMainProjectEntryIfMainInstance(repo, PathManager.getConfigDir())` (`services/StaleMainProjectCleanup.kt`): null unless `isRunningInMainInstance`, else `ProjectCleaner.cleanStaleMainProjectEntry()` (core-spec §9). The activity logs the removed entry, if any. Any `Throwable` is logged; `ControlFlowException` is rethrown. Together with the call in `setMainProject`, this guarantees the main project does not keep a `projects/<id>/` entry once its isolated instance has exited.
 
 ## 11. Plugin sync on IDE update (`startup/PluginSyncOnUpdateActivity`)
 
-`ProjectActivity`, so it runs per project open. It inits Koin, resolves the current repository, the current build (`ApplicationInfo.build.asString()`) and an `IntelliJNotificationHandler(project)`, then calls `pluginSyncTargetsAfterUpdate(repo, PathManager.getConfigDir(), currentBuild, handler)` (`services/PluginSyncTargetsAfterUpdate.kt`) on `Dispatchers.IO`. Failures before that call (Koin, repository) propagate to the platform. The function syncs nothing; it returns the projects to offer a sync for:
+`ProjectActivity`, so it runs per project open. It resolves the current repository, the current build (`ApplicationInfo.build.asString()`) and an `IntelliJNotificationHandler(project)`, then calls `pluginSyncTargetsAfterUpdate(repo, PathManager.getConfigDir(), currentBuild, handler)` (`services/PluginSyncTargetsAfterUpdate.kt`) on `Dispatchers.IO`. Failures before that call (Koin, repository) propagate to the platform. The function syncs nothing; it returns the projects to offer a sync for:
 
 1. Empty unless `MainProjectService.isRunningInMainInstance(repo, currentConfigDir)`.
 2. Reads `lastKnownBuildNumber`, then always stores the current build.
@@ -220,13 +222,13 @@ Because the build number is stored before the checks, only the first project ope
 | Code | Thread |
 |---|---|
 | File choosers, `Messages` dialogs, main-project prompt | EDT (dialogs) |
-| `showFileChooserAndLaunch` config I/O (`resolvePath`, Koin init) | caller (EDT for actions) |
+| All repository/lock/git I/O after a user choice (`resolvePath`, launch, sync planning, toggles, import, project copy) | pooled thread or `Task.Backgroundable` |
 | `launchOrFocusUnderProgress`, `performSyncWithProgress` | `Task.Backgroundable` |
 | Self-shutdown helper extraction and spawn | `Task.Backgroundable` |
 | Remove Project deletion and popup reshow | `Task.Backgroundable` |
 | Open a Project Copy dialog validation (local stats) | EDT |
 | Popup building, import | pooled thread |
-| Open a Project Copy worktree validation, creation, launch, Koin init | pooled thread |
+| Open a Project Copy worktree validation, creation, launch | pooled thread |
 | Set/Unset main project config write and stale-entry cleanup | pooled thread |
 | `ShutdownSignalService` start and polling | `Dispatchers.IO` coroutine, from app start |
 | `PluginSyncOnUpdateActivity` checks (`pluginSyncTargetsAfterUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
@@ -239,7 +241,7 @@ Kotest `StringSpec` + MockK specs in `plugin/src/test/kotlin/com/projectjuggler/
 
 Setup:
 
-- Helpers shared with core come from core's test fixtures (`core/src/testFixtures`): `KoinTestExtension` (every spec that reaches a `getInstance(...)` registers it) and `createTempDir`.
+- Helpers shared with core come from core's test fixtures (`core/src/testFixtures`): `KoinTestExtension` (every spec that reaches a `getInstance(...)` registers it, except `di/PluginKoinTest`, which starts and stops Koin itself) and `createTempDir`.
 - `plugin/test/`: `TestApplicationExtension` boots IntelliJ's headless test application in `beforeSpec` (`initTestApplication()`, `TestFrameworkType.JUnit5`); only specs that need a real `Application` (notifications, `PathManager`, `ApplicationNamesInfo`) register it. `expectLoggedError { ... }` runs a block that must log exactly one `LOG.error` and returns the logged `Throwable` (IntelliJ's logger turns logged errors into test failures); it needs `test-framework-core`, hence the extra `testFramework(TestFrameworkType.Platform)`. Every test that reaches a `LOG.error` path is wrapped in it. `RecordingNotificationHandler` records info/error messages; `PluginTestSupport.kt` has `testRepository`, `registerProject`, `markIsolatedInstanceOpen` (writes a `.lock` with the live PID) and `writeGitHead`.
 - The `test` task sets `project.juggler.base.dir` to `plugin/build/project-juggler-test`, so the real `IdeRegistry` never touches `~/.project-juggler`.
 - Kotest, MockK, koin-test and the core test fixtures pull `kotlinx-coroutines-core` 1.7.0, which shadows the IDE's patched coroutines and breaks the test application (`NoSuchMethodError ... DebugProbesImpl.install`). Each test dependency excludes that module (`withoutCoroutines()`); a `configurations.all` exclude would also remove the IDE's copy and break `compileKotlin`. `junit:junit` is a runtime-only test dependency because the IntelliJ test framework still references JUnit 4 classes. None of these end up in the plugin zip.
@@ -252,7 +254,9 @@ Covered, by spec:
 | `ProjectJugglerBundleTest` | formerly hardcoded keys are present, `SyncType` names come from the bundle |
 | `actions/recent/SyncTypeTest` | sync booleans, `cliFlag`, `displayName` per type |
 | `actions/recent/RecentProjectPopupBuilderTest` | `buildItems`: item order, main project, filtering, `maxRecentProjects` limit, path-mismatch item, git branch, `isOpen` for other IDEs' and the current IDE's projects, toggle text |
-| `actions/recent/RecentProjectPopupTest` | `projectSubActions` (with and without Open with entries), speed-search and list texts |
+| `actions/recent/RecentProjectPopupTest` | `projectSubActions` (with and without Open with entries), speed-search and list texts, main toggle text from `item.isMainProject` |
+| `di/PluginKoinTest` | `IdeInstallationService.getInstance()` starts Koin, returns one instance, loads `pluginModule` into a Koin started without it |
+| `services/PlatformRecentProjectsTest` | recent paths and icon fallbacks for another `RecentProjectsManager`, paths from `RecentProjectsManagerBase` |
 | `actions/recent/CompactPathTest` | `compactPath` |
 | `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, `start` output in the log file |
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
@@ -284,6 +288,5 @@ Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 
 ## Known gaps
 
-14. `KoinInit.init` is called on EDT in several actions (marked `todo move to BGT`). `ToggleMainProjectSubAction` performs config file I/O under a file lock on EDT. `ImportRecentProjectsAction` casts `RecentProjectsManager` to `RecentProjectsManagerBase`, an implementation class.
 15. `runIde` hardcodes a user-specific base dir. The plugin has no settings page or startup health check for missing base paths.
 16. Sync all projects with no syncable target (only the main project tracked) still runs an in-process sync of zero projects and reports success for 0 projects.

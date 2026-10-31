@@ -3,6 +3,7 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.intellij.util.application
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.launchOrFocusProject
@@ -16,7 +17,10 @@ data class OpenWithIdeSubAction(val installation: IdeInstallation) : RecentProje
         project: Project?
     ): PopupStep<*>? {
         step.doFinalStep {
-            launchOrFocusProject(project, item.projectPath, IdeInstallationService.getInstance().getRepository(installation))
+            application.executeOnPooledThread {
+                val repository = IdeInstallationService.getInstance().getRepository(installation)
+                launchOrFocusProject(project, item.projectPath, repository)
+            }
         }
         return PopupStep.FINAL_CHOICE
     }

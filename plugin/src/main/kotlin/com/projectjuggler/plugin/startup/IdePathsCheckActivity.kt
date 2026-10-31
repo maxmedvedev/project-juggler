@@ -6,9 +6,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.util.application
-import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.CurrentIdePaths
 import com.projectjuggler.plugin.services.IdeInstallationService
@@ -28,8 +26,6 @@ import kotlinx.coroutines.withContext
 internal class IdePathsCheckActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         try {
-            KoinInit.init(pluginModule)
-
             val (repository, mismatches) = withContext(Dispatchers.IO) {
                 val repository = IdeInstallationService.currentIdeConfigRepository
                 repository to IdePathsStartupCheck.mismatchesToReport(repository, CurrentIdePaths.detect())

@@ -7,7 +7,6 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.di.KoinTestExtension
-import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.test.TestApplicationExtension
 import com.projectjuggler.platform.Platform
 import io.kotest.core.spec.style.StringSpec
@@ -16,7 +15,6 @@ import io.kotest.matchers.paths.shouldStartWithPath
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldEndWith
-import org.koin.core.context.loadKoinModules
 import java.nio.file.Path
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
@@ -34,7 +32,6 @@ class IdeInstallationServiceTest : StringSpec({
     val legacyDir = baseDir.resolve("v2").resolve(legacy.directoryName)
 
     beforeSpec {
-        loadKoinModules(pluginModule)
         // Start from an unconfigured repository so the first access auto-populates it
         baseDir.resolve("v2").deleteRecursively()
         // A dir keyed on the home directory, as older plugin versions wrote it; adopted on first access

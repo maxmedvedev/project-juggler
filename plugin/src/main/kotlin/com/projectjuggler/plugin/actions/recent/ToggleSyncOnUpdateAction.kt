@@ -16,9 +16,8 @@ internal class ToggleSyncOnUpdateAction(
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
         step.doFinalStep {
-            val repository = IdeInstallationService.currentIdeConfigRepository
-            repository.update { it.copy(syncPluginsOnIdeUpdate = !enabled) }
             application.executeOnPooledThread {
+                IdeInstallationService.currentIdeConfigRepository.update { it.copy(syncPluginsOnIdeUpdate = !enabled) }
                 RecentProjectPopupBuilder(project).show()
             }
         }

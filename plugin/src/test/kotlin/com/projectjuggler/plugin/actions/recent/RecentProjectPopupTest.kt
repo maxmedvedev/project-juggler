@@ -90,6 +90,21 @@ class RecentProjectPopupTest : StringSpec({
         OpenRecentProjectAction(projectPath, gitBranch = "main").getTextFor() shouldBe "$name - [main] - $path"
     }
 
+    // No Koin and no repository in this spec: the label must come from the item, not from a config load
+    "the main toggle offers unset for the main project item" {
+        val item = OpenRecentProjectAction(projectPath, gitBranch = null, isMainProject = true)
+
+        ToggleMainProjectSubAction.getTextFor(item) shouldBe
+            ProjectJugglerBundle.message("popup.recent.projects.action.unset.main")
+    }
+
+    "the main toggle offers set for any other item" {
+        val item = OpenRecentProjectAction(projectPath, gitBranch = null, isMainProject = false)
+
+        ToggleMainProjectSubAction.getTextFor(item) shouldBe
+            ProjectJugglerBundle.message("popup.recent.projects.action.set.main")
+    }
+
     "the update paths text lists the mismatches" {
         UpdatePathsAction(listOf(IdePathKind.CONFIG, IdePathKind.PLUGINS)).getTextFor() shouldContain "Config, Plugins"
     }

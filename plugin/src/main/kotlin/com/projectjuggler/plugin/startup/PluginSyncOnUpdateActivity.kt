@@ -7,11 +7,9 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.projectjuggler.config.ProjectMetadata
-import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.actions.recent.SyncType
-import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.pluginSyncTargetsAfterUpdate
 import com.projectjuggler.plugin.showNotification
@@ -25,8 +23,6 @@ import kotlinx.coroutines.withContext
  */
 internal class PluginSyncOnUpdateActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
-        KoinInit.init(pluginModule)
-
         val repository = IdeInstallationService.currentIdeConfigRepository
         val currentBuild = ApplicationInfo.getInstance().build.asString()
         val handler = IntelliJNotificationHandler(project)

@@ -3,6 +3,7 @@ package com.projectjuggler.plugin.actions.recent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.intellij.util.application
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.performSelfShutdownSync
@@ -18,7 +19,8 @@ data class SyncAllProjectsAction(
         project: Project?,
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
-        syncAllProjectsWithType(syncType, project)
+        // Planning reads metadata and the recent index; the self-shutdown path extracts the helper
+        application.executeOnPooledThread { syncAllProjectsWithType(syncType, project) }
         return PopupStep.FINAL_CHOICE
     }
 

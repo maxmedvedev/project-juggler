@@ -43,7 +43,7 @@ The base dir can be overridden with the `project.juggler.base.dir` system proper
 
 ### Dependency injection (Koin, scoped per IDE)
 
-- `KoinInit.init(vararg modules)` starts Koin once; the plugin passes `pluginModule`, sync-helper passes nothing. `coreModule` holds true singletons (`IdeRegistry`, `ProcessLauncher`).
+- `KoinInit.init(vararg modules)` starts Koin once; the plugin starts it lazily from `IdeInstallationService.getInstance()`, sync-helper passes nothing. `coreModule` holds true singletons (`IdeRegistry`, `ProcessLauncher`).
 - `ideScopedModule` declares everything else inside the `IDE_SCOPE` Koin scope. `IdeScopeManager` creates one scope per `IdeConfigRepository` and `declare`s the repository into it, so scoped services receive the right repository via `get()`.
 - Services expose `getInstance(ideConfigRepository)` companions that resolve through `ideConfigRepository.getScope().get()`. Constructors are `internal`; always go through `getInstance`. Default-argument constructors (e.g. `ProjectLauncher`) exist so tests can inject mocks.
 - In the plugin, `IdeInstallationService.currentIdeConfigRepository` is the repository for the running IDE (detected from `PathManager`), and auto-populates base paths on first use via `IdePathSyncDetector.autoPopulateIfNeeded`.
@@ -78,6 +78,7 @@ Plugin tests (`plugin/src/test`, details in `docs/plugin-spec.md` §13) target t
 - **Actions must not contain business logic** - Keep action classes thin; implement logic in `plugin/services` or core (e.g. `IdeInstallationService`, `launchProject`, `setMainProject`)
 - **Always use planning mode** - Work on all tasks in planning mode first before implementing
 - When doing try-catch, always catch `Throwable` and log it. If the exception is `ControlFlowException`, rethrow it without handling. Use `Throwable.rethrowIfControlFlow()` and `Throwable.userMessage()` from `plugin/Utils.kt`.
+- No repository, lock or git I/O on the EDT; do it on a pooled thread after the dialog or popup choice.
 - User-visible strings go in `messages/ProjectJugglerBundle.properties` via `ProjectJugglerBundle.message(...)`.
 
 ## MCP

@@ -7,8 +7,6 @@ import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.core.ShutdownSignalManager
 import com.projectjuggler.core.StopRequestSignal
-import com.projectjuggler.di.KoinInit
-import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IsolatedInstance
@@ -72,7 +70,6 @@ class ShutdownSignalService(scope: CoroutineScope) {
      */
     private fun detectCurrentProject(): ProjectMetadata? {
         return try {
-            KoinInit.init(pluginModule)
             val projectId = IsolatedInstance.currentProjectId() ?: return null
             loadProjectMetadata(projectId)
         } catch (e: Throwable) {

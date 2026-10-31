@@ -6,6 +6,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.recent.SyncType
@@ -27,6 +28,7 @@ private val LOG = Logger.getInstance("#com.projectjuggler.plugin.actions.Sync")
  * Starts the sync-helper process with [helperArgs] (see `SyncTarget.SelfShutdown`) in a background task,
  * then exits IntelliJ gracefully. On failure the IDE keeps running.
  */
+@RequiresBackgroundThread
 fun performSelfShutdownSync(
     project: Project?,
     notificationMessage: String,

@@ -4,9 +4,7 @@ import com.intellij.openapi.diagnostic.fileLogger
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
-import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
-import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
@@ -108,7 +106,7 @@ internal fun suggestDestination(source: String, branchName: String): String? {
 internal fun openProjectCopy(
     input: ProjectCopyInput,
     notificationHandler: NotificationHandler,
-    repository: () -> IdeConfigRepository = ::currentRepository,
+    repository: () -> IdeConfigRepository = { IdeInstallationService.currentIdeConfigRepository },
 ) {
     try {
         val request = when (val validation = validateProjectCopyInput(input)) {
@@ -128,11 +126,6 @@ internal fun openProjectCopy(
         t.rethrowIfControlFlow()
         reportWorktreeFailure(t, notificationHandler)
     }
-}
-
-private fun currentRepository(): IdeConfigRepository {
-    KoinInit.init(pluginModule)
-    return IdeInstallationService.currentIdeConfigRepository
 }
 
 /**

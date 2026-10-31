@@ -24,11 +24,11 @@ internal class UpdatePathsAction(
         step: BaseListPopupStep<RecentProjectPopupAction>
     ): PopupStep<*>? {
         step.doFinalStep {
-            IdePathSyncDetector.updatePaths(
-                IdeInstallationService.currentIdeConfigRepository,
-                IntelliJNotificationHandler(project),
-            )
             application.executeOnPooledThread {
+                IdePathSyncDetector.updatePaths(
+                    IdeInstallationService.currentIdeConfigRepository,
+                    IntelliJNotificationHandler(project),
+                )
                 RecentProjectPopupBuilder(project).show()
             }
         }

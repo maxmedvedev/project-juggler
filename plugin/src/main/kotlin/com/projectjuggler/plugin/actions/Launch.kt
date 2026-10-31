@@ -6,6 +6,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.util.application
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
@@ -19,7 +20,9 @@ import com.projectjuggler.plugin.util.IntelliJNotificationHandler
  * installation's repository).
  * If project is open, attempts to focus the window.
  * If project is closed, launches it normally.
+ * Reads the repository, so call it on a pooled thread; the prompt hops to EDT by itself.
  */
+@RequiresBackgroundThread
 fun launchOrFocusProject(
     project: Project?,
     projectPath: ProjectPath,

@@ -5,8 +5,6 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.projectjuggler.core.ProjectCleaner
-import com.projectjuggler.di.KoinInit
-import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.cleanStaleMainProjectEntryIfMainInstance
@@ -21,8 +19,6 @@ import kotlinx.coroutines.withContext
 internal class StaleMainProjectCleanupActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         try {
-            KoinInit.init(pluginModule)
-
             val repository = IdeInstallationService.currentIdeConfigRepository
 
             withContext(Dispatchers.IO) {

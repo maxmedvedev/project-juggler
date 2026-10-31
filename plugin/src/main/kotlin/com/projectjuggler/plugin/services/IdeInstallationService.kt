@@ -8,6 +8,7 @@ import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
+import com.projectjuggler.plugin.di.ensurePluginKoin
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import org.koin.core.context.GlobalContext
 import java.nio.file.Path
@@ -79,8 +80,11 @@ class IdeInstallationService internal constructor(
     }
 
     companion object {
-        fun getInstance(): IdeInstallationService =
-            GlobalContext.get().get()
+        /** Starts the plugin's Koin on first use (see [ensurePluginKoin]). */
+        fun getInstance(): IdeInstallationService {
+            ensurePluginKoin()
+            return GlobalContext.get().get()
+        }
 
         val currentIdeConfigRepository: IdeConfigRepository
             get() = getInstance().currentRepository

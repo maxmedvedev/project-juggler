@@ -5,27 +5,29 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
-import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
-import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.plugin.services.clearMainProject
 import com.projectjuggler.plugin.services.setMainProject
 import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 
-/** Toggle whether this is the main project */
+/**
+ * Toggle whether this is the main project. The current state is [OpenRecentProjectAction.isMainProject], computed on
+ * a background thread when the popup was built, so neither the label nor the confirmation reads the config.
+ */
 object ToggleMainProjectSubAction : RecentProjectSubAction {
     override fun onChosen(
         item: OpenRecentProjectAction,
         step: BaseListPopupStep<RecentProjectSubAction>,
         project: Project?
     ): PopupStep<*>? {
-        toggleMainProject(project, item.projectPath)
+        toggleMainProject(project, item)
         return PopupStep.FINAL_CHOICE
     }
 
-    private fun toggleMainProject(project: Project?, projectPath: ProjectPath) {
-        val isMain = MainProjectService.isMainProject(IdeInstallationService.currentIdeConfigRepository, projectPath)
+    private fun toggleMainProject(project: Project?, item: OpenRecentProjectAction) {
+        val projectPath = item.projectPath
+        val isMain = item.isMainProject
         application.invokeLater {
             val message = if (isMain) {
                 ProjectJugglerBundle.message("dialog.confirm.unset.main.message", projectPath.name)
@@ -67,11 +69,8 @@ object ToggleMainProjectSubAction : RecentProjectSubAction {
         }
     }
 
-    override fun getTextFor(item: OpenRecentProjectAction): String {
-        val isMain = MainProjectService.isMainProject(IdeInstallationService.currentIdeConfigRepository, item.projectPath)
-        return when {
-            isMain -> ProjectJugglerBundle.message("popup.recent.projects.action.unset.main")
-            else -> ProjectJugglerBundle.message("popup.recent.projects.action.set.main")
-        }
+    override fun getTextFor(item: OpenRecentProjectAction): String = when {
+        item.isMainProject -> ProjectJugglerBundle.message("popup.recent.projects.action.unset.main")
+        else -> ProjectJugglerBundle.message("popup.recent.projects.action.set.main")
     }
 }
