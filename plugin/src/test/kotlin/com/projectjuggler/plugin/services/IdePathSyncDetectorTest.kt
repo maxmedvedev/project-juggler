@@ -27,6 +27,9 @@ class IdePathSyncDetectorTest : StringSpec({
     val configDir = createTempDir("ide-config")
     val pluginsDir = createTempDir("ide-plugins")
     val vmOptionsDir = createTempDir("ide-vmoptions")
+    val config = ProjectJugglerBundle.message("ide.path.kind.config")
+    val plugins = ProjectJugglerBundle.message("ide.path.kind.plugins")
+    val vmOptions = ProjectJugglerBundle.message("ide.path.kind.vmoptions")
 
     // A fresh repository per test: the stored paths of one test must not leak into the next
     fun newRepository(): IdeConfigRepository = testRepository(createTempDirectory(baseDir, "ide"))
@@ -69,7 +72,7 @@ class IdePathSyncDetectorTest : StringSpec({
         repository.storeCurrent()
         repository.update { it.copy(baseConfigPath = "/stale/config") }
 
-        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf("Config")
+        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf(config)
     }
 
     "detectMismatches reports a differing plugins path" {
@@ -77,7 +80,7 @@ class IdePathSyncDetectorTest : StringSpec({
         repository.storeCurrent()
         repository.update { it.copy(basePluginsPath = "/stale/plugins") }
 
-        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf("Plugins")
+        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf(plugins)
     }
 
     "detectMismatches reports a differing vmoptions path" {
@@ -85,7 +88,7 @@ class IdePathSyncDetectorTest : StringSpec({
         repository.storeCurrent()
         repository.update { it.copy(baseVmOptionsPath = "/stale/idea.vmoptions") }
 
-        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf("VM Options")
+        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf(vmOptions)
     }
 
     "detectMismatches reports all three in a fixed order" {
@@ -99,7 +102,7 @@ class IdePathSyncDetectorTest : StringSpec({
         }
 
         IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly
-            listOf("Config", "Plugins", "VM Options")
+            listOf(config, plugins, vmOptions)
     }
 
     "detectMismatches treats a trailing slash as a different path (gap 9)" {
@@ -108,7 +111,7 @@ class IdePathSyncDetectorTest : StringSpec({
         repository.storeCurrent()
         repository.update { it.copy(baseConfigPath = "$configDir/") }
 
-        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf("Config")
+        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf(config)
     }
 
     "updatePaths overwrites config and plugins but keeps a vmoptions path whose file is missing" {

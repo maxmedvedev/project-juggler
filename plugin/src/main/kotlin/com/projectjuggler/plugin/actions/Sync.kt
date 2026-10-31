@@ -7,12 +7,14 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.projectjuggler.config.ProjectMetadata
+import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.actions.recent.SyncType
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.SyncProgressSink
 import com.projectjuggler.plugin.services.syncProjects
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
+import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.plugin.util.BundledSyncHelper
 import com.projectjuggler.process.ProjectLauncher
 
@@ -45,7 +47,7 @@ fun performSelfShutdownSync(
         }
     } catch (e: Exception) {
         showErrorNotification(
-            "Failed to initiate self-shutdown sync: ${e.message}",
+            ProjectJugglerBundle.message("notification.error.sync.self.shutdown.failed", e.userMessage()),
             project
         )
     }

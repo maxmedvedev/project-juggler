@@ -1,6 +1,7 @@
 package com.projectjuggler.plugin.actions.recent
 
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -52,6 +53,9 @@ class RecentProjectPopupTest : StringSpec({
     }
 
     "the update paths text lists the mismatches" {
-        UpdatePathsAction(listOf("Config", "Plugins")).getTextFor() shouldContain "Config, Plugins"
+        val config = ProjectJugglerBundle.message("ide.path.kind.config")
+        val plugins = ProjectJugglerBundle.message("ide.path.kind.plugins")
+
+        UpdatePathsAction(listOf(config, plugins)).getTextFor() shouldContain "$config, $plugins"
     }
 })

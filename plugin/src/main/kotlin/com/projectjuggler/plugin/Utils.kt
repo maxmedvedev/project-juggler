@@ -19,3 +19,7 @@ fun showInfoNotification(@NotificationContent message: String, project: Project?
 fun showErrorNotification(@NotificationContent message: String, project: Project?) {
     showNotification(message, project, NotificationType.ERROR)
 }
+
+/** The exception message for a notification, or the bundle's "Unknown error". */
+internal fun Throwable.userMessage(): String =
+    message?.takeIf { it.isNotBlank() } ?: ProjectJugglerBundle.message("error.unknown")

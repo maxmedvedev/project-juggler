@@ -21,6 +21,8 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import java.nio.file.FileAlreadyExistsException
 import kotlin.io.path.createTempDirectory
@@ -161,5 +163,27 @@ class SyncPluginsOnIdeUpdateTest : StringSpec({
         logged.shouldBeInstanceOf<FileAlreadyExistsException>()
         handler.infos.shouldBeEmpty()
         handler.errors.single() shouldStartWith ProjectJugglerBundle.message("notification.sync.on.update.failed", "")
+    }
+
+    "a failure without a message is reported as an unknown error" {
+        mockkObject(MainProjectService)
+        try {
+            every { MainProjectService.isRunningInMainInstance(any(), any()) } throws IllegalStateException()
+            val handler = RecordingNotificationHandler()
+
+            val logged = expectLoggedError {
+                syncPluginsOnIdeUpdate(updatedRepository(), mainConfigDir, "NEW-2", handler, mockk(relaxed = true))
+            }
+
+            logged.shouldBeInstanceOf<IllegalStateException>()
+            handler.errors shouldContainExactly listOf(
+                ProjectJugglerBundle.message(
+                    "notification.sync.on.update.failed",
+                    ProjectJugglerBundle.message("error.unknown")
+                )
+            )
+        } finally {
+            unmockkObject(MainProjectService)
+        }
     }
 })

@@ -11,6 +11,7 @@ import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.SyncPlanner
 import com.projectjuggler.plugin.services.SyncTarget
+import com.projectjuggler.plugin.userMessage
 
 /** Sync settings from base config */
 data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubAction {
@@ -55,7 +56,7 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
                 )
             },
             errorMessage = { e ->
-                ProjectJugglerBundle.message("notification.error.sync.settings.failed", e.message ?: "")
+                ProjectJugglerBundle.message("notification.error.sync.settings.failed", e.userMessage())
             }
         )
     }
@@ -66,7 +67,10 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
     private fun handleSelfShutdownSync(project: Project?, helperArgs: List<String>, syncType: SyncType) {
         performSelfShutdownSync(
             project = project,
-            notificationMessage = "IntelliJ will close to sync ${syncType.displayName} and reopen automatically...",
+            notificationMessage = ProjectJugglerBundle.message(
+                "notification.info.sync.self.shutdown.project",
+                syncType.displayName
+            ),
             helperArgs = helperArgs
         )
     }

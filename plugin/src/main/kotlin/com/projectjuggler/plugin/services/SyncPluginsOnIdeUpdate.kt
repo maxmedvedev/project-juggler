@@ -8,6 +8,7 @@ import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
 import java.nio.file.Path
 
@@ -77,7 +78,7 @@ internal fun syncPluginsOnIdeUpdate(
         if (t is ControlFlowException) throw t
         LOG.error("Plugin sync on IDE update failed", t)
         notificationHandler.showErrorNotification(
-            ProjectJugglerBundle.message("notification.sync.on.update.failed", t.message ?: "Unknown error")
+            ProjectJugglerBundle.message("notification.sync.on.update.failed", t.userMessage())
         )
     }
 }

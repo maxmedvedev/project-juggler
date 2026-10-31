@@ -6,6 +6,7 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.core.BaseVMOptionsTracker
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.userMessage
 import java.nio.file.Files
 
 /**
@@ -39,13 +40,13 @@ internal object IdePathSyncDetector {
         val mismatches = mutableListOf<String>()
 
         if (config.baseConfigPath != null && config.baseConfigPath != currentConfigPath) {
-            mismatches.add("Config")
+            mismatches.add(ProjectJugglerBundle.message("ide.path.kind.config"))
         }
         if (config.basePluginsPath != null && config.basePluginsPath != currentPluginsPath) {
-            mismatches.add("Plugins")
+            mismatches.add(ProjectJugglerBundle.message("ide.path.kind.plugins"))
         }
         if (config.baseVmOptionsPath != null && config.baseVmOptionsPath != currentVmOptionsPath) {
-            mismatches.add("VM Options")
+            mismatches.add(ProjectJugglerBundle.message("ide.path.kind.vmoptions"))
         }
 
         return mismatches
@@ -84,7 +85,7 @@ internal object IdePathSyncDetector {
             if (e is ControlFlowException) throw e
             LOG.error("Failed to update IDE paths", e)
             notificationHandler.showErrorNotification(
-                ProjectJugglerBundle.message("notification.error.paths.update.failed", e.message ?: "Unknown error")
+                ProjectJugglerBundle.message("notification.error.paths.update.failed", e.userMessage())
             )
         }
     }

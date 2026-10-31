@@ -129,7 +129,9 @@ class RecentProjectPopupBuilderTest : StringSpec({
 
         val items = buildItems(repository)
 
-        items.first().shouldBeInstanceOf<UpdatePathsAction>().mismatches shouldContainExactly listOf("Config")
+        items.first().shouldBeInstanceOf<UpdatePathsAction>().mismatches shouldContainExactly listOf(
+            ProjectJugglerBundle.message("ide.path.kind.config")
+        )
         items[1] shouldBe OpenFileChooserAction
     }
 

@@ -3,7 +3,7 @@ package com.projectjuggler.plugin
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.PropertyKey
 
-private const val BUNDLE = "messages.ProjectJugglerBundle"
+internal const val BUNDLE = "messages.ProjectJugglerBundle"
 
 object ProjectJugglerBundle : DynamicBundle(BUNDLE) {
 

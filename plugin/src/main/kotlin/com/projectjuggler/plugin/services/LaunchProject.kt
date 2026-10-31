@@ -5,6 +5,7 @@ import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.process.describe
 import com.projectjuggler.util.ProjectLockUtils
@@ -46,13 +47,13 @@ internal fun launchProject(
                 "notification.error.launch.crashed",
                 projectPath.name,
                 failure.exitCode,
-                failure.describe().ifBlank { "&lt;No output&gt;" }
+                failure.describe().ifBlank { ProjectJugglerBundle.message("notification.error.launch.no.output") }
             )
             notificationHandler.showErrorNotification(message)
         }
     } catch (ex: Throwable) {
         val message =
-            ProjectJugglerBundle.message("notification.error.launch.failed", ex.message ?: "Unknown error")
+            ProjectJugglerBundle.message("notification.error.launch.failed", ex.userMessage())
         notificationHandler.showErrorNotification(message)
     }
 }

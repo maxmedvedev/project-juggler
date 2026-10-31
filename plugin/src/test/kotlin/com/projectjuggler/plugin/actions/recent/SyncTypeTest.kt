@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.actions.recent
 
+import com.projectjuggler.plugin.ProjectJugglerBundle
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 
@@ -36,10 +37,10 @@ class SyncTypeTest : StringSpec({
         SyncType.Plugins.cliFlag shouldBe "--plugins"
     }
 
-    "display names" {
-        SyncType.All.displayName shouldBe "all settings"
-        SyncType.VmOptions.displayName shouldBe "VM options"
-        SyncType.Config.displayName shouldBe "configuration"
-        SyncType.Plugins.displayName shouldBe "plugins"
+    "display names come from the bundle" {
+        SyncType.All.displayName shouldBe ProjectJugglerBundle.message("sync.type.all")
+        SyncType.VmOptions.displayName shouldBe ProjectJugglerBundle.message("sync.type.vmoptions")
+        SyncType.Config.displayName shouldBe ProjectJugglerBundle.message("sync.type.config")
+        SyncType.Plugins.displayName shouldBe ProjectJugglerBundle.message("sync.type.plugins")
     }
 })

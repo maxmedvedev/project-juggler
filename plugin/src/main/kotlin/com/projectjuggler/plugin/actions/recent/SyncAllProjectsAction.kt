@@ -10,6 +10,7 @@ import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.SyncPlanner
 import com.projectjuggler.plugin.services.SyncTarget
+import com.projectjuggler.plugin.userMessage
 
 data class SyncAllProjectsAction(
     val syncType: SyncType
@@ -52,7 +53,7 @@ data class SyncAllProjectsAction(
                 )
             },
             errorMessage = { e ->
-                ProjectJugglerBundle.message("notification.error.sync.projects.failed", e.message ?: "")
+                ProjectJugglerBundle.message("notification.error.sync.projects.failed", e.userMessage())
             }
         )
     }
@@ -64,7 +65,7 @@ data class SyncAllProjectsAction(
     private fun handleSelfShutdownSyncAll(project: Project?, helperArgs: List<String>) {
         performSelfShutdownSync(
             project = project,
-            notificationMessage = "IntelliJ will close to sync all projects and reopen automatically...",
+            notificationMessage = ProjectJugglerBundle.message("notification.info.sync.self.shutdown.all"),
             helperArgs = helperArgs
         )
     }

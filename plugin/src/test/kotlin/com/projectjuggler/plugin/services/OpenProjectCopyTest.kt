@@ -79,7 +79,7 @@ class OpenProjectCopyTest : StringSpec({
 
     "createAndLaunchProjectCopy reports a worktree failure and does not launch" {
         mockkObject(GitWorktreeManager)
-        every { GitWorktreeManager.createWorktree(any(), any(), any(), any()) } throws IOException("git failed")
+        every { GitWorktreeManager.createWorktree(any(), any(), any(), any()) } throws IOException()
         val launcher = mockk<ProjectLauncher>(relaxed = true)
         val handler = RecordingNotificationHandler()
 
@@ -91,7 +91,10 @@ class OpenProjectCopyTest : StringSpec({
         verify(exactly = 0) { launcher.launch(any(), any()) }
         handler.infos.shouldBeEmpty()
         handler.errors shouldContainExactly listOf(
-            ProjectJugglerBundle.message("notification.error.worktree.failed", "git failed")
+            ProjectJugglerBundle.message(
+                "notification.error.worktree.failed",
+                ProjectJugglerBundle.message("error.unknown")
+            )
         )
     }
 })

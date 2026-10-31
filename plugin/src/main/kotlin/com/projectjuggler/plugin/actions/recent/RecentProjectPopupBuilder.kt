@@ -16,6 +16,7 @@ import com.projectjuggler.plugin.services.CurrentIdePaths
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IdePathSyncDetector
 import com.projectjuggler.plugin.showErrorNotification
+import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.util.GitUtils
 import com.projectjuggler.util.ProjectLockUtils
 import java.nio.file.Files.exists
@@ -37,7 +38,7 @@ internal class RecentProjectPopupBuilder(
         } catch (ex: Throwable) {
             if (ex is ControlFlowException) throw ex
 
-            val message = ProjectJugglerBundle.message("notification.error.recent.projects.load.failed", ex.message ?: "")
+            val message = ProjectJugglerBundle.message("notification.error.recent.projects.load.failed", ex.userMessage())
             showErrorNotification(message, project)
             logger<RecentProjectPopup>().error(message, ex)
         }

@@ -4,6 +4,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.projectjuggler.config.IdeInstallation
+import com.projectjuggler.plugin.ProjectJugglerBundle
 
 /** Open project with a specific IDE installation */
 data class OpenWithIdeSubAction(val installation: IdeInstallation) : RecentProjectSubAction {
@@ -19,5 +20,5 @@ data class OpenWithIdeSubAction(val installation: IdeInstallation) : RecentProje
     }
 
     override fun getTextFor(item: OpenRecentProjectAction): String =
-        "Open with ${installation.displayName}"
+        ProjectJugglerBundle.message("popup.recent.projects.action.open.with", installation.displayName)
 }

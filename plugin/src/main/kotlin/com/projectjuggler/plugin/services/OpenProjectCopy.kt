@@ -6,6 +6,7 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.util.GitWorktreeManager
 import kotlin.io.path.exists
@@ -57,7 +58,7 @@ internal fun createAndLaunchProjectCopy(
         )
     } catch (t: Throwable) {
         if (t is ControlFlowException) throw t
-        val message = ProjectJugglerBundle.message("notification.error.worktree.failed", t.message ?: "Unknown error")
+        val message = ProjectJugglerBundle.message("notification.error.worktree.failed", t.userMessage())
         notificationHandler.showErrorNotification(message)
         LOG.error(message, t)
     }

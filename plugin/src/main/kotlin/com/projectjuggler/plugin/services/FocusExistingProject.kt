@@ -5,6 +5,7 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
+import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.process.WindowFocuser
 import com.projectjuggler.util.ProjectLockUtils
 
@@ -62,7 +63,7 @@ fun focusExistingProject(
         if (e is ControlFlowException) throw e
 
         notificationHandler.showErrorNotification(
-            ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, e.message ?: "Unknown error"),
+            ProjectJugglerBundle.message("notification.error.focus.exception", projectPath.name, e.userMessage()),
         )
     }
 }

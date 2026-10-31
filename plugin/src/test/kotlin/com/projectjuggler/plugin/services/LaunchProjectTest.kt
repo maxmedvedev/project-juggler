@@ -59,7 +59,7 @@ class LaunchProjectTest : StringSpec({
 
         launchProject(projectPath, repository, handler, crashingLauncher(LaunchFailure(1, "", "")))
 
-        handler.errors shouldContainExactly listOf(crashedMessage(1, "&lt;No output&gt;"))
+        handler.errors shouldContainExactly listOf(crashedMessage(1, ProjectJugglerBundle.message("notification.error.launch.no.output")))
     }
 
     "a crash keeps at most 500 characters of output" {
@@ -80,6 +80,22 @@ class LaunchProjectTest : StringSpec({
 
         handler.errors shouldContainExactly listOf(
             ProjectJugglerBundle.message("notification.error.launch.failed", "no executable")
+        )
+    }
+
+    "a failure to start without a message reports an unknown error" {
+        val launcher = mockk<ProjectLauncher> {
+            every { launch(any(), any()) } throws IllegalStateException()
+        }
+        val handler = RecordingNotificationHandler()
+
+        launchProject(projectPath, repository, handler, launcher)
+
+        handler.errors shouldContainExactly listOf(
+            ProjectJugglerBundle.message(
+                "notification.error.launch.failed",
+                ProjectJugglerBundle.message("error.unknown")
+            )
         )
     }
 })
