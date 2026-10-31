@@ -3,8 +3,10 @@ package com.projectjuggler.plugin.util
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
+import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.platform.Platform
 import com.projectjuggler.plugin.rethrowIfControlFlow
+import java.io.File
 import java.io.IOException
 import java.net.URL
 import java.nio.file.Files
@@ -29,12 +31,16 @@ import kotlin.io.path.listDirectoryEntries
  * Manages extraction and execution of the bundled sync-helper distribution.
  *
  * The distribution is extracted once per content fingerprint into [defaultRoot] and reused across IDE sessions.
+ * The helper runs on the IDE's own JVM with its main class (see [command]); the `bin/` start scripts stay in the
+ * bundle for manual runs only.
  */
 @OptIn(ExperimentalPathApi::class)
 object BundledSyncHelper {
     const val LOG_FILE_NAME = "sync-helper.log"
+    const val MAIN_CLASS = "com.projectjuggler.synchelper.SyncHelperMainKt"
 
     private const val RESOURCE_ROOT = "sync-helper"
+    private const val MARKER = "lib/sync-helper.jar"
     private val BUNDLED_DIRS = listOf("bin", "lib")
     private val LEGACY_MIN_AGE: Duration = Duration.ofHours(1)
 
@@ -45,24 +51,24 @@ object BundledSyncHelper {
     private val cachedFingerprint by lazy { withBundledEntries(::fingerprintOf) }
 
     /**
-     * Gets the path to the sync-helper executable, extracting the bundled distribution if this content
-     * has not been extracted yet. Must not be called on EDT.
+     * Gets the directory of the extracted sync-helper distribution (with `bin/` and `lib/`), extracting the bundled
+     * distribution if this content has not been extracted yet. Must not be called on EDT.
      *
      * @throws IllegalStateException if sync-helper cannot be extracted or found
      */
     @RequiresBackgroundThread
-    fun getExecutable(): Path = getExecutable(defaultRoot(), Path(System.getProperty("java.io.tmpdir")))
+    fun getInstallDir(): Path = getInstallDir(defaultRoot(), Path(System.getProperty("java.io.tmpdir")))
 
     /**
-     * Returns `<root>/<fingerprint>/bin/sync-helper(.bat)`, extracting into it first if needed. After an extraction,
-     * other entries of [root] and (once per JVM) legacy `sync-helper-*` dirs in [legacyTempDir] are removed.
+     * Returns `<root>/<fingerprint>`, extracting into it first if needed (`lib/sync-helper.jar` marks a complete
+     * extraction). After an extraction, other entries of [root] and (once per JVM) legacy `sync-helper-*` dirs in
+     * [legacyTempDir] are removed.
      */
     @Synchronized
-    internal fun getExecutable(root: Path, legacyTempDir: Path?): Path {
+    internal fun getInstallDir(root: Path, legacyTempDir: Path?): Path {
         val fingerprint = fingerprint()
         val target = root.resolve(fingerprint)
-        val executable = executableIn(target)
-        if (executable.exists()) return executable
+        if (isComplete(target)) return target
 
         extractTo(root, target)
         bestEffort("remove stale sync-helper extractions in $root") {
@@ -72,8 +78,8 @@ object BundledSyncHelper {
             cleanUpLegacyTempDirs(legacyTempDir)
         }
 
-        log.info("sync-helper executable located at: $executable")
-        return executable
+        log.info("sync-helper extracted to: $target")
+        return target
     }
 
     /**
@@ -82,10 +88,15 @@ object BundledSyncHelper {
      */
     @RequiresBackgroundThread
     fun start(args: List<String>, logFile: Path = PathManager.getLogDir().resolve(LOG_FILE_NAME)): Process =
-        start(getExecutable(), args, logFile)
+        start(getInstallDir(), args, logFile)
 
-    internal fun start(executable: Path, args: List<String>, logFile: Path): Process {
-        val command = listOf(executable.toString()) + args
+    internal fun start(installDir: Path, args: List<String>, logFile: Path): Process {
+        val command = command(
+            installDir,
+            javaHome = Path(System.getProperty("java.home")),
+            baseDir = System.getProperty(IdeRegistry.PROJECT_JUGGLER_BASE_DIR),
+            args = args
+        )
         Files.createDirectories(logFile.parent)
         val process = ProcessBuilder(command)
             .redirectErrorStream(true)
@@ -106,10 +117,31 @@ object BundledSyncHelper {
         legacyCleanupDone.set(false)
     }
 
-    private fun executableIn(dir: Path): Path = when (Platform.current()) {
-        Platform.WINDOWS -> dir.resolve("bin/sync-helper.bat")
-        else -> dir.resolve("bin/sync-helper")
+    /**
+     * The command line that runs the helper's [MAIN_CLASS] from [installDir] on the JVM in [javaHome]:
+     * `<javaHome>/bin/java[.exe] -cp <cp> [-Dproject.juggler.base.dir=<baseDir>] <main class> <args>`, where `<cp>`
+     * is the `*` wildcard in `<installDir>/lib`. `java` expands the wildcard itself, so no shell is needed. Using the IDE's JVM avoids depending on a system `java`,
+     * and setting no `JAVA_HOME` keeps the JBR out of the relaunched IDE's environment.
+     */
+    internal fun command(
+        installDir: Path,
+        javaHome: Path,
+        baseDir: String?,
+        args: List<String>,
+        platform: Platform = Platform.current(),
+    ): List<String> {
+        val java = javaHome.resolve("bin").resolve(if (platform == Platform.WINDOWS) "java.exe" else "java")
+        return buildList {
+            add(java.toString())
+            add("-cp")
+            add("${installDir.resolve("lib")}${File.separator}*")
+            if (baseDir != null) add("-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=$baseDir")
+            add(MAIN_CLASS)
+            addAll(args)
+        }
     }
+
+    private fun isComplete(dir: Path): Boolean = dir.resolve(MARKER).isRegularFile()
 
     /**
      * Extracts into a `<fingerprint>.tmp-*` sibling of [target] and moves it into place atomically, so a crash
@@ -128,26 +160,17 @@ object BundledSyncHelper {
                 }
             }
 
-            val executable = executableIn(tmp)
-            if (!executable.exists()) {
-                throw IllegalStateException("sync-helper executable not found at: $executable")
-            }
-            if (Platform.current() != Platform.WINDOWS) {
-                try {
-                    executable.toFile().setExecutable(true)
-                } catch (e: Throwable) {
-                    e.rethrowIfControlFlow()
-                    log.warn("Failed to make sync-helper executable", e)
-                }
+            if (!isComplete(tmp)) {
+                throw IllegalStateException("sync-helper jar not found at: ${tmp.resolve(MARKER)}")
             }
 
-            // An incomplete target (executable missing) would block the move
+            // An incomplete target (jar missing) would block the move
             if (target.exists()) target.deleteRecursively()
             try {
                 Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE)
             } catch (e: IOException) {
                 // Someone else completed the same extraction first; use theirs
-                if (!executableIn(target).exists()) throw e
+                if (!isComplete(target)) throw e
                 deleteQuietly(tmp)
             }
         } catch (e: Throwable) {
@@ -168,7 +191,7 @@ object BundledSyncHelper {
             tempDir.listDirectoryEntries("sync-helper-*").forEach { dir ->
                 bestEffort("remove legacy sync-helper dir $dir") {
                     val isLegacy = dir.resolve("bin").isDirectory() &&
-                        dir.resolve("lib/sync-helper.jar").isRegularFile() &&
+                        isComplete(dir) &&
                         dir.getLastModifiedTime().toInstant() < cutoff
                     if (isLegacy) {
                         dir.deleteRecursively()

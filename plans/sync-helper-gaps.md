@@ -242,6 +242,17 @@ Opus 5.5 at the current effort, 4 sessions, in this order (each one depends on t
    exit), `SyncPlanner`, `SyncAllProjectsAction`, the reworded bundle text, and their tests. Reads first:
    `BundledSyncHelper.kt` and its test, `Sync.kt`, `SyncPlanner.kt` and its test, `SyncAllProjectsAction.kt`,
    `SyncSettingsSubAction.kt`. Done when `./gradlew :plugin:test` passes. ~25%.
+   **Done** in `run the sync-helper on the ide's jvm and stop exiting the ide for a self-sync`. Notes for later
+   sessions: `reportHelperExit(project, exitCode, logFile, appClosing)` is private in `actions/Sync.kt`; it skips
+   the report when the app is disposed or `appClosing` is set. `Application.isExitInProgress` is internal API
+   (flagged by `verifyPlugin`), so `performSelfShutdownSync` instead subscribes an `AppLifecycleListener`
+   (`appWillBeClosed`) per helper run and disconnects it when the helper exits; session 4 wires `reportHelperExit`
+   to `reportSelfSyncResult` (it needs the repository and current project id, e.g. from
+   `IsolatedInstance.currentProjectId()`). `performSyncWithProgress` also skips `onFinished` when the sync itself
+   threw (not only on cancellation). `BundledSyncHelper.MAIN_CLASS` is public; `command(...)` has an extra
+   `platform` parameter (default `Platform.current()`) for the tests. `ProjectJugglerBundleTest` pins the reworded
+   `notification.info.sync.self.shutdown.all` and the `helper.exited` text. `verifyPlugin`: compatible with all
+   recommended IDEs; the only remaining note is the pre-existing deprecated `DynamicBundle(String)` constructor.
 4. **Result report, docs, finishing.** Implements `SelfSyncReport.kt`, `SelfSyncResultActivity`, the `plugin.xml`
    entry and bundle keys, wires `reportHelperExit` to `reportSelfSyncResult`, adds `SelfSyncReportTest`, does the
    manual check, updates the docs and does the full "Finishing". Reads first: `StaleMainProjectCleanupActivity.kt`,

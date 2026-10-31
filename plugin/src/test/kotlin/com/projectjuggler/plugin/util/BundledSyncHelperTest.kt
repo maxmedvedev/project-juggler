@@ -4,11 +4,12 @@ import com.projectjuggler.platform.Platform
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
-import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldMatch
-import java.nio.file.Files
+import java.io.File
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Instant
@@ -23,18 +24,17 @@ import kotlin.io.path.createFile
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.deleteRecursively
 import kotlin.io.path.exists
-import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
+import kotlin.io.path.readText
 import kotlin.io.path.setLastModifiedTime
 
 @OptIn(ExperimentalPathApi::class)
 class BundledSyncHelperTest : StringSpec({
 
     val tempDir = createTempDir("bundled-helper")
-    val executableName = if (Platform.isWindows()) "sync-helper.bat" else "sync-helper"
 
     fun newRoot(): Path = createTempDirectory(tempDir, "root")
 
@@ -54,7 +54,7 @@ class BundledSyncHelperTest : StringSpec({
         val fresh = legacyDir(legacyTempDir, "sync-helper-fresh", "sync-helper.jar", withBin = true, Instant.now())
         val foreign = legacyDir(legacyTempDir, "sync-helper-foreign", "other.jar", withBin = false, twoHoursAgo)
 
-        BundledSyncHelper.getExecutable(newRoot(), legacyTempDir)
+        BundledSyncHelper.getInstallDir(newRoot(), legacyTempDir)
 
         old.exists() shouldBe false
         fresh.exists() shouldBe true
@@ -64,14 +64,10 @@ class BundledSyncHelperTest : StringSpec({
     "extracts the bundled distribution into a fingerprint directory under the root" {
         val root = newRoot()
 
-        val executable = BundledSyncHelper.getExecutable(root, null)
+        val helperDir = BundledSyncHelper.getInstallDir(root, null)
 
-        val helperDir = root.resolve(BundledSyncHelper.fingerprint())
-        executable shouldBe helperDir.resolve("bin").resolve(executableName)
-        executable.isRegularFile() shouldBe true
-        if (!Platform.isWindows()) {
-            Files.isExecutable(executable) shouldBe true
-        }
+        helperDir shouldBe root.resolve(BundledSyncHelper.fingerprint())
+        helperDir.resolve("bin").listDirectoryEntries().map { it.name } shouldContain "sync-helper"
         helperDir.resolve("lib/sync-helper.jar").isRegularFile() shouldBe true
         helperDir.resolve("lib/core.jar").isRegularFile() shouldBe true
         root.listDirectoryEntries() shouldContainExactly listOf(helperDir)
@@ -79,24 +75,24 @@ class BundledSyncHelperTest : StringSpec({
 
     "reuses the extraction on the second call" {
         val root = newRoot()
-        val first = BundledSyncHelper.getExecutable(root, null)
-        val coreJar = first.parent.parent.resolve("lib/core.jar")
+        val first = BundledSyncHelper.getInstallDir(root, null)
+        val coreJar = first.resolve("lib/core.jar")
         val oldTime = FileTime.from(Instant.now().minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
         coreJar.setLastModifiedTime(oldTime)
 
-        BundledSyncHelper.getExecutable(root, null) shouldBe first
+        BundledSyncHelper.getInstallDir(root, null) shouldBe first
         coreJar.getLastModifiedTime() shouldBe oldTime
     }
 
     "re-extracts to the same path when the extraction was deleted" {
         val root = newRoot()
-        val first = BundledSyncHelper.getExecutable(root, null)
-        first.parent.parent.deleteRecursively()
+        val first = BundledSyncHelper.getInstallDir(root, null)
+        first.deleteRecursively()
 
-        val second = BundledSyncHelper.getExecutable(root, null)
+        val second = BundledSyncHelper.getInstallDir(root, null)
 
         second shouldBe first
-        second.isRegularFile() shouldBe true
+        second.resolve("lib/sync-helper.jar").isRegularFile() shouldBe true
     }
 
     "removes other fingerprints and leftover temp dirs after an extraction" {
@@ -105,20 +101,30 @@ class BundledSyncHelperTest : StringSpec({
         root.resolve("0000000000000000/bin").createDirectories().resolve("x").createFile()
         root.resolve("$fingerprint.tmp-123").createDirectories()
 
-        BundledSyncHelper.getExecutable(root, null)
+        BundledSyncHelper.getInstallDir(root, null)
 
         root.listDirectoryEntries().map { it.name } shouldContainExactly listOf(fingerprint)
     }
 
     "returns an existing extraction as is and leaves its siblings alone" {
         val root = newRoot()
-        val fingerprint = BundledSyncHelper.fingerprint()
-        val executable = root.resolve(fingerprint).resolve("bin").createDirectories().resolve(executableName)
-            .createFile()
+        val helperDir = root.resolve(BundledSyncHelper.fingerprint())
+        helperDir.resolve("lib").createDirectories().resolve("sync-helper.jar").createFile()
         val sibling = root.resolve("0000000000000000").createDirectories()
 
-        BundledSyncHelper.getExecutable(root, null) shouldBe executable
-        root.listDirectoryEntries() shouldContainExactlyInAnyOrder listOf(executable.parent.parent, sibling)
+        BundledSyncHelper.getInstallDir(root, null) shouldBe helperDir
+        helperDir.resolve("bin").exists() shouldBe false
+        root.listDirectoryEntries() shouldContainExactlyInAnyOrder listOf(helperDir, sibling)
+    }
+
+    "re-extracts a directory without the jar marker" {
+        val root = newRoot()
+        val helperDir = root.resolve(BundledSyncHelper.fingerprint())
+        helperDir.resolve("bin").createDirectories().resolve("sync-helper").createFile()
+
+        BundledSyncHelper.getInstallDir(root, null) shouldBe helperDir
+        helperDir.resolve("lib/sync-helper.jar").isRegularFile() shouldBe true
+        helperDir.resolve("lib/core.jar").isRegularFile() shouldBe true
     }
 
     "creates nothing in the system temp dir" {
@@ -126,7 +132,7 @@ class BundledSyncHelperTest : StringSpec({
         fun helperTempDirs() = systemTemp.listDirectoryEntries("sync-helper-*").toSet()
         val before = helperTempDirs()
 
-        BundledSyncHelper.getExecutable(newRoot(), null)
+        BundledSyncHelper.getInstallDir(newRoot(), null)
 
         helperTempDirs() shouldBe before
     }
@@ -135,11 +141,11 @@ class BundledSyncHelperTest : StringSpec({
         val root = newRoot()
         val executor = Executors.newFixedThreadPool(2)
         try {
-            val results = List(2) { executor.submit(Callable { BundledSyncHelper.getExecutable(root, null) }) }
+            val results = List(2) { executor.submit(Callable { BundledSyncHelper.getInstallDir(root, null) }) }
                 .map { it.get(60, TimeUnit.SECONDS) }
 
             results.toSet().size shouldBe 1
-            results.first().isRegularFile() shouldBe true
+            results.first().resolve("lib/sync-helper.jar").isRegularFile() shouldBe true
             root.listDirectoryEntries().size shouldBe 1
         } finally {
             executor.shutdownNow()
@@ -153,14 +159,49 @@ class BundledSyncHelperTest : StringSpec({
         BundledSyncHelper.fingerprint() shouldBe fingerprint
     }
 
-    "start writes the helper output to the log file" {
-        val executable = BundledSyncHelper.getExecutable(newRoot(), null)
+    "command runs the main class on the given JVM on Unix" {
+        val installDir = Path("/helper")
+
+        val command = BundledSyncHelper.command(
+            installDir, Path("/jbr"), baseDir = null, args = listOf("--ide", "/ide"), platform = Platform.MACOS
+        )
+
+        command shouldContainExactly listOf(
+            Path("/jbr/bin/java").toString(),
+            "-cp",
+            "${installDir.resolve("lib")}${File.separator}*",
+            BundledSyncHelper.MAIN_CLASS,
+            "--ide",
+            "/ide"
+        )
+    }
+
+    "command uses java.exe on Windows and passes the base dir on" {
+        val installDir = Path("/helper")
+
+        val command = BundledSyncHelper.command(
+            installDir, Path("/jbr"), baseDir = "/sandbox", args = listOf("--all"), platform = Platform.WINDOWS
+        )
+
+        command shouldContainExactly listOf(
+            Path("/jbr/bin/java.exe").toString(),
+            "-cp",
+            "${installDir.resolve("lib")}${File.separator}*",
+            "-Dproject.juggler.base.dir=/sandbox",
+            BundledSyncHelper.MAIN_CLASS,
+            "--all"
+        )
+    }
+
+    "start runs the helper on the IDE's JVM and writes its output to the log file" {
+        val installDir = BundledSyncHelper.getInstallDir(newRoot(), null)
         val logFile = tempDir.resolve("logs").resolve(BundledSyncHelper.LOG_FILE_NAME)
 
-        val process = BundledSyncHelper.start(executable, listOf("--bogus"), logFile)
+        val process = BundledSyncHelper.start(installDir, listOf("--bogus"), logFile)
 
         process.waitFor(60, TimeUnit.SECONDS) shouldBe true
-        logFile.isRegularFile() shouldBe true
-        logFile.fileSize() shouldBeGreaterThan 0L
+        // Exit code 2 (usage error) proves the main class ran and parsed the arguments
+        process.exitValue() shouldBe 2
+        logFile.readText() shouldContain "--bogus"
     }
 })

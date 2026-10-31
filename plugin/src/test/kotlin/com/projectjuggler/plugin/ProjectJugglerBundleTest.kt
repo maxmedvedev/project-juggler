@@ -44,6 +44,8 @@ class ProjectJugglerBundleTest : StringSpec({
         ProjectJugglerBundle.message("notification.info.sync.self.shutdown.project", SyncType.Plugins.displayName) shouldBe
             "IntelliJ will close to sync plugins and reopen automatically..."
         ProjectJugglerBundle.message("notification.info.sync.self.shutdown.all") shouldBe
-            "IntelliJ will close to sync all projects and reopen automatically..."
+            "The other projects sync first, then IntelliJ will close to sync this project and reopen automatically..."
+        ProjectJugglerBundle.message("notification.self.sync.helper.exited", 2, "/logs/sync-helper.log") shouldBe
+            "sync-helper exited with code 2. Details: /logs/sync-helper.log"
     }
 })

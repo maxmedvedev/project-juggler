@@ -11,8 +11,14 @@ import com.projectjuggler.plugin.actions.recent.SyncType
 internal sealed interface SyncTarget {
     data class InProcess(val projects: List<ProjectMetadata>) : SyncTarget
 
-    /** `helperArgs`: `--ide <exe> (--path <p> | --all-projects) <flag>`, the full sync-helper argument list. */
-    data class SelfShutdown(val helperArgs: List<String>) : SyncTarget
+    /**
+     * The current project is a target: `helperArgs` (`--ide <exe> --path <current project> <flag>`, the full
+     * sync-helper argument list) syncs it from outside. [others] are the remaining targets, to sync in process first.
+     */
+    data class SelfShutdown(
+        val helperArgs: List<String>,
+        val others: List<ProjectMetadata> = emptyList(),
+    ) : SyncTarget
 
     /** A single project without metadata. */
     data object NoTarget : SyncTarget
@@ -27,25 +33,27 @@ internal object SyncPlanner {
         currentProjectId: ProjectId? = IsolatedInstance.currentProjectId(),
     ): SyncTarget {
         if (IsolatedInstance.isCurrentProject(repository, projectPath, currentProjectId)) {
-            return SyncTarget.SelfShutdown(helperArgs(repository, listOf("--path", projectPath.pathString), syncType))
+            return SyncTarget.SelfShutdown(helperArgs(repository, projectPath, syncType))
         }
         val metadata = ProjectManager.getInstance(repository).get(projectPath) ?: return SyncTarget.NoTarget
         return SyncTarget.InProcess(listOf(metadata))
     }
 
-    /** Targets every syncable project (`ProjectManager.listSyncable`, i.e. all tracked projects but the main one). */
+    /**
+     * Targets every syncable project (`ProjectManager.listSyncable`, i.e. all tracked projects but the main one).
+     * When the current project is one of them, it goes to the sync-helper and the rest to [SyncTarget.SelfShutdown.others].
+     */
     fun forAllProjects(
         repository: IdeConfigRepository,
         syncType: SyncType,
         currentProjectId: ProjectId? = IsolatedInstance.currentProjectId(),
     ): SyncTarget {
         val projects = ProjectManager.getInstance(repository).listSyncable()
-        if (currentProjectId != null && projects.any { it.id == currentProjectId }) {
-            return SyncTarget.SelfShutdown(helperArgs(repository, listOf("--all-projects"), syncType))
-        }
-        return SyncTarget.InProcess(projects)
+        val (current, others) = projects.partition { it.id == currentProjectId }
+        val currentProject = current.firstOrNull() ?: return SyncTarget.InProcess(projects)
+        return SyncTarget.SelfShutdown(helperArgs(repository, currentProject.path, syncType), others)
     }
 
-    private fun helperArgs(repository: IdeConfigRepository, target: List<String>, syncType: SyncType): List<String> =
-        listOf("--ide", repository.installation.executablePath) + target + syncType.cliFlag
+    private fun helperArgs(repository: IdeConfigRepository, projectPath: ProjectPath, syncType: SyncType): List<String> =
+        listOf("--ide", repository.installation.executablePath, "--path", projectPath.pathString, syncType.cliFlag)
 }

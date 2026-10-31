@@ -1,6 +1,8 @@
 package com.projectjuggler.plugin.actions
 
+import com.intellij.ide.AppLifecycleListener
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -20,13 +22,17 @@ import com.projectjuggler.plugin.showInfoNotification
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.plugin.util.BundledSyncHelper
 import com.projectjuggler.process.ProjectLauncher
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val LOG = Logger.getInstance("#com.projectjuggler.plugin.actions.Sync")
 
 /**
  * Common logic for self-shutdown sync operations.
- * Starts the sync-helper process with [helperArgs] (see `SyncTarget.SelfShutdown`) in a background task,
- * then exits IntelliJ gracefully. On failure the IDE keeps running.
+ * Starts the sync-helper process with [helperArgs] (see `SyncTarget.SelfShutdown`) in a background task. The IDE does
+ * not exit by itself: the helper finds it running, writes a stop request, and `ShutdownSignalService` closes it; the
+ * helper then syncs and relaunches it. If the helper exits while the IDE still runs (it failed before stopping it),
+ * [reportHelperExit] reports that. If the helper cannot be started, the IDE keeps running.
  */
 @RequiresBackgroundThread
 fun performSelfShutdownSync(
@@ -41,11 +47,23 @@ fun performSelfShutdownSync(
         /* canBeCancelled = */ false
     ) {
         override fun run(indicator: ProgressIndicator) {
-            BundledSyncHelper.start(helperArgs)
-            Thread.sleep(100) // lets the helper start before the IDE exits, see sync-helper-spec gap 1
+            val logFile = PathManager.getLogDir().resolve(BundledSyncHelper.LOG_FILE_NAME)
+            val appClosing = AtomicBoolean(false)
+            val connection = ApplicationManager.getApplication().messageBus.connect()
+            connection.subscribe(AppLifecycleListener.TOPIC, object : AppLifecycleListener {
+                override fun appWillBeClosed(isRestart: Boolean) = appClosing.set(true)
+            })
+            val process = try {
+                BundledSyncHelper.start(helperArgs, logFile)
+            } catch (t: Throwable) {
+                connection.disconnect()
+                throw t
+            }
+            process.onExit().thenAccept {
+                connection.disconnect()
+                reportHelperExit(project, it.exitValue(), logFile, appClosing.get())
+            }
         }
-
-        override fun onSuccess() = ApplicationManager.getApplication().exit()
 
         override fun onThrowable(error: Throwable) {
             LOG.warn("Failed to initiate self-shutdown sync", error)
@@ -58,9 +76,30 @@ fun performSelfShutdownSync(
 }
 
 /**
+ * Reports a sync-helper that exited while this IDE is still running, i.e. before it stopped the IDE or after a
+ * shutdown timeout. When the IDE is exiting (the helper stopped it), the relaunched IDE reports at startup instead.
+ */
+private fun reportHelperExit(project: Project?, exitCode: Int, logFile: Path, appClosing: Boolean) {
+    try {
+        if (appClosing || ApplicationManager.getApplication().isDisposed) return
+        LOG.info("sync-helper exited with code $exitCode while the IDE is running; output in $logFile")
+        if (exitCode != 0) {
+            showErrorNotification(
+                ProjectJugglerBundle.message("notification.self.sync.helper.exited", exitCode, logFile.toString()),
+                project?.takeUnless { it.isDisposed }
+            )
+        }
+    } catch (t: Throwable) {
+        t.rethrowIfControlFlow()
+        LOG.warn("Failed to report the sync-helper exit", t)
+    }
+}
+
+/**
  * Common sync logic with progress indicator.
  * Syncs [projects] with progress tracking. Shows [successMessage] when every project synced, else one error
- * notification built by [errorMessage] from the failure detail (see [describeFailures]).
+ * notification built by [errorMessage] from the failure detail (see [describeFailures]). Then calls [onFinished] on
+ * the task's pooled thread, also when some projects failed, but not when the user cancelled.
  */
 fun performSyncWithProgress(
     project: Project?,
@@ -68,11 +107,12 @@ fun performSyncWithProgress(
     syncType: SyncType,
     taskTitle: String,
     successMessage: (List<ProjectMetadata>) -> String,
-    errorMessage: (detail: String) -> String
+    errorMessage: (detail: String) -> String,
+    onFinished: () -> Unit = {}
 ) {
     ProgressManager.getInstance().run(object : Task.Backgroundable(project, taskTitle) {
         override fun run(indicator: ProgressIndicator) {
-            try {
+            val finished = try {
                 val launcher = ProjectLauncher.getInstance(IdeInstallationService.currentIdeConfigRepository)
                 val result = syncProjects(launcher, projects, syncType, ProgressIndicatorSink(indicator))
                 if (result.succeeded) {
@@ -80,11 +120,14 @@ fun performSyncWithProgress(
                 } else {
                     showErrorNotification(errorMessage(describeFailures(result, projects.size)), project)
                 }
+                true
             } catch (t: Throwable) {
                 t.rethrowIfControlFlow()
                 LOG.warn("Sync of ${projects.size} project(s) failed", t)
                 showErrorNotification(errorMessage(t.userMessage()), project)
+                false
             }
+            if (finished) onFinished()
         }
     })
 }

@@ -34,13 +34,18 @@ data class SyncAllProjectsAction(
     private fun syncAllProjectsWithType(syncType: SyncType, project: Project?) {
         val repository = IdeInstallationService.currentIdeConfigRepository
         when (val target = SyncPlanner.forAllProjects(repository, syncType)) {
-            is SyncTarget.SelfShutdown -> handleSelfShutdownSyncAll(project, target.helperArgs)
+            is SyncTarget.SelfShutdown -> syncOthersThenSelf(project, target, syncType)
             is SyncTarget.InProcess -> syncInProcess(project, target.projects, syncType)
             SyncTarget.NoTarget -> return
         }
     }
 
-    private fun syncInProcess(project: Project?, projects: List<ProjectMetadata>, syncType: SyncType) {
+    private fun syncInProcess(
+        project: Project?,
+        projects: List<ProjectMetadata>,
+        syncType: SyncType,
+        onFinished: () -> Unit = {}
+    ) {
         performSyncWithProgress(
             project = project,
             projects = projects,
@@ -55,15 +60,25 @@ data class SyncAllProjectsAction(
             },
             errorMessage = { detail ->
                 ProjectJugglerBundle.message("notification.error.sync.projects.failed", detail)
-            }
+            },
+            onFinished = onFinished
         )
     }
 
     /**
-     * Handles syncing all projects when current project is in the list.
-     * Spawns sync-helper with --all-projects and shuts down.
+     * Handles syncing all projects when the current project is among them: syncs the others in process (with
+     * progress and their own notification), then hands the current one to the sync-helper. Cancelling the in-process
+     * part skips the self-sync. `onFinished` runs on the task's pooled thread, as [performSelfShutdownSync] needs.
      */
-    private fun handleSelfShutdownSyncAll(project: Project?, helperArgs: List<String>) {
+    private fun syncOthersThenSelf(project: Project?, target: SyncTarget.SelfShutdown, syncType: SyncType) {
+        if (target.others.isEmpty()) {
+            selfShutdownSync(project, target.helperArgs)
+        } else {
+            syncInProcess(project, target.others, syncType) { selfShutdownSync(project, target.helperArgs) }
+        }
+    }
+
+    private fun selfShutdownSync(project: Project?, helperArgs: List<String>) {
         performSelfShutdownSync(
             project = project,
             notificationMessage = ProjectJugglerBundle.message("notification.info.sync.self.shutdown.all"),

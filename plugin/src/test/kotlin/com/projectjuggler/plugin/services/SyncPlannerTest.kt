@@ -67,14 +67,30 @@ class SyncPlannerTest : StringSpec({
         target.shouldBeInstanceOf<SyncTarget.InProcess>().projects shouldContainExactlyInAnyOrder listOf(a, b)
     }
 
-    "forAllProjects hands everything to the sync-helper when the current project is a target" {
+    "forAllProjects hands the current project to the sync-helper and keeps the others in process" {
         val repository = newRepository()
         val a = registerProject(repository, projectA)
-        registerProject(repository, projectB)
+        val b = registerProject(repository, projectB)
+        val main = registerProject(repository, mainDir)
+        MainProjectService.setMainProject(repository, main.path)
 
         val target = SyncPlanner.forAllProjects(repository, SyncType.All, currentProjectId = a.id)
 
-        target shouldBe SyncTarget.SelfShutdown(listOf("--ide", ideExecutable, "--all-projects", "--all"))
+        target shouldBe SyncTarget.SelfShutdown(
+            helperArgs = listOf("--ide", ideExecutable, "--path", a.path.pathString, "--all"),
+            others = listOf(b)
+        )
+    }
+
+    "forAllProjects with only the current project tracked has no others" {
+        val repository = newRepository()
+        val a = registerProject(repository, projectA)
+
+        val target = SyncPlanner.forAllProjects(repository, SyncType.Plugins, currentProjectId = a.id)
+
+        target shouldBe SyncTarget.SelfShutdown(
+            listOf("--ide", ideExecutable, "--path", a.path.pathString, "--plugins")
+        )
     }
 
     "forAllProjects with only the main project tracked syncs an empty list (gap 16)" {
