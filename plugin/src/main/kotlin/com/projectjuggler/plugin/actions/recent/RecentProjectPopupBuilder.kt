@@ -6,6 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.util.application
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.intellij.util.containers.addIfNotNull
+import com.projectjuggler.config.IdeConfig
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectMetadata
@@ -15,12 +16,13 @@ import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.CurrentIdePaths
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.IdePathSyncDetector
+import com.projectjuggler.plugin.services.isOpenInCurrentIde
+import com.projectjuggler.plugin.services.isProjectRunning
 import com.projectjuggler.plugin.services.openWithInstallations
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.userMessage
 import com.projectjuggler.util.GitUtils
-import com.projectjuggler.util.ProjectLockUtils
 import java.nio.file.Files.exists
 import java.nio.file.Path
 
@@ -58,15 +60,22 @@ internal class RecentProjectPopupBuilder(
     companion object {
         /**
          * The popup items for [repository], in display order. Pure apart from reading the repository,
-         * the project directories and their lock files.
+         * the project directories, their lock files and [openInCurrentIde] (the open state of the current
+         * IDE's own projects, see [isProjectRunning]).
          */
         internal fun buildItems(
             repository: IdeConfigRepository,
             currentPaths: CurrentIdePaths,
+            openInCurrentIde: (ProjectPath) -> Boolean = ::isOpenInCurrentIde,
         ): List<RecentProjectPopupAction> {
-            // Load recent projects
+            val config = repository.load()
+            val isOpen = { path: ProjectPath ->
+                isProjectRunning(repository, path, currentPaths.configDir, openInCurrentIde)
+            }
+
+            // Load recent projects; the index is trimmed to the same limit on every recordOpen
             val recentIndex = RecentProjectsIndex.getInstance(repository)
-            val recentMetadata = recentIndex.getRecent(20)
+            val recentMetadata = recentIndex.getRecent(config.maxRecentProjects)
 
             // Filter out non-existent paths (deleted projects)
             val validProjects = recentMetadata.filter { metadata ->
@@ -75,7 +84,7 @@ internal class RecentProjectPopupBuilder(
 
             // Create items with git branch info (even if empty, we'll still show the "Browse..." item)
             val items = validProjects.map { metadata ->
-                createRecentProjectItem(metadata, repository)
+                createRecentProjectItem(metadata, repository, isOpen)
             }
 
             // Create popup using ListPopupImpl with custom renderer and submenu support
@@ -90,7 +99,7 @@ internal class RecentProjectPopupBuilder(
             // Add browse button at the top
             itemsList.add(OpenFileChooserAction)
             // Add main project if configured
-            val mainProjectItem = createMainProjectItem(repository)
+            val mainProjectItem = createMainProjectItem(config, isOpen)
             itemsList.addIfNotNull(mainProjectItem)
             itemsList.addAll(items.filterNot { it.isMainProject })
 
@@ -103,7 +112,7 @@ internal class RecentProjectPopupBuilder(
                 itemsList.add(SyncAllProjectsAction(SyncType.VmOptions))
                 itemsList.add(SyncAllProjectsAction(SyncType.Config))
                 itemsList.add(SyncAllProjectsAction(SyncType.Plugins))
-                itemsList.add(ToggleSyncOnUpdateAction(repository.load().syncPluginsOnIdeUpdate))
+                itemsList.add(ToggleSyncOnUpdateAction(config.syncPluginsOnIdeUpdate))
             } else {
                 // Show import action when no projects
                 itemsList.add(ImportRecentProjectsAction)
@@ -112,26 +121,24 @@ internal class RecentProjectPopupBuilder(
             return itemsList
         }
 
-        private fun createMainProjectItem(ideConfigRepository: IdeConfigRepository): OpenRecentProjectAction? {
-            val mainProjectPathStr = ideConfigRepository.load().mainProjectPath ?: return null
+        private fun createMainProjectItem(
+            config: IdeConfig,
+            isOpen: (ProjectPath) -> Boolean,
+        ): OpenRecentProjectAction? {
+            val mainProjectPathStr = config.mainProjectPath ?: return null
             val path = ProjectPath(mainProjectPathStr)
             val gitBranch = GitUtils.detectGitBranch(path.path)
-            val isOpen = detectIfProjectOpen(ideConfigRepository, path)
-            return OpenRecentProjectAction(path, gitBranch, isOpen, isMainProject = true)
+            return OpenRecentProjectAction(path, gitBranch, isOpen(path), isMainProject = true)
         }
 
         private fun createRecentProjectItem(
             metadata: ProjectMetadata,
-            ideConfigRepository: IdeConfigRepository
+            ideConfigRepository: IdeConfigRepository,
+            isOpen: (ProjectPath) -> Boolean,
         ): OpenRecentProjectAction {
             val gitBranch = GitUtils.detectGitBranch(metadata.path.path)
-            val isOpen = detectIfProjectOpen(ideConfigRepository, metadata.path)
             val isMainProject = MainProjectService.isMainProject(ideConfigRepository, metadata.path)
-            return OpenRecentProjectAction(metadata.path, gitBranch, isOpen, isMainProject)
-        }
-
-        private fun detectIfProjectOpen(ideConfigRepository: IdeConfigRepository, projectPath: ProjectPath): Boolean {
-            return ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath)
+            return OpenRecentProjectAction(metadata.path, gitBranch, isOpen(metadata.path), isMainProject)
         }
     }
 }

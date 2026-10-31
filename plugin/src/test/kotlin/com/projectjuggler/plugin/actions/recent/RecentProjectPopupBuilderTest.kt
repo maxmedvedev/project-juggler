@@ -3,6 +3,7 @@ package com.projectjuggler.plugin.actions.recent
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.core.DirectoryManager
 import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.CurrentIdePaths
@@ -17,8 +18,11 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import java.nio.file.Path
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.deleteExisting
+import kotlin.io.path.writeText
 
 class RecentProjectPopupBuilderTest : StringSpec({
     extensions(KoinTestExtension())
@@ -38,7 +42,26 @@ class RecentProjectPopupBuilderTest : StringSpec({
 
     fun newProjectDir(name: String) = createTempDirectory(projectsDir, name)
 
-    fun buildItems(repository: IdeConfigRepository) = RecentProjectPopupBuilder.buildItems(repository, currentPaths)
+    // The platform's open projects are not available in unit tests: by default nothing is open in the current IDE
+    fun buildItems(
+        repository: IdeConfigRepository,
+        paths: CurrentIdePaths = currentPaths,
+        openInCurrentIde: (ProjectPath) -> Boolean = { false },
+    ) = RecentProjectPopupBuilder.buildItems(repository, paths, openInCurrentIde)
+
+    fun isolatedConfigDir(repository: IdeConfigRepository, projectPath: ProjectPath): Path =
+        DirectoryManager.getInstance(repository).getProjectRoot(projectPath).resolve("config")
+
+    // A repository whose main instance (the current IDE) has its own config dir, so a `.lock` there stays per test
+    fun newMainInstance(): Pair<IdeConfigRepository, CurrentIdePaths> {
+        val mainConfigDir = createTempDirectory(baseDir, "main-config")
+        val repository = newRepository().apply { update { it.copy(baseConfigPath = mainConfigDir.toString()) } }
+        return repository to CurrentIdePaths(mainConfigDir, pluginsDir, mainConfigDir.resolve("idea.vmoptions"))
+    }
+
+    fun writeLiveLock(configDir: Path) {
+        configDir.createDirectories().resolve(".lock").writeText(ProcessHandle.current().pid().toString())
+    }
 
     fun List<RecentProjectPopupAction>.projects() = filterIsInstance<OpenRecentProjectAction>()
 
@@ -160,11 +183,57 @@ class RecentProjectPopupBuilderTest : StringSpec({
         items.getValue(idle.path).isOpen shouldBe false
     }
 
-    "at most ten recents are shown (gap 8)" {
-        // plugin-spec gap 8: the popup asks for 20 recents but the index keeps maxRecentProjects (10)
+    "12 recorded with default maxRecentProjects -> 10 items" {
         val repository = newRepository()
         repeat(12) { registerProject(repository, newProjectDir("p$it")) }
 
         buildItems(repository).projects() shouldHaveSize 10
+    }
+
+    "maxRecentProjects = 25, 25 recorded -> 25 project items" {
+        val repository = newRepository()
+        repository.update { it.copy(maxRecentProjects = 25) }
+        repeat(25) { registerProject(repository, newProjectDir("p$it")) }
+
+        buildItems(repository).projects() shouldHaveSize 25
+    }
+
+    "project whose isolated config dir is the current config dir is open only when the platform has it open" {
+        val repository = newRepository()
+        val own = registerProject(repository, newProjectDir("own"))
+        markIsolatedInstanceOpen(repository, own.path)
+        val ownConfigDir = isolatedConfigDir(repository, own.path)
+        val paths = CurrentIdePaths(ownConfigDir, pluginsDir, ownConfigDir.resolve("idea.vmoptions"))
+
+        fun ownItem(openInCurrentIde: (ProjectPath) -> Boolean) =
+            buildItems(repository, paths, openInCurrentIde).projects().single { it.projectPath == own.path }
+
+        ownItem { false }.isOpen shouldBe false
+        ownItem { it == own.path }.isOpen shouldBe true
+    }
+
+    "main project in the main instance is open only when the platform has it open" {
+        val (repository, paths) = newMainInstance()
+        val mainPath = ProjectPath(newProjectDir("main").toString())
+        MainProjectService.setMainProject(repository, mainPath)
+        writeLiveLock(paths.configDir)
+
+        fun mainItem(openInCurrentIde: (ProjectPath) -> Boolean) =
+            buildItems(repository, paths, openInCurrentIde).projects().single { it.isMainProject }
+
+        mainItem { false }.isOpen shouldBe false
+        mainItem { true }.isOpen shouldBe true
+    }
+
+    "main project seen from an isolated IDE is open while the main IDE runs" {
+        val (repository, mainPaths) = newMainInstance()
+        val mainPath = ProjectPath(newProjectDir("main").toString())
+        MainProjectService.setMainProject(repository, mainPath)
+        writeLiveLock(mainPaths.configDir)
+        val other = registerProject(repository, newProjectDir("other"))
+        val otherConfigDir = isolatedConfigDir(repository, other.path)
+        val paths = CurrentIdePaths(otherConfigDir, pluginsDir, otherConfigDir.resolve("idea.vmoptions"))
+
+        buildItems(repository, paths) { false }.projects().single { it.isMainProject }.isOpen shouldBe true
     }
 })

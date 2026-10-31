@@ -5,6 +5,7 @@ import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.DirectoryManager
 import com.projectjuggler.di.KoinTestExtension
+import com.projectjuggler.plugin.test.markIsolatedInstanceOpen
 import com.projectjuggler.plugin.test.registerProject
 import com.projectjuggler.plugin.test.testRepository
 import com.projectjuggler.test.createTempDir
@@ -80,5 +81,25 @@ class CurrentIdeProjectTest : StringSpec({
         val mainProject = setMainProject(repository, mainConfigDir)
 
         belongsToCurrentIde(repository, mainProject, ownConfigDir(repository, mainProject)) shouldBe false
+    }
+
+    "isProjectRunning asks the platform for the current IDE's own project and ignores its lock" {
+        val repository = newRepository()
+        val metadata = registerProject(repository, projectDir)
+        markIsolatedInstanceOpen(repository, metadata.path)
+        val ownConfigDir = ownConfigDir(repository, metadata.path)
+
+        isProjectRunning(repository, metadata.path, ownConfigDir) { false } shouldBe false
+        isProjectRunning(repository, metadata.path, ownConfigDir) { it == metadata.path } shouldBe true
+    }
+
+    "isProjectRunning uses the lock for another IDE's project" {
+        val repository = newRepository()
+        val running = registerProject(repository, projectDir)
+        val idle = registerProject(repository, otherProjectDir)
+        markIsolatedInstanceOpen(repository, running.path)
+
+        isProjectRunning(repository, running.path, elsewhere) { false } shouldBe true
+        isProjectRunning(repository, idle.path, elsewhere) { true } shouldBe false
     }
 })

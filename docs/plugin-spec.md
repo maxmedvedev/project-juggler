@@ -75,10 +75,10 @@ Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" c
 
 ### 5.1 Building the item list (`RecentProjectPopupBuilder`, background thread)
 
-`show()` resolves the current repository and `CurrentIdePaths.detect()` and calls `RecentProjectPopupBuilder.buildItems(repo, currentPaths)` (companion object), which does steps 1-3:
+`show()` resolves the current repository and `CurrentIdePaths.detect()` and calls `RecentProjectPopupBuilder.buildItems(repo, currentPaths)` (companion object), which loads `config.json` once and does steps 1-3:
 
-1. `RecentProjectsIndex.getRecent(20)`, filtered to paths that exist on disk.
-2. For each entry: `GitUtils.detectGitBranch`, `ProjectLockUtils.isProjectOpen`, `MainProjectService.isMainProject` -> `OpenRecentProjectAction(path, branch, isOpen, isMainProject)`.
+1. `RecentProjectsIndex.getRecent(maxRecentProjects)`, filtered to paths that exist on disk. `recordOpen` trims `recent.json` to the same limit, so a lowered value applies to the popup at once and to the file on the next `recordOpen`; a deleted directory takes a slot until it is pushed out.
+2. For each entry: `GitUtils.detectGitBranch`, `isOpen`, `MainProjectService.isMainProject` -> `OpenRecentProjectAction(path, branch, isOpen, isMainProject)`. `isOpen` = `isProjectRunning` (`services/CurrentIdeProject.kt`): for a project that belongs to the current IDE (`belongsToCurrentIde`: the main project in the main instance, or the project of this isolated instance) whether the platform has it open (`ProjectUtil.findProject`), since the `.lock` there is the current IDE's own; otherwise `ProjectLockUtils.isProjectOpen`. For the main project seen from an isolated IDE this means the main IDE is running.
 3. Item order:
    1. `UpdatePathsAction(mismatches)` if `IdePathSyncDetector.detectMismatches(repo, currentPaths)` is non-empty (§7).
    2. `OpenFileChooserAction` ("Browse...").
@@ -239,7 +239,7 @@ Covered, by spec:
 | `UtilsTest` | `rethrowIfControlFlow`, `userMessage` |
 | `ProjectJugglerBundleTest` | formerly hardcoded keys are present, `SyncType` names come from the bundle |
 | `actions/recent/SyncTypeTest` | sync booleans, `cliFlag`, `displayName` per type |
-| `actions/recent/RecentProjectPopupBuilderTest` | `buildItems`: item order, main project, filtering, path-mismatch item, git branch, `isOpen`, toggle text |
+| `actions/recent/RecentProjectPopupBuilderTest` | `buildItems`: item order, main project, filtering, `maxRecentProjects` limit, path-mismatch item, git branch, `isOpen` for other IDEs' and the current IDE's projects, toggle text |
 | `actions/recent/RecentProjectPopupTest` | `projectSubActions` (with and without Open with entries), speed-search and list texts |
 | `actions/recent/CompactPathTest` | `compactPath` |
 | `util/BundledSyncHelperTest` | extraction, caching, re-extraction |
@@ -250,7 +250,7 @@ Covered, by spec:
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, failure and cancellation |
 | `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
 | `services/OpenWithIdeTest` | `openWithInstallations` exclusions, base-settings filter and order; `shouldPromptForMainProject` per target repository |
-| `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects |
+| `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects; `isProjectRunning` platform vs lock |
 | `services/LaunchProjectTest` | launch, crash and start-failure notifications, control-flow exceptions propagate |
 | `services/FocusExistingProjectTest` | each focus outcome and its message, non-`Exception` errors, control-flow exceptions propagate |
 | `services/MainProjectActionsTest` | `setMainProject`, `clearMainProject` |
@@ -262,13 +262,12 @@ Covered, by spec:
 | `services/OpenProjectCopyTest` | `validateProjectCopyInput` per field and check, `suggestDestination`, `openProjectCopy` re-check failure, `createAndLaunchProjectCopy` success and worktree failure |
 | `services/IdeInstallationServiceTest` (test application) | current installation and repository in the sandbox IDE, auto-populated base paths, `VMOptionsCopy` files |
 
-Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
+Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
 
-Gaps pinned by tests (the test name carries the number): 8 (`RecentProjectPopupBuilderTest`), 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
+Gaps pinned by tests (the test name carries the number): 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
 
 ## Known gaps
 
-8. Popup shows up to 20 recents while core caps the index at `maxRecentProjects` (10 by default), so the limit is effectively 10. The main project item's `isOpen` relies on `isProjectOpen`, which is false when `baseConfigPath` is unset.
 9. `IdePathSyncDetector` compares paths as raw strings and is only checked from the popup. `autoPopulateIfNeeded` runs the first time the repository is touched in whichever instance that is; if that is an isolated instance started by `sync-helper` with no prior config, the isolated dirs become the "base" paths.
 10. `detectCurrentInstallation` falls back to an `IdeInstallation` keyed on the home directory when the executable is missing, which produces a different `directoryName` than an installation found by `IntelliJLocator`, splitting state across two `<ideDir>`s.
 11. `BundledSyncHelper` extracts a full distribution into a new temp directory once per IDE session and never deletes it. Extraction happens on the calling thread. The helper process inherits the IDE's stdio.
