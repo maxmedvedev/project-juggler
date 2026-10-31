@@ -1,7 +1,7 @@
 package com.projectjuggler.config
 
 import com.projectjuggler.core.DirectoryManager
-import java.nio.file.Files
+import com.projectjuggler.util.PathUtils
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -48,20 +48,7 @@ object MainProjectService {
     fun isRunningInMainInstance(ideConfigRepository: IdeConfigRepository, currentConfigDir: Path): Boolean {
         if (DirectoryManager.getInstance(ideConfigRepository).isIsolatedConfigDir(currentConfigDir)) return false
         val baseConfigPath = ideConfigRepository.load().baseConfigPath ?: return true
-        return samePath(Paths.get(baseConfigPath), currentConfigDir)
-    }
-
-    private fun samePath(a: Path, b: Path): Boolean {
-        val normalizedA = a.toAbsolutePath().normalize()
-        val normalizedB = b.toAbsolutePath().normalize()
-        if (normalizedA == normalizedB) return true
-        if (!Files.exists(normalizedA) || !Files.exists(normalizedB)) return false
-        return try {
-            normalizedA.toRealPath() == normalizedB.toRealPath()
-        } catch (e: Throwable) {
-            System.err.println("Failed to resolve real paths of $normalizedA and $normalizedB: ${e.message}")
-            false
-        }
+        return PathUtils.isSamePath(Paths.get(baseConfigPath), currentConfigDir)
     }
 
     /**

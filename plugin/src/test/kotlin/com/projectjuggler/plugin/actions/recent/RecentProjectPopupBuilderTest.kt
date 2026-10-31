@@ -7,6 +7,7 @@ import com.projectjuggler.core.DirectoryManager
 import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.CurrentIdePaths
+import com.projectjuggler.plugin.services.IdePathKind
 import com.projectjuggler.plugin.test.markIsolatedInstanceOpen
 import com.projectjuggler.plugin.test.registerProject
 import com.projectjuggler.plugin.test.testRepository
@@ -152,9 +153,7 @@ class RecentProjectPopupBuilderTest : StringSpec({
 
         val items = buildItems(repository)
 
-        items.first().shouldBeInstanceOf<UpdatePathsAction>().mismatches shouldContainExactly listOf(
-            ProjectJugglerBundle.message("ide.path.kind.config")
-        )
+        items.first().shouldBeInstanceOf<UpdatePathsAction>().mismatches shouldContainExactly listOf(IdePathKind.CONFIG)
         items[1] shouldBe OpenFileChooserAction
     }
 

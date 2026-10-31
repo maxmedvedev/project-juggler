@@ -6,7 +6,9 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.util.application
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.IdePathKind
 import com.projectjuggler.plugin.services.IdePathSyncDetector
+import com.projectjuggler.plugin.services.joinDisplayNames
 import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 
 /**
@@ -14,7 +16,7 @@ import com.projectjuggler.plugin.util.IntelliJNotificationHandler
  * Clicking it updates the stored paths to match the current IDE.
  */
 internal class UpdatePathsAction(
-    val mismatches: List<String>,
+    val mismatches: List<IdePathKind>,
 ) : RecentProjectPopupAction {
 
     override fun onChosen(
@@ -34,5 +36,5 @@ internal class UpdatePathsAction(
     }
 
     override fun getTextFor(): String =
-        ProjectJugglerBundle.message("popup.update.paths", mismatches.joinToString())
+        ProjectJugglerBundle.message("popup.update.paths", mismatches.joinDisplayNames())
 }

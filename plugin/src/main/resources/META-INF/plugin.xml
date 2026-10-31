@@ -28,6 +28,7 @@
         <postStartupActivity implementation="com.projectjuggler.plugin.shutdown.ShutdownSignalServiceStartupActivity"/>
         <postStartupActivity implementation="com.projectjuggler.plugin.startup.PluginSyncOnUpdateActivity"/>
         <postStartupActivity implementation="com.projectjuggler.plugin.startup.StaleMainProjectCleanupActivity"/>
+        <postStartupActivity implementation="com.projectjuggler.plugin.startup.IdePathsCheckActivity"/>
     </extensions>
 
     <actions resource-bundle="messages.ProjectJugglerBundle">

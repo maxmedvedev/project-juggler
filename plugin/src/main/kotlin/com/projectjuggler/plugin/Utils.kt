@@ -1,6 +1,7 @@
 package com.projectjuggler.plugin
 
 import com.intellij.notification.NotificationGroupManager
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.Project
@@ -8,9 +9,20 @@ import com.intellij.openapi.util.NlsContexts.NotificationContent
 import kotlin.coroutines.cancellation.CancellationException
 
 fun showNotification(@NotificationContent message: String, project: Project?, type: NotificationType) {
+    showNotification(message, project, type, actions = emptyArray())
+}
+
+/** Shows a balloon in the plugin's notification group with [actions] as its links. */
+fun showNotification(
+    @NotificationContent message: String,
+    project: Project?,
+    type: NotificationType,
+    vararg actions: AnAction,
+) {
     NotificationGroupManager.getInstance()
         .getNotificationGroup("project-juggler.notifications")
         .createNotification(message, type)
+        .apply { actions.forEach(::addAction) }
         .notify(project)
 }
 

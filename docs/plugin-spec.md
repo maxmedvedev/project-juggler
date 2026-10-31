@@ -16,7 +16,7 @@ Conventions:
 - Depends on `:core` and Koin. Tests: Kotest in `plugin/src/test`, see §13.
 - `processResources` depends on `:sync-helper:installDist` and copies the distribution into plugin resources under `sync-helper/` (`bin/`, `lib/`). This is what `BundledSyncHelper` extracts at runtime (§9).
 - `runIde` passes `-Dproject.juggler.base.dir=/Users/max/.project-juggler-test` (a machine-specific absolute path).
-- Registered extensions: one notification group `project-juggler.notifications` (balloon), three `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
+- Registered extensions: one notification group `project-juggler.notifications` (balloon), four `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
 
 ## 2. Initialization and DI
 
@@ -25,7 +25,7 @@ Conventions:
 - `IdeInstallationService`:
   - `currentInstallation` (lazy): resolves the executable from `PathManager.getHomePath()` as `MacOS/idea` (macOS), `bin/idea.sh` (Linux), `bin/idea64.exe` (Windows). If it exists, `IntelliJLocator.findInstallation(path)`; otherwise an `IdeInstallation(homePath, extractDisplayName(homePath))` keyed on the home directory rather than an executable.
   - `currentRepository` (lazy): `IdeRegistry.getRepository(currentInstallation)` followed by `IdePathSyncDetector.autoPopulateIfNeeded(repo)`.
-- `IdePathSyncDetector.autoPopulateIfNeeded(repo, current = CurrentIdePaths.detect())` (§7): no-op when `baseConfigPath` is already set. Otherwise writes `baseConfigPath = current.configDir`, `basePluginsPath = current.pluginsDir`, and, if the file exists, `baseVmOptionsPath = current.vmOptionsFile`, then updates the vmoptions hash. Errors are logged (`Throwable` caught, `ControlFlowException` rethrown), not surfaced. `CurrentIdePaths.detect()` is a default argument, so a failure there propagates instead.
+- `IdePathSyncDetector.autoPopulateIfNeeded(repo, current = CurrentIdePaths.detect())` (§7): runs only in the main instance (`current.configDir` is not `DirectoryManager.isIsolatedConfigDir`), so an isolated instance, e.g. one started by `sync-helper`, never stores its isolated dirs as base. For each `IdePathKind` it sets the stored path to the current one when the stored value is null or lies under `<ideDir>/projects/` (an isolated dir captured earlier, repaired); the vmoptions path only when the current file exists. All fills happen in one `repository.update`, nothing is written when no kind needs filling, and the vmoptions hash is refreshed when the vmoptions path was filled. Paths that are set and outside the ide dir are never touched. Errors are logged (`Throwable` caught, `ControlFlowException` rethrown), not surfaced. `CurrentIdePaths.detect()` is a default argument, so a failure there propagates instead.
   - `getAllInstallations()` / `getRepository(installation)` delegate to `IdeRegistry`.
 - `VMOptionsCopy` is a copy of the platform's `VMOptions` file-location logic: user file from `jb.vmOptionsFile` if outside the IDE home, else `PathManager.getCustomOptionsDirectory()/<script>[64][.exe].vmoptions`; platform file is `<bin>/<same name>`.
 
@@ -162,13 +162,15 @@ Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `s
 
 ## 7. IDE path drift (`IdePathSyncDetector`)
 
-Stored base paths can go stale after an IDE update or relocation. The running IDE's paths are a `CurrentIdePaths(configDir, pluginsDir, vmOptionsFile)` (`services/CurrentIdePaths.kt`); `CurrentIdePaths.detect()` reads `PathManager.getConfigDir()`, `PathManager.getPluginsDir()` and `VMOptionsCopy.getUserOptionsFile() ?: getPlatformOptionsFile()`. It is the default argument of `detectMismatches`, `updatePaths` and `autoPopulateIfNeeded` (§2), so it is evaluated before their `try`.
+Stored base paths can go stale after an IDE update or relocation. The running IDE's paths are a `CurrentIdePaths(configDir, pluginsDir, vmOptionsFile)` (`services/CurrentIdePaths.kt`); `CurrentIdePaths.detect()` reads `PathManager.getConfigDir()`, `PathManager.getPluginsDir()` and the vmoptions file the IDE reads: `VMOptionsCopy.getUserOptionsFile()` if that file exists, else `getPlatformOptionsFile()`. It is the default argument of `detectMismatches`, `updatePaths` and `autoPopulateIfNeeded` (§2), so it is evaluated before their `try`.
 
-`detectMismatches(repo, current)` returns an empty list when `current.configDir` is under `repo.baseDir` (isolated instance). (Core's `DirectoryManager.isIsolatedConfigDir` implements the stricter, normalized `<ideDir>/projects/` rule; this check could delegate to it.) Otherwise it compares, as strings, `baseConfigPath`, `basePluginsPath` and `baseVmOptionsPath` to the three current paths, each only when the stored value is non-null. Labels come from `ide.path.kind.*` ("Config", "Plugins", "VM Options").
+The three base paths are the `IdePathKind` entries `CONFIG`, `PLUGINS`, `VM_OPTIONS` (`services/IdePathKind.kt`), each with its stored and current value; `displayName` comes from `ide.path.kind.*` ("Config", "Plugins", "VM Options").
+
+`detectMismatches(repo, current)` returns an empty list when `current.configDir` is an isolated dir (`DirectoryManager.isIsolatedConfigDir`, core-spec §3). It does not use `MainProjectService.isRunningInMainInstance`, because after drift the stored `baseConfigPath` is exactly what is stale. Otherwise it returns, in `IdePathKind` order, each kind whose stored value is non-null and not `PathUtils.isSamePath` the current one (normalized, real paths when both exist, so trailing slashes, `.` segments and symlinks are not drift).
 
 `updatePaths(repo, notificationHandler, current)` overwrites config and plugins paths, overwrites the vmoptions path only if the current file exists, refreshes the vmoptions hash when it exists, and notifies `notification.success.paths.updated` or `notification.error.paths.update.failed` (plus a logged error) through the handler; `UpdatePathsAction` passes `IntelliJNotificationHandler(project)`.
 
-It is only invoked from the popup item; nothing checks at startup despite the class comment.
+It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheckActivity` (`ProjectActivity`) inits Koin and, on `Dispatchers.IO`, calls `IdePathsStartupCheck.mismatchesToReport(repo, CurrentIdePaths.detect())`, which returns the mismatches only on its first call per IDE session (an `AtomicBoolean`) and is empty in an isolated instance. When non-empty the activity shows a warning balloon `notification.paths.out.of.sync` with the kinds and an expiring "Update paths" action (`notification.action.update.paths`, via `showNotification(..., actions)` in `Utils.kt`) that runs `updatePaths(repo, IntelliJNotificationHandler(project), CurrentIdePaths.detect())` on a pooled thread. Stored paths are never changed without that click. Any `Throwable` is logged; `ControlFlowException` is rethrown. An IDE that stays on the welcome screen runs no project activity and gets no balloon; the popup item still covers it.
 
 ## 8. Open a Project Copy (git worktree)
 
@@ -219,7 +221,8 @@ Because the build number is stored before the checks, only the first project ope
 | Open a Project Copy worktree validation, creation, launch, Koin init | pooled thread |
 | Set/Unset main project config write and stale-entry cleanup | pooled thread |
 | `ShutdownSignalService` polling | `Dispatchers.IO` coroutine |
-| `PluginSyncOnUpdateActivity` (`syncPluginsOnIdeUpdate`), `StaleMainProjectCleanupActivity` cleanup | `Dispatchers.IO` |
+| `PluginSyncOnUpdateActivity` (`syncPluginsOnIdeUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
+| `IdePathsCheckActivity` "Update paths" | pooled thread |
 
 ## 13. Tests
 
@@ -256,7 +259,9 @@ Covered, by spec:
 | `services/MainProjectActionsTest` | `setMainProject`, `clearMainProject` |
 | `services/RemoveProjectTest` | `removeRecentProject`: removal, unknown path, refusal while running, failed deletion (Unix) |
 | `services/RecentProjectsImportTest` | `importableProjects`, `importProjects` |
-| `services/IdePathSyncDetectorTest` | `detectMismatches`, `updatePaths`, `autoPopulateIfNeeded` |
+| `services/IdePathSyncDetectorTest` | `detectMismatches` (normalized and symlinked paths, isolated instance), `updatePaths`, `autoPopulateIfNeeded` (isolated instance, per-field fill, repair of isolated paths) |
+| `services/CurrentIdePathsTest` (test application) | `detect().vmOptionsFile`: platform file without, with a missing, and user file with an existing `jb.vmOptionsFile` |
+| `services/IdePathsStartupCheckTest` | `mismatchesToReport`: first call only, no mismatch, isolated instance |
 | `services/SyncPluginsOnIdeUpdateTest` | main-instance check, build bookkeeping, plugin sync of isolated projects only, per-project and outer failures |
 | `services/StaleMainProjectCleanupTest` | `cleanStaleMainProjectEntryIfMainInstance` in isolated and main instances |
 | `services/OpenProjectCopyTest` | `validateProjectCopyInput` per field and check, `suggestDestination`, `openProjectCopy` re-check failure, `createAndLaunchProjectCopy` success and worktree failure |
@@ -264,11 +269,10 @@ Covered, by spec:
 
 Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
 
-Gaps pinned by tests (the test name carries the number): 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
+Gaps pinned by tests (the test name carries the number): 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
 
 ## Known gaps
 
-9. `IdePathSyncDetector` compares paths as raw strings and is only checked from the popup. `autoPopulateIfNeeded` runs the first time the repository is touched in whichever instance that is; if that is an isolated instance started by `sync-helper` with no prior config, the isolated dirs become the "base" paths.
 10. `detectCurrentInstallation` falls back to an `IdeInstallation` keyed on the home directory when the executable is missing, which produces a different `directoryName` than an installation found by `IntelliJLocator`, splitting state across two `<ideDir>`s.
 11. `BundledSyncHelper` extracts a full distribution into a new temp directory once per IDE session and never deletes it. Extraction happens on the calling thread. The helper process inherits the IDE's stdio.
 12. `ShutdownSignalService` starts only after a project is opened; an isolated IDE sitting on the welcome screen ignores stop requests, so stop-and-sync times out against it. The JSON `autoRestart`/`timeoutSeconds` fields are not honored by the receiver.

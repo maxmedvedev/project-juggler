@@ -1,6 +1,7 @@
 package com.projectjuggler.util
 
 import com.projectjuggler.platform.Platform
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.Path
 import kotlin.io.path.isDirectory
@@ -59,4 +60,21 @@ object PathUtils {
      * @return The root directory, or null for a parentless path (e.g. a filesystem root)
      */
     fun projectRoot(path: Path): Path? = if (path.isDirectory()) path else path.parent
+
+    /**
+     * True when [a] and [b] name the same location: equal after `toAbsolutePath().normalize()`, or, when both
+     * exist, equal real paths (so symlinks match). A failure to resolve real paths counts as different.
+     */
+    fun isSamePath(a: Path, b: Path): Boolean {
+        val normalizedA = a.toAbsolutePath().normalize()
+        val normalizedB = b.toAbsolutePath().normalize()
+        if (normalizedA == normalizedB) return true
+        if (!Files.exists(normalizedA) || !Files.exists(normalizedB)) return false
+        return try {
+            normalizedA.toRealPath() == normalizedB.toRealPath()
+        } catch (e: Throwable) {
+            System.err.println("Failed to resolve real paths of $normalizedA and $normalizedB: ${e.message}")
+            false
+        }
+    }
 }

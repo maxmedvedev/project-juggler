@@ -7,6 +7,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectory
+import kotlin.io.path.createSymbolicLinkPointingTo
 import kotlin.io.path.writeText
 
 class PathUtilsTest : StringSpec({
@@ -113,5 +114,34 @@ class PathUtilsTest : StringSpec({
 
     "resolveAbsolute should expand a standalone tilde".config(enabled = Platform.isUnix()) {
         PathUtils.resolveAbsolute("~") shouldBe Path(System.getProperty("user.home")).toAbsolutePath().normalize()
+    }
+
+    "isSamePath should ignore a trailing slash" {
+        PathUtils.isSamePath(Path("$rootDir/"), rootDir) shouldBe true
+    }
+
+    "isSamePath should ignore dot segments" {
+        val dir = rootDir.resolve("same-dot").createDirectory()
+
+        PathUtils.isSamePath(rootDir.resolve("./same-dot/../same-dot/."), dir) shouldBe true
+    }
+
+    "isSamePath should resolve symlinks when both paths exist".config(enabled = Platform.isUnix()) {
+        val target = rootDir.resolve("same-target").createDirectory()
+        val link = rootDir.resolve("same-link").createSymbolicLinkPointingTo(target)
+
+        PathUtils.isSamePath(link, target) shouldBe true
+    }
+
+    "isSamePath should report different directories as different" {
+        val a = rootDir.resolve("same-a").createDirectory()
+        val b = rootDir.resolve("same-b").createDirectory()
+
+        PathUtils.isSamePath(a, b) shouldBe false
+    }
+
+    "isSamePath should compare non-existent paths normalized" {
+        PathUtils.isSamePath(Path("/no/such/./dir/"), Path("/no/such/dir")) shouldBe true
+        PathUtils.isSamePath(Path("/no/such/dir"), Path("/no/such/other")) shouldBe false
     }
 })

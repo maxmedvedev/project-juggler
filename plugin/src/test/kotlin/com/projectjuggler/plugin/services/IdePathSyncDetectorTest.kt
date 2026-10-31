@@ -2,6 +2,7 @@ package com.projectjuggler.plugin.services
 
 import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.di.KoinTestExtension
+import com.projectjuggler.platform.Platform
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.test.RecordingNotificationHandler
 import com.projectjuggler.plugin.test.expectLoggedError
@@ -16,8 +17,10 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.nio.file.FileAlreadyExistsException
+import kotlin.io.path.createSymbolicLinkPointingTo
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.createTempFile
+import kotlin.io.path.exists
 import kotlin.io.path.writeText
 
 class IdePathSyncDetectorTest : StringSpec({
@@ -27,9 +30,9 @@ class IdePathSyncDetectorTest : StringSpec({
     val configDir = createTempDir("ide-config")
     val pluginsDir = createTempDir("ide-plugins")
     val vmOptionsDir = createTempDir("ide-vmoptions")
-    val config = ProjectJugglerBundle.message("ide.path.kind.config")
-    val plugins = ProjectJugglerBundle.message("ide.path.kind.plugins")
-    val vmOptions = ProjectJugglerBundle.message("ide.path.kind.vmoptions")
+    val config = IdePathKind.CONFIG
+    val plugins = IdePathKind.PLUGINS
+    val vmOptions = IdePathKind.VM_OPTIONS
 
     // A fresh repository per test: the stored paths of one test must not leak into the next
     fun newRepository(): IdeConfigRepository = testRepository(createTempDirectory(baseDir, "ide"))
@@ -105,13 +108,22 @@ class IdePathSyncDetectorTest : StringSpec({
             listOf(config, plugins, vmOptions)
     }
 
-    "detectMismatches treats a trailing slash as a different path (gap 9)" {
-        // plugin-spec gap 9: paths are compared as raw strings, not normalized
+    "detectMismatches treats trailing slashes and dot segments as the same path" {
         val repository = newRepository()
         repository.storeCurrent()
-        repository.update { it.copy(baseConfigPath = "$configDir/") }
+        repository.update {
+            it.copy(baseConfigPath = "$configDir/", basePluginsPath = "${pluginsDir.parent}/./${pluginsDir.fileName}")
+        }
 
-        IdePathSyncDetector.detectMismatches(repository, current) shouldContainExactly listOf(config)
+        IdePathSyncDetector.detectMismatches(repository, current).shouldBeEmpty()
+    }
+
+    "detectMismatches treats a symlinked current config dir as the same path".config(enabled = Platform.isUnix()) {
+        val repository = newRepository()
+        repository.storeCurrent()
+        val link = createTempDirectory(baseDir, "link").resolve("config").createSymbolicLinkPointingTo(configDir)
+
+        IdePathSyncDetector.detectMismatches(repository, current.copy(configDir = link)).shouldBeEmpty()
     }
 
     "updatePaths overwrites config and plugins but keeps a vmoptions path whose file is missing" {
@@ -182,9 +194,50 @@ class IdePathSyncDetectorTest : StringSpec({
         config.baseVmOptionsHash.shouldBeNull()
     }
 
-    "autoPopulateIfNeeded does not touch a configured repository" {
+    "autoPopulateIfNeeded stores nothing in an isolated instance" {
+        val repository = newRepository()
+        val isolated = current.copy(
+            configDir = repository.baseDir.resolve("projects/x-1/config"),
+            vmOptionsFile = existingVmOptions,
+        )
+
+        IdePathSyncDetector.autoPopulateIfNeeded(repository, isolated)
+
+        repository.baseDir.resolve("config.json").exists() shouldBe false
+    }
+
+    "autoPopulateIfNeeded fills the unset paths and keeps a set config path" {
         val repository = newRepository()
         repository.update { it.copy(baseConfigPath = "/configured/config") }
+
+        IdePathSyncDetector.autoPopulateIfNeeded(repository, current.copy(vmOptionsFile = existingVmOptions))
+
+        val config = repository.load()
+        config.baseConfigPath shouldBe "/configured/config"
+        config.basePluginsPath shouldBe pluginsDir.toString()
+        config.baseVmOptionsPath shouldBe existingVmOptions.toString()
+        config.baseVmOptionsHash.shouldNotBeNull()
+    }
+
+    "autoPopulateIfNeeded replaces a stored path under the isolated projects dir" {
+        val repository = newRepository()
+        repository.storeCurrent()
+        repository.update { it.copy(basePluginsPath = repository.baseDir.resolve("projects/x-1/plugins").toString()) }
+
+        IdePathSyncDetector.autoPopulateIfNeeded(repository, current)
+
+        repository.load().basePluginsPath shouldBe pluginsDir.toString()
+    }
+
+    "autoPopulateIfNeeded does not touch a repository whose three paths are set outside the ide dir" {
+        val repository = newRepository()
+        repository.update {
+            it.copy(
+                baseConfigPath = "/configured/config",
+                basePluginsPath = "/configured/plugins",
+                baseVmOptionsPath = "/configured/idea.vmoptions",
+            )
+        }
         val before = repository.load()
 
         IdePathSyncDetector.autoPopulateIfNeeded(repository, current.copy(vmOptionsFile = existingVmOptions))
