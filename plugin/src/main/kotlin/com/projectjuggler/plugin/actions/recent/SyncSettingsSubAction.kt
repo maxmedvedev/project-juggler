@@ -11,7 +11,6 @@ import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.SyncPlanner
 import com.projectjuggler.plugin.services.SyncTarget
-import com.projectjuggler.plugin.userMessage
 
 /** Sync settings from base config */
 data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubAction {
@@ -55,8 +54,8 @@ data class SyncSettingsSubAction(val syncType: SyncType) : RecentProjectSubActio
                     synced.first().path.name
                 )
             },
-            errorMessage = { e ->
-                ProjectJugglerBundle.message("notification.error.sync.settings.failed", e.userMessage())
+            errorMessage = { detail ->
+                ProjectJugglerBundle.message("notification.error.sync.settings.failed", detail)
             }
         )
     }

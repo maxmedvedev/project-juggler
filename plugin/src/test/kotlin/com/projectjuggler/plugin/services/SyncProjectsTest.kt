@@ -25,6 +25,7 @@ class SyncProjectsTest : StringSpec({
 
     val projectA = ProjectMetadata(ProjectPath(createTempDir("project-a").toString()), lastOpened = "2025-01-01T00:00:00Z")
     val projectB = ProjectMetadata(ProjectPath(createTempDir("project-b").toString()), lastOpened = "2025-01-01T00:00:00Z")
+    val projectC = ProjectMetadata(ProjectPath(createTempDir("project-c").toString()), lastOpened = "2025-01-01T00:00:00Z")
 
     class RecordingSink : SyncProgressSink {
         val indeterminate = mutableListOf<Boolean>()
@@ -111,15 +112,35 @@ class SyncProjectsTest : StringSpec({
         )
     }
 
-    "the first failure propagates and skips the remaining projects" {
+    "a failing project is recorded and the next one is still synced" {
         val launcher = mockk<ProjectLauncher>(relaxed = true)
-        every { launcher.syncProject(projectA, any(), any(), any(), any()) } throws IllegalStateException("boom")
+        val boom = IllegalStateException("boom")
+        every { launcher.syncProject(projectA, any(), any(), any(), any()) } throws boom
 
-        val thrown = shouldThrow<IllegalStateException> {
+        val result = syncProjects(launcher, listOf(projectA, projectB), SyncType.All, RecordingSink())
+
+        verify(exactly = 1) { launcher.syncProject(projectB, any(), any(), any(), any()) }
+        result.synced shouldContainExactly listOf(projectB)
+        result.failures shouldContainExactly listOf(SyncFailure(projectA, boom))
+        result.succeeded shouldBe false
+    }
+
+    "a batch without failures succeeded" {
+        val result = syncProjects(mockk(relaxed = true), listOf(projectA, projectB), SyncType.All, RecordingSink())
+
+        result.synced shouldContainExactly listOf(projectA, projectB)
+        result.failures.shouldBeEmpty()
+        result.succeeded shouldBe true
+    }
+
+    "cancellation thrown by a project's sync propagates and skips the remaining projects" {
+        val launcher = mockk<ProjectLauncher>(relaxed = true)
+        every { launcher.syncProject(projectA, any(), any(), any(), any()) } throws ProcessCanceledException()
+
+        shouldThrow<ProcessCanceledException> {
             syncProjects(launcher, listOf(projectA, projectB), SyncType.All, RecordingSink())
         }
 
-        thrown.message shouldBe "boom"
         verify(exactly = 0) { launcher.syncProject(projectB, any(), any(), any(), any()) }
     }
 
@@ -132,5 +153,44 @@ class SyncProjectsTest : StringSpec({
         }
 
         verify { launcher wasNot Called }
+    }
+
+    "cancellation before the second project stops after the first" {
+        val launcher = mockk<ProjectLauncher>(relaxed = true)
+        var checks = 0
+        val sink = RecordingSink().apply { onCheckCanceled = { if (++checks == 2) throw ProcessCanceledException() } }
+
+        shouldThrow<ProcessCanceledException> {
+            syncProjects(launcher, listOf(projectA, projectB), SyncType.All, sink)
+        }
+
+        verify(exactly = 1) { launcher.syncProject(projectA, any(), any(), any(), any()) }
+        verify(exactly = 0) { launcher.syncProject(projectB, any(), any(), any(), any()) }
+    }
+
+    "describeFailures gives the bare message for a single-project batch" {
+        val result = SyncBatchResult(emptyList(), listOf(SyncFailure(projectA, IllegalStateException("boom"))))
+
+        describeFailures(result, total = 1) shouldBe "boom"
+    }
+
+    "describeFailures reports a failure without a message as an unknown error" {
+        val result = SyncBatchResult(emptyList(), listOf(SyncFailure(projectA, IllegalStateException())))
+
+        describeFailures(result, total = 1) shouldBe ProjectJugglerBundle.message("error.unknown")
+    }
+
+    "describeFailures summarizes failures of a larger batch by project name" {
+        val one = SyncBatchResult(listOf(projectA, projectC), listOf(SyncFailure(projectB, IllegalStateException("a"))))
+        val two = SyncBatchResult(
+            listOf(projectB),
+            listOf(SyncFailure(projectA, IllegalStateException("a")), SyncFailure(projectC, IllegalStateException("b"))),
+        )
+
+        describeFailures(one, total = 3) shouldBe
+            ProjectJugglerBundle.message("sync.failure.summary", 1, 3, "${projectB.name}: a")
+        describeFailures(two, total = 3) shouldBe
+            ProjectJugglerBundle.message("sync.failure.summary", 2, 3, "${projectA.name}: a; ${projectC.name}: b")
+        describeFailures(two, total = 3) shouldBe "2 of 3 projects failed: ${projectA.name}: a; ${projectC.name}: b"
     }
 })

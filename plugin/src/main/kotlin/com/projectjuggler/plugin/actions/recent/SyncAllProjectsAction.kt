@@ -10,7 +10,6 @@ import com.projectjuggler.plugin.actions.performSyncWithProgress
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.SyncPlanner
 import com.projectjuggler.plugin.services.SyncTarget
-import com.projectjuggler.plugin.userMessage
 
 data class SyncAllProjectsAction(
     val syncType: SyncType
@@ -52,8 +51,8 @@ data class SyncAllProjectsAction(
                     it.size
                 )
             },
-            errorMessage = { e ->
-                ProjectJugglerBundle.message("notification.error.sync.projects.failed", e.userMessage())
+            errorMessage = { detail ->
+                ProjectJugglerBundle.message("notification.error.sync.projects.failed", detail)
             }
         )
     }

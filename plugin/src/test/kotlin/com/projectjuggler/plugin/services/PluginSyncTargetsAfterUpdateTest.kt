@@ -10,25 +10,22 @@ import com.projectjuggler.plugin.test.RecordingNotificationHandler
 import com.projectjuggler.plugin.test.expectLoggedError
 import com.projectjuggler.plugin.test.registerProject
 import com.projectjuggler.plugin.test.testRepository
-import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
-import io.mockk.Called
 import io.mockk.every
-import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
-import io.mockk.verify
 import java.nio.file.FileAlreadyExistsException
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.createTempFile
 
-class SyncPluginsOnIdeUpdateTest : StringSpec({
+class PluginSyncTargetsAfterUpdateTest : StringSpec({
     extensions(KoinTestExtension())
 
     val baseDir = createTempDir("juggler")
@@ -53,114 +50,95 @@ class SyncPluginsOnIdeUpdateTest : StringSpec({
         return isolated
     }
 
-    fun ProjectLauncher.verifyPluginSync(metadata: ProjectMetadata) = verify(exactly = 1) {
-        syncProject(
-            metadata,
-            syncVmOptions = false,
-            syncConfig = false,
-            syncPlugins = true,
-            options = match { it.stopIfRunning && it.autoRestart && it.shutdownTimeout == 60 },
-        )
+    fun RecordingNotificationHandler.shouldBeSilent() {
+        infos.shouldBeEmpty()
+        errors.shouldBeEmpty()
     }
 
     "does nothing in an isolated instance" {
         val repository = updatedRepository()
         repository.registerTwoIsolatedAndMain()
-        val launcher = mockk<ProjectLauncher>(relaxed = true)
         val handler = RecordingNotificationHandler()
         val isolatedConfigDir = repository.baseDir.resolve("projects/x/config")
 
-        syncPluginsOnIdeUpdate(repository, isolatedConfigDir, "NEW-2", handler, launcher)
+        val targets = pluginSyncTargetsAfterUpdate(repository, isolatedConfigDir, "NEW-2", handler)
 
+        targets.shouldBeEmpty()
         repository.load().lastKnownBuildNumber shouldBe "OLD-1"
-        verify { launcher wasNot Called }
-        handler.infos.shouldBeEmpty()
+        handler.shouldBeSilent()
     }
 
-    "the first run stores the build without syncing" {
+    "the first run stores the build without targets" {
         val repository = newRepository()
         repository.update { it.copy(syncPluginsOnIdeUpdate = true) }
         repository.registerTwoIsolatedAndMain()
-        val launcher = mockk<ProjectLauncher>(relaxed = true)
+        val handler = RecordingNotificationHandler()
 
-        syncPluginsOnIdeUpdate(repository, mainConfigDir, "NEW-2", RecordingNotificationHandler(), launcher)
+        val targets = pluginSyncTargetsAfterUpdate(repository, mainConfigDir, "NEW-2", handler)
 
+        targets.shouldBeEmpty()
         repository.load().lastKnownBuildNumber shouldBe "NEW-2"
-        verify { launcher wasNot Called }
+        handler.shouldBeSilent()
     }
 
-    "an unchanged build does not sync" {
+    "an unchanged build has no targets" {
         val repository = updatedRepository()
         repository.registerTwoIsolatedAndMain()
-        val launcher = mockk<ProjectLauncher>(relaxed = true)
+        val handler = RecordingNotificationHandler()
 
-        syncPluginsOnIdeUpdate(repository, mainConfigDir, "OLD-1", RecordingNotificationHandler(), launcher)
+        val targets = pluginSyncTargetsAfterUpdate(repository, mainConfigDir, "OLD-1", handler)
 
+        targets.shouldBeEmpty()
         repository.load().lastKnownBuildNumber shouldBe "OLD-1"
-        verify { launcher wasNot Called }
+        handler.shouldBeSilent()
     }
 
-    "a new build with the setting off stores the build without syncing" {
+    "a new build with the setting off stores the build without targets" {
         val repository = updatedRepository(enabled = false)
         repository.registerTwoIsolatedAndMain()
-        val launcher = mockk<ProjectLauncher>(relaxed = true)
         val handler = RecordingNotificationHandler()
 
-        syncPluginsOnIdeUpdate(repository, mainConfigDir, "NEW-2", handler, launcher)
+        val targets = pluginSyncTargetsAfterUpdate(repository, mainConfigDir, "NEW-2", handler)
 
+        targets.shouldBeEmpty()
         repository.load().lastKnownBuildNumber shouldBe "NEW-2"
-        verify { launcher wasNot Called }
-        handler.infos.shouldBeEmpty()
+        handler.shouldBeSilent()
     }
 
-    "a new build syncs plugins into the isolated projects only" {
+    "a new build without isolated projects has no targets" {
         val repository = updatedRepository()
-        val (a, b) = repository.registerTwoIsolatedAndMain()
-        val launcher = mockk<ProjectLauncher>(relaxed = true)
         val handler = RecordingNotificationHandler()
 
-        syncPluginsOnIdeUpdate(repository, mainConfigDir, "NEW-2", handler, launcher)
+        val targets = pluginSyncTargetsAfterUpdate(repository, mainConfigDir, "NEW-2", handler)
 
+        targets.shouldBeEmpty()
         repository.load().lastKnownBuildNumber shouldBe "NEW-2"
-        launcher.verifyPluginSync(a)
-        launcher.verifyPluginSync(b)
-        verify(exactly = 2) { launcher.syncProject(any(), any(), any(), any(), any()) }
-        handler.infos shouldContainExactly listOf(
-            ProjectJugglerBundle.message("notification.sync.on.update.started", "NEW-2", 2),
-            ProjectJugglerBundle.message("notification.sync.on.update.complete", 2),
-        )
-        handler.errors.shouldBeEmpty()
+        handler.shouldBeSilent()
     }
 
-    "a failing project does not stop the others" {
+    "a new build returns the isolated projects only and syncs nothing itself" {
         val repository = updatedRepository()
-        val (a, b) = repository.registerTwoIsolatedAndMain()
-        val launcher = mockk<ProjectLauncher>(relaxed = true)
-        // Whichever project comes first fails
-        every { launcher.syncProject(a, any(), any(), any(), any()) } throws IllegalStateException("boom")
-        every { launcher.syncProject(b, any(), any(), any(), any()) } throws IllegalStateException("boom")
+        val isolated = repository.registerTwoIsolatedAndMain()
         val handler = RecordingNotificationHandler()
 
-        syncPluginsOnIdeUpdate(repository, mainConfigDir, "NEW-2", handler, launcher)
+        val targets = pluginSyncTargetsAfterUpdate(repository, mainConfigDir, "NEW-2", handler)
 
-        launcher.verifyPluginSync(a)
-        launcher.verifyPluginSync(b)
-        handler.infos shouldContainExactly listOf(
-            ProjectJugglerBundle.message("notification.sync.on.update.started", "NEW-2", 2),
-            ProjectJugglerBundle.message("notification.sync.on.update.complete", 2),
-        )
-        handler.errors.shouldBeEmpty()
+        targets.map { it.path } shouldContainExactlyInAnyOrder isolated.map { it.path }
+        repository.load().lastKnownBuildNumber shouldBe "NEW-2"
+        handler.shouldBeSilent()
     }
 
-    "any other failure is reported" {
+    "any failure is reported and yields no targets" {
         val repository = testRepository(createTempFile(baseDir, "not-a-dir"))
         val handler = RecordingNotificationHandler()
+        var targets: List<ProjectMetadata>? = null
 
         val logged = expectLoggedError {
-            syncPluginsOnIdeUpdate(repository, mainConfigDir, "NEW-2", handler, mockk(relaxed = true))
+            targets = pluginSyncTargetsAfterUpdate(repository, mainConfigDir, "NEW-2", handler)
         }
 
         logged.shouldBeInstanceOf<FileAlreadyExistsException>()
+        targets.shouldBe(emptyList())
         handler.infos.shouldBeEmpty()
         handler.errors.single() shouldStartWith ProjectJugglerBundle.message("notification.sync.on.update.failed", "")
     }
@@ -172,7 +150,7 @@ class SyncPluginsOnIdeUpdateTest : StringSpec({
             val handler = RecordingNotificationHandler()
 
             val logged = expectLoggedError {
-                syncPluginsOnIdeUpdate(updatedRepository(), mainConfigDir, "NEW-2", handler, mockk(relaxed = true))
+                pluginSyncTargetsAfterUpdate(updatedRepository(), mainConfigDir, "NEW-2", handler)
             }
 
             logged.shouldBeInstanceOf<IllegalStateException>()

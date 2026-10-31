@@ -12,6 +12,7 @@ import com.projectjuggler.plugin.actions.recent.SyncType
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.services.IdeInstallationService
 import com.projectjuggler.plugin.services.SyncProgressSink
+import com.projectjuggler.plugin.services.describeFailures
 import com.projectjuggler.plugin.services.syncProjects
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
@@ -56,7 +57,8 @@ fun performSelfShutdownSync(
 
 /**
  * Common sync logic with progress indicator.
- * Performs sync for a list of projects with progress tracking and notifications.
+ * Syncs [projects] with progress tracking. Shows [successMessage] when every project synced, else one error
+ * notification built by [errorMessage] from the failure detail (see [describeFailures]).
  */
 fun performSyncWithProgress(
     project: Project?,
@@ -64,18 +66,22 @@ fun performSyncWithProgress(
     syncType: SyncType,
     taskTitle: String,
     successMessage: (List<ProjectMetadata>) -> String,
-    errorMessage: (Throwable) -> String
+    errorMessage: (detail: String) -> String
 ) {
     ProgressManager.getInstance().run(object : Task.Backgroundable(project, taskTitle) {
         override fun run(indicator: ProgressIndicator) {
             try {
                 val launcher = ProjectLauncher.getInstance(IdeInstallationService.currentIdeConfigRepository)
-                syncProjects(launcher, projects, syncType, ProgressIndicatorSink(indicator))
-                showInfoNotification(successMessage(projects), project)
+                val result = syncProjects(launcher, projects, syncType, ProgressIndicatorSink(indicator))
+                if (result.succeeded) {
+                    showInfoNotification(successMessage(result.synced), project)
+                } else {
+                    showErrorNotification(errorMessage(describeFailures(result, projects.size)), project)
+                }
             } catch (t: Throwable) {
                 t.rethrowIfControlFlow()
                 LOG.warn("Sync of ${projects.size} project(s) failed", t)
-                showErrorNotification(errorMessage(t), project)
+                showErrorNotification(errorMessage(t.userMessage()), project)
             }
         }
     })

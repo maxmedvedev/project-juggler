@@ -110,7 +110,7 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 |---|---|
 | Browse... | `showFileChooserAndLaunch` after the popup closes. |
 | Sync ... (all projects) | §6.2 with `syncType`. |
-| Auto-sync plugins on IDE update | Toggles `syncPluginsOnIdeUpdate` via `repository.update`, then rebuilds and reshows the popup. Label shows a check mark prefix when enabled. |
+| Offer plugin sync on IDE update | Toggles `syncPluginsOnIdeUpdate` via `repository.update`, then rebuilds and reshows the popup. Label shows a check mark prefix when enabled. When on, an IDE update offers a plugin sync (§11) rather than running one. |
 | Import recent projects from IntelliJ... | Reads `RecentProjectsManagerBase.getRecentPaths()`, keeps existing directories; if none, info dialog `dialog.import.projects.no.projects`; else Yes/No confirm with count. The path filter is `importableProjects(paths)` (`services/RecentProjectsImport.kt`). On Yes, on a pooled thread `importProjects(repo, projects)` runs `ProjectManager.registerOrUpdate` and `RecentProjectsIndex.recordOpen` per project, then the popup is reshown. Import does not launch anything or create isolated dirs. |
 | IDE paths out of sync | `IdePathSyncDetector.updatePaths` then reshow (§7). |
 
@@ -135,14 +135,14 @@ Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarge
 `SyncPlanner.forProject(repo, path, syncType)`:
 
 - If `IsolatedInstance.isCurrentProject(repo, path)` (§6.3): `SelfShutdown` with helper args `--ide <executablePath> --path <projectPath> <cliFlag>`; the info text is `notification.info.sync.self.shutdown.project`.
-- Else load metadata (`NoTarget` if missing, the action silently returns) and `InProcess` for that one project. Title `progress.sync.project.type`, success `notification.success.sync.single.project.type`, failure `notification.error.sync.settings.failed`.
+- Else load metadata (`NoTarget` if missing, the action silently returns) and `InProcess` for that one project. Title `progress.sync.project.type`, success `notification.success.sync.single.project.type`, failure `notification.error.sync.settings.failed` (with the project's error message).
 
 ### 6.2 All projects (`SyncAllProjectsAction`)
 
 `SyncPlanner.forAllProjects(repo, syncType)`:
 
 - Targets are `ProjectManager.listSyncable()`: every tracked project except the main project (a stale tracked entry for the main project would otherwise make core send a stop request to the main IDE, which never polls for one, and time out after 60 s). If any target's id is the current isolated project id, `SelfShutdown` with `--ide <executablePath> --all-projects <cliFlag>`; the info text is `notification.info.sync.self.shutdown.all`.
-- Else `InProcess` over the targets, possibly empty (gap 16). Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed`.
+- Else `InProcess` over the targets, possibly empty (gap 16). Title `progress.sync.all.projects.type`, success `notification.success.sync.all.projects.type` (type, count), failure `notification.error.sync.projects.failed` (with the `sync.failure.summary` of the failed projects; the others are still synced).
 
 ### 6.3 `IsolatedInstance` (`services/IsolatedInstance.kt`)
 
@@ -150,7 +150,7 @@ Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarge
 
 ### 6.4 `performSyncWithProgress`
 
-Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one. The first `Throwable` propagates out of `syncProjects`, aborting the remaining projects; the task rethrows `ControlFlowException`, logs a warning and shows the error notification. Projects that are running are stopped via the signal protocol and restarted (core-spec §8).
+Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `syncProjects(launcher, projects, syncType, sink)` (`services/SyncProjects.kt`) with a `SyncProgressSink` adapter over the `ProgressIndicator` and `ProgressManager.checkCanceled()`. `syncProjects` uses `SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60)`. Progress text follows `SyncProgress`: `Stopping` -> `progress.sync.stopping.ide`, `Syncing` -> `progress.sync.syncing.type`, `Restarting` -> `progress.sync.restarting.ide`; `Error` is ignored. Per project: `checkCanceled()`, text `progress.sync.project.type`, fraction `index/size` when more than one, then `syncProject`. A `Throwable` from one project is logged as a warning and recorded as a `SyncFailure`, and the loop continues with the next project; control-flow exceptions (`ProcessCanceledException`) propagate. `syncProjects` returns a `SyncBatchResult(synced, failures)`. The task shows the caller's success notification only when no project failed; otherwise one error notification, the caller's error text with the detail from `describeFailures(result, total)`: the bare message (`userMessage()`) for a one-project batch, else `sync.failure.summary` ("N of M projects failed: <name>: <message>; ..."). A failure outside the projects (e.g. resolving the launcher) is logged as a warning and reported with its message through the same error text. Cancel is checked between projects only, never from the `Stopping` callback: cancelling during the stop wait would make core's `finally` delete `stop-request.json` while the target may already be exiting, leaving it stopped and never restarted; the wait is bounded by the 60 s timeout. Cancellation shows no notification. Projects that are running are stopped via the signal protocol and restarted (core-spec §8).
 
 ### 6.5 Self-shutdown sync (`performSelfShutdownSync`)
 
@@ -204,15 +204,16 @@ The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one 
 
 ## 11. Plugin sync on IDE update (`startup/PluginSyncOnUpdateActivity`)
 
-`ProjectActivity`, so it runs per project open. It inits Koin, resolves the current repository, the current build (`ApplicationInfo.build.asString()`) and an `IntelliJNotificationHandler(project)`, then calls `syncPluginsOnIdeUpdate(repo, PathManager.getConfigDir(), currentBuild, handler)` (`services/SyncPluginsOnIdeUpdate.kt`) on `Dispatchers.IO`. Failures before that call (Koin, repository) and in resolving the default `ProjectLauncher` propagate to the platform. The function:
+`ProjectActivity`, so it runs per project open. It inits Koin, resolves the current repository, the current build (`ApplicationInfo.build.asString()`) and an `IntelliJNotificationHandler(project)`, then calls `pluginSyncTargetsAfterUpdate(repo, PathManager.getConfigDir(), currentBuild, handler)` (`services/PluginSyncTargetsAfterUpdate.kt`) on `Dispatchers.IO`. Failures before that call (Koin, repository) propagate to the platform. The function syncs nothing; it returns the projects to offer a sync for:
 
-1. Returns unless `MainProjectService.isRunningInMainInstance(repo, currentConfigDir)`.
+1. Empty unless `MainProjectService.isRunningInMainInstance(repo, currentConfigDir)`.
 2. Reads `lastKnownBuildNumber`, then always stores the current build.
-3. Return if there was no previous build, the build is unchanged, `syncPluginsOnIdeUpdate` is false, or `ProjectManager.listSyncable()` (tracked projects minus the main project) is empty.
-4. Notify `notification.sync.on.update.started` (build, count). For each syncable project `syncProject(syncPlugins = true only, stopIfRunning = true, autoRestart = true, 60 s)`; per-project failures are logged as warnings and the loop continues. Then `notification.sync.on.update.complete`.
-5. Any other `Throwable` -> `notification.sync.on.update.failed` and a logged error. `ControlFlowException` is rethrown.
+3. Empty if there was no previous build, the build is unchanged or `syncPluginsOnIdeUpdate` is false; else `ProjectManager.listSyncable()` (tracked projects minus the main project), possibly empty.
+4. Any other `Throwable` -> `notification.sync.on.update.failed`, a logged error and an empty list. `ControlFlowException` is rethrown.
 
-Because the build number is stored before the checks, only the first project opened after an update triggers the sync. Running isolated IDEs are stopped and restarted without a prompt.
+When the list is non-empty the activity shows an info balloon `notification.sync.on.update.available` (build, count) with an expiring "Sync plugins" action (`notification.sync.on.update.action`, via `showNotification(..., actions)` in `Utils.kt`). Nothing is stopped or synced until it is clicked. The click runs `performSyncWithProgress` (§6.4) over the captured targets with `SyncType.Plugins`, title `progress.sync.on.update`, success `notification.sync.on.update.complete` (count) and failure `notification.sync.on.update.failed` (with the failure summary); running isolated IDEs are stopped and restarted there, with progress and cancel between projects.
+
+Because the build number is stored before the checks, only the first project opened after an update offers the sync. Ignoring or closing the balloon skips that build; the next IDE update offers again.
 
 ## 12. Threading summary
 
@@ -228,7 +229,8 @@ Because the build number is stored before the checks, only the first project ope
 | Open a Project Copy worktree validation, creation, launch, Koin init | pooled thread |
 | Set/Unset main project config write and stale-entry cleanup | pooled thread |
 | `ShutdownSignalService` start and polling | `Dispatchers.IO` coroutine, from app start |
-| `PluginSyncOnUpdateActivity` (`syncPluginsOnIdeUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
+| `PluginSyncOnUpdateActivity` checks (`pluginSyncTargetsAfterUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
+| `PluginSyncOnUpdateActivity` offered sync ("Sync plugins") | `Task.Backgroundable` |
 | `IdePathsCheckActivity` "Update paths" | pooled thread |
 
 ## 13. Tests
@@ -258,7 +260,7 @@ Covered, by spec:
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests; age against `timeoutSeconds` and the 5-minute fallback |
 | `shutdown/ShutdownSignalRegistrationTest` | `plugin.xml` registers `ShutdownSignalAppListener` on the `AppLifecycleListener` topic |
 | `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args |
-| `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, failure and cancellation |
+| `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, continuing past failures, cancellation before each project and from a project's sync, `describeFailures` |
 | `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
 | `services/OpenWithIdeTest` | `openWithInstallations` exclusions, base-settings filter and order; `shouldPromptForMainProject` per target repository |
 | `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects; `isProjectRunning` platform vs lock |
@@ -270,7 +272,7 @@ Covered, by spec:
 | `services/IdePathSyncDetectorTest` | `detectMismatches` (normalized and symlinked paths, isolated instance), `updatePaths`, `autoPopulateIfNeeded` (isolated instance, per-field fill, repair of isolated paths) |
 | `services/CurrentIdePathsTest` (test application) | `detect().vmOptionsFile`: platform file without, with a missing, and user file with an existing `jb.vmOptionsFile` |
 | `services/IdePathsStartupCheckTest` | `mismatchesToReport`: first call only, no mismatch, isolated instance |
-| `services/SyncPluginsOnIdeUpdateTest` | main-instance check, build bookkeeping, plugin sync of isolated projects only, per-project and outer failures |
+| `services/PluginSyncTargetsAfterUpdateTest` | main-instance check, build bookkeeping, targets are the isolated projects only, no sync or notification of its own, failures |
 | `services/StaleMainProjectCleanupTest` | `cleanStaleMainProjectEntryIfMainInstance` in isolated and main instances |
 | `services/OpenProjectCopyTest` | `validateProjectCopyInput` per field and check, `suggestDestination`, `openProjectCopy` re-check failure, `createAndLaunchProjectCopy` success and worktree failure |
 | `services/CurrentIdeExecutableTest` | `currentIdeExecutable` per platform and script name |
@@ -282,7 +284,6 @@ Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 
 ## Known gaps
 
-13. `PluginSyncOnUpdateActivity` performs network-free but potentially long sync work (stopping and restarting every isolated IDE) on first project open with only a balloon as notice and no cancel. `performSyncWithProgress` aborts the whole batch on the first failure, unlike the update activity which continues.
 14. `KoinInit.init` is called on EDT in several actions (marked `todo move to BGT`). `ToggleMainProjectSubAction` performs config file I/O under a file lock on EDT. `ImportRecentProjectsAction` casts `RecentProjectsManager` to `RecentProjectsManagerBase`, an implementation class.
 15. `runIde` hardcodes a user-specific base dir. The plugin has no settings page or startup health check for missing base paths.
 16. Sync all projects with no syncable target (only the main project tracked) still runs an in-process sync of zero projects and reports success for 0 projects.
