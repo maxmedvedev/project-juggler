@@ -93,15 +93,15 @@ internal fun projectSubActions(
     openWith.mapTo(actions, ::OpenWithIdeSubAction)
     actions.add(ToggleMainProjectSubAction)
 
-    // The main project runs on base settings directly, so there is nothing to sync
+    // The main project runs on base settings directly, so there is nothing to sync and no isolated data to remove
     if (!item.isMainProject) {
         actions.addAll(listOf(
             SyncSettingsSubAction(SyncType.All),
             SyncSettingsSubAction(SyncType.VmOptions),
             SyncSettingsSubAction(SyncType.Config),
             SyncSettingsSubAction(SyncType.Plugins),
+            RemoveProjectSubAction,
         ))
     }
-    actions.add(RemoveProjectSubAction)
     return actions
 }

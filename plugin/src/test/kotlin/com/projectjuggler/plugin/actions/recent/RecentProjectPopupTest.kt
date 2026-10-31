@@ -31,13 +31,12 @@ class RecentProjectPopupTest : StringSpec({
         )
     }
 
-    "the main project has nothing to sync" {
+    "the main project has nothing to sync or remove" {
         val item = OpenRecentProjectAction(projectPath, gitBranch = null, isMainProject = true)
 
         projectSubActions(item) shouldContainExactly listOf(
             OpenRecentProjectSubAction,
             ToggleMainProjectSubAction,
-            RemoveProjectSubAction,
         )
     }
 
@@ -60,7 +59,7 @@ class RecentProjectPopupTest : StringSpec({
         )
     }
 
-    "the main project offers open with each other IDE but nothing to sync" {
+    "the main project offers open with each other IDE but nothing to sync or remove" {
         val item = OpenRecentProjectAction(projectPath, gitBranch = null, isMainProject = true)
 
         projectSubActions(item, listOf(ideA, ideB)) shouldContainExactly listOf(
@@ -68,7 +67,6 @@ class RecentProjectPopupTest : StringSpec({
             OpenWithIdeSubAction(ideA),
             OpenWithIdeSubAction(ideB),
             ToggleMainProjectSubAction,
-            RemoveProjectSubAction,
         )
     }
 
