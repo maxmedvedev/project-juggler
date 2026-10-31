@@ -47,8 +47,8 @@ Parsing rules:
 
 1. `KoinInit.init()` with no extra modules (core modules only, core-spec §5).
 2. Parse arguments.
-3. Build `IdeInstallation(idePath, "IDE")`. The display name is fixed to `"IDE"`; only `executablePath` matters for `directoryName`, so this resolves the same `<ideDir>` as the plugin's `currentIdeConfigRepository`.
-4. `IdeRegistry.getInstance().getRepository(installation)` -> `IdeConfigRepository` rooted at `<base>/v2/<ideDir>`. `<base>` is `-Dproject.juggler.base.dir` if set in *this* JVM, else `~/.project-juggler`. Nothing is written to `config.json` by the helper itself.
+3. Build `IdeInstallation(idePath, "IDE")`. The display name is fixed to `"IDE"`, so its `directoryName` (`IDE-<id8>`) differs from the plugin's dir name.
+4. `IdeRegistry.getInstance().getRepository(installation)` -> `IdeConfigRepository` rooted at `<base>/v2/<ideDir>`. Resolution is by executable path (core-spec §4): the plugin's dir for the same executable is found whatever its display name, so this is the same `<ideDir>` as the plugin's `currentIdeConfigRepository`. `<base>` is `-Dproject.juggler.base.dir` if set in *this* JVM, else `~/.project-juggler`. Nothing is written to `config.json` by the helper itself.
 5. `ProjectLauncher.getInstance(repository)`.
 6. Target selection:
    - `--path`: `ProjectManager.resolvePath(raw)` then `ProjectManager.get(path)`; a missing `metadata.json` is `error("Project not found: <raw>")`.
@@ -115,6 +115,6 @@ The IDE's own exit removes `config/.lock`. The helper, started ~100 ms earlier, 
 7. `--all-projects` is not transactional and has unspecified order; the current project may be restarted before the others are synced, and a failure midway leaves the set half-synced with no report.
 8. The helper requires a system `java`. On a machine with only the IDE's JBR, extraction succeeds but the script fails at startup, again invisibly.
 9. Each IDE process extracts a fresh `sync-helper-*` temp directory that is never removed.
-10. `IdeInstallation(idePath, "IDE")` is correct for directory resolution but any code path that saves `config.json` through this repository would persist the placeholder display name.
+10. The placeholder display name `"IDE"` is persisted only if the helper creates a new ideDir (no plugin ran for that executable); resolution goes through `IdeRegistry.getRepository` by executable path.
 11. `.github/workflows/release.yml` still references a `:cli` module; there is no release artifact for `sync-helper` outside the plugin zip.
 12. Untested: argument parsing, target selection, and the extraction logic in `BundledSyncHelper`.

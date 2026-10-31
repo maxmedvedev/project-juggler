@@ -9,7 +9,8 @@ import java.nio.file.Path
  * Other IDE installations a project can be opened with: not the current one, base settings already captured.
  *
  * An installation counts as current when its `directoryName` matches [current] or its executable lies under
- * [currentHome] (the same IDE can be keyed differently, see gap 10). Only installations whose repository has
+ * [currentHome] (the same IDE registered under another executable, e.g. a home-keyed dir left by an older plugin
+ * version that could not be adopted). Only installations whose repository has
  * `baseConfigPath` set (the plugin ran there once) are offered: for the others core would fall back to the newest
  * config directory and plugins on the machine, which may belong to a different IDE version. Sorted by display name.
  * Reads each repository's `config.json`; creates nothing.

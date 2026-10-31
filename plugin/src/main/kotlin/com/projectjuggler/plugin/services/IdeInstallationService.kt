@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.services
 
+import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.projectjuggler.config.IdeConfigRepository
@@ -9,9 +10,10 @@ import com.projectjuggler.locators.IntelliJLocator
 import com.projectjuggler.platform.Platform
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import org.koin.core.context.GlobalContext
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
+import kotlin.io.path.exists
+
+private val LOG = logger<IdeInstallationService>()
 
 /**
  * Central service for managing IDE installations and their configurations.
@@ -38,6 +40,7 @@ class IdeInstallationService internal constructor(
 
     private fun detectCurrentRepository(): IdeConfigRepository {
         val installation = currentInstallation
+        adoptLegacyHomeKeyedRepository(installation)
         val repository = ideRegistry.getRepository(installation)
 
         // Auto-populate config if this is first run for this IDE
@@ -46,41 +49,33 @@ class IdeInstallationService internal constructor(
     }
 
     /**
-     * Detect the currently running IDE installation.
+     * Older plugin versions keyed the current IDE on its home directory when the `idea` launcher was missing
+     * (other products). Moves such a dir to the executable-keyed one once, so recents and settings survive.
      */
-    private fun detectCurrentInstallation(): IdeInstallation {
-        val executablePath = getIntelliJExecutablePath()
-
-        // Try to find matching installation from detected list
-        if (executablePath != null) {
-            return IntelliJLocator.findInstallation(executablePath.toString())
-        }
-
-        // Create installation from detected path
-        val path = PathManager.getHomePath()
-        val displayName = IntelliJLocator.extractDisplayName(path)
-        return IdeInstallation(path, displayName)
-    }
-
-    private fun getIntelliJExecutablePath(): Path? {
+    private fun adoptLegacyHomeKeyedRepository(installation: IdeInstallation) {
+        val homePath = PathManager.getHomePath()
         try {
-            val homeDir = Paths.get(PathManager.getHomePath())
-            val platform = Platform.current()
-
-            val executablePath = when (platform) {
-                Platform.MACOS -> homeDir.resolve("MacOS").resolve("idea")
-                Platform.LINUX -> homeDir.resolve("bin").resolve("idea.sh")
-                Platform.WINDOWS -> homeDir.resolve("bin").resolve("idea64.exe")
-            }
-
-            return if (Files.exists(executablePath)) {
-                executablePath
-            } else null
+            val adopted = ideRegistry.adoptLegacyRepository(installation, listOf(homePath)) ?: return
+            LOG.info("Adopted the ide dir keyed on $homePath as ${adopted.baseDir}")
         } catch (e: Throwable) {
             e.rethrowIfControlFlow()
-            logger<IdeInstallationService>().error("Failed to get IntelliJ executable path", e)
-            return null
+            LOG.warn("Failed to adopt the ide dir keyed on $homePath; continuing without it", e)
         }
+    }
+
+    /**
+     * Detect the currently running IDE installation, keyed on its launcher (never on the home directory).
+     */
+    private fun detectCurrentInstallation(): IdeInstallation {
+        val executable = currentIdeExecutable(
+            Path.of(PathManager.getHomePath()),
+            ApplicationNamesInfo.getInstance().scriptName,
+            Platform.current(),
+        )
+        if (!executable.exists()) {
+            LOG.warn("IDE launcher $executable does not exist; launches from this IDE will fail")
+        }
+        return IntelliJLocator.findInstallation(executable.toString())
     }
 
     companion object {

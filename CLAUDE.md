@@ -37,7 +37,7 @@ The `.github/workflows/release.yml` references a `:cli` module that no longer ex
 
 ### Multi-IDE data model (v2)
 
-Everything is keyed by **IDE installation**, not globally. `IdeInstallation(executablePath, displayName)` derives a hash-based `directoryName`; `IdeRegistry` discovers installations and hands out one `IdeConfigRepository` per installation rooted at `~/.project-juggler/v2/<ide-dir>/`. That directory holds `config.json` (`IdeConfig`: base VM options/config/plugins paths, main project, sync-on-update flag), `recent.json`, and `projects/<project-id>/` with `metadata.json` plus the isolated `config`/`system`/`logs`/`plugins` dirs. All JSON writes go through `FileLockUtils.withFileLock`.
+Everything is keyed by **IDE installation**, not globally. `IdeInstallation(executablePath, displayName)` derives a hash-based `directoryName`; `IdeRegistry` discovers installations and hands out one `IdeConfigRepository` per installation rooted at `~/.project-juggler/v2/<ide-dir>/`. Repositories are looked up by executable path (`directoryName` only names new dirs), so the same executable under another display name reuses its existing dir; the plugin keys the running IDE on `<home>/{MacOS|bin}/<ApplicationNamesInfo.scriptName>` and adopts a legacy home-keyed dir once. That directory holds `config.json` (`IdeConfig`: base VM options/config/plugins paths, main project, sync-on-update flag), `recent.json`, and `projects/<project-id>/` with `metadata.json` plus the isolated `config`/`system`/`logs`/`plugins` dirs. All JSON writes go through `FileLockUtils.withFileLock`.
 
 The base dir can be overridden with the `project.juggler.base.dir` system property (used by `runIde`).
 
