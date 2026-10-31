@@ -155,10 +155,9 @@ Cancellable-by-API `Task.Backgroundable` (default cancellable flag) that runs `s
 ### 6.5 Self-shutdown sync (`performSelfShutdownSync`)
 
 1. Info notification (passed by the caller).
-2. `BundledSyncHelper.getExecutable()` (§9).
-3. Start `<executable> <helperArgs>` (the `SyncType.cliFlag` is already the last helper arg) with inherited IO, no wait.
-4. `Thread.sleep(100)`, then `ApplicationManager.getApplication().exit()` on EDT. The IDE exits; the helper detects the lock release, syncs and relaunches.
-5. Any `Throwable` except `ControlFlowException` -> `notification.error.sync.self.shutdown.failed`, logged as a warning. The IDE does not exit in that case.
+2. A non-cancellable `Task.Backgroundable` titled `progress.sync.helper.starting` calls `BundledSyncHelper.start(helperArgs)` (§9; the `SyncType.cliFlag` is already the last helper arg): it extracts if needed, starts `<executable> <helperArgs>` with stdout and stderr redirected to `<IDE log dir>/sync-helper.log` (`PathManager.getLogDir()`, overwritten per run; `<projRoot>/logs` in an isolated instance) and stdin closed, and does not wait. Then the task sleeps 100 ms.
+3. `onSuccess`: `ApplicationManager.getApplication().exit()` on EDT. The IDE exits; the helper detects the lock release, syncs and relaunches.
+4. `onThrowable` (any failure in extraction or spawn) -> logged warning and `notification.error.sync.self.shutdown.failed`; the IDE does not exit in that case. Cancellation cannot happen (non-cancellable); a `ProcessCanceledException` would go to `onCancel` and also keep the IDE running.
 
 ## 7. IDE path drift (`IdePathSyncDetector`)
 
@@ -182,7 +181,14 @@ It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheck
 
 ## 9. Bundled sync-helper (`BundledSyncHelper`)
 
-`getExecutable()` returns a cached path if it still exists. Otherwise it extracts `sync-helper/bin` and `sync-helper/lib` from plugin resources into a fresh `Files.createTempDirectory("sync-helper-")`, handling both `jar:` URLs (iterate JAR entries with the prefix) and plain file URLs (dev mode, `Files.walk`). Executable is `bin/sync-helper.bat` on Windows, `bin/sync-helper` elsewhere, made executable on Unix. Missing resource or executable -> `IllegalStateException`. Extracted directories are never removed.
+`getExecutable()` (`@RequiresBackgroundThread`, `@Synchronized` inside) works under the root `PathManager.getSystemDir()/project-juggler/sync-helper/` of the running IDE (`<projRoot>/system/...` in an isolated instance, so `ProjectCleaner` removes it with the project). Only this IDE process uses that root.
+
+- The extraction directory is `<root>/<fingerprint>`, where the fingerprint is the first 16 hex chars of a SHA-256 over the sorted `<relative path>:<content id>` of every regular file under `sync-helper/bin` and `sync-helper/lib` in plugin resources (content id: size and CRC from the jar's central directory, no decompression; in dev mode with a file URL, a SHA-256 of the file). It is computed once per class load. Fingerprint and extraction walk the same entry list, from `jar:` URLs (JAR entries with the prefix) or file URLs (`Files.walk`).
+- Executable is `bin/sync-helper.bat` on Windows, `bin/sync-helper` elsewhere. If it exists under `<root>/<fingerprint>`, it is returned without extraction (also across IDE sessions); if that directory was deleted, the next call re-extracts.
+- Otherwise the files are extracted into `<root>/<fingerprint>.tmp-*`, the executable is checked and made executable on Unix, an incomplete `<root>/<fingerprint>` is deleted, and the temp dir is moved into place with `ATOMIC_MOVE`, so a crash mid-extraction never leaves a directory that looks complete. If the move fails but a complete target exists, the temp dir is deleted and the target used. Any other failure deletes the temp dir, logs an error and throws `IllegalStateException` (also for a missing resource or executable).
+- After an extraction, every other entry of the root (old fingerprints, leftover `*.tmp-*`) is deleted recursively, and once per JVM the legacy `java.io.tmpdir/sync-helper-*` directories of earlier versions are deleted when they contain `bin/` and `lib/sync-helper.jar` and were last modified more than 1 hour ago (an older plugin in another IDE may be mid-sync from one). Each deletion is best effort: failures are logged at info.
+
+`start(args, logFile = <log dir>/sync-helper.log)` (`@RequiresBackgroundThread`) creates the log dir, starts `<getExecutable()> <args>` with `redirectErrorStream(true)` into `logFile` (overwritten), closes the process's stdin and logs the command line and log file at info. It returns the `Process`; `performSelfShutdownSync` does not keep it.
 
 The helper's CLI contract (`sync-helper`): `--ide <path>` required; exactly one of `--path <project>` or `--all-projects`; any of `--all`, `--vmoptions`, `--config`, `--plugins` (none means nothing is synced but the stop/restart cycle still runs). It builds `IdeInstallation(idePath, "IDE")`, resolves the repository, and runs `syncProject` with `STOP_AND_RESTART` semantics and a 60 s timeout for each project. Unknown args are ignored.
 
@@ -215,6 +221,7 @@ Because the build number is stored before the checks, only the first project ope
 | File choosers, `Messages` dialogs, main-project prompt | EDT (dialogs) |
 | `showFileChooserAndLaunch` config I/O (`resolvePath`, Koin init) | caller (EDT for actions) |
 | `launchOrFocusUnderProgress`, `performSyncWithProgress` | `Task.Backgroundable` |
+| Self-shutdown helper extraction and spawn | `Task.Backgroundable` |
 | Remove Project deletion and popup reshow | `Task.Backgroundable` |
 | Open a Project Copy dialog validation (local stats) | EDT |
 | Popup building, import | pooled thread |
@@ -245,7 +252,7 @@ Covered, by spec:
 | `actions/recent/RecentProjectPopupBuilderTest` | `buildItems`: item order, main project, filtering, `maxRecentProjects` limit, path-mismatch item, git branch, `isOpen` for other IDEs' and the current IDE's projects, toggle text |
 | `actions/recent/RecentProjectPopupTest` | `projectSubActions` (with and without Open with entries), speed-search and list texts |
 | `actions/recent/CompactPathTest` | `compactPath` |
-| `util/BundledSyncHelperTest` | extraction, caching, re-extraction |
+| `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, `start` output in the log file |
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
 | `services/IsolatedInstanceTest` | `projectIdFromConfigPath`, `isCurrentProject` |
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests |
@@ -270,11 +277,10 @@ Covered, by spec:
 
 Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
 
-Gaps pinned by tests (the test name carries the number): 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`).
+Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 
 ## Known gaps
 
-11. `BundledSyncHelper` extracts a full distribution into a new temp directory once per IDE session and never deletes it. Extraction happens on the calling thread. The helper process inherits the IDE's stdio.
 12. `ShutdownSignalService` starts only after a project is opened; an isolated IDE sitting on the welcome screen ignores stop requests, so stop-and-sync times out against it. The JSON `autoRestart`/`timeoutSeconds` fields are not honored by the receiver.
 13. `PluginSyncOnUpdateActivity` performs network-free but potentially long sync work (stopping and restarting every isolated IDE) on first project open with only a balloon as notice and no cancel. `performSyncWithProgress` aborts the whole batch on the first failure, unlike the update activity which continues.
 14. `KoinInit.init` is called on EDT in several actions (marked `todo move to BGT`). `ToggleMainProjectSubAction` performs config file I/O under a file lock on EDT. `ImportRecentProjectsAction` casts `RecentProjectsManager` to `RecentProjectsManagerBase`, an implementation class.

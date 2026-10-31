@@ -23,39 +23,35 @@ private val LOG = Logger.getInstance("#com.projectjuggler.plugin.actions.Sync")
 
 /**
  * Common logic for self-shutdown sync operations.
- * Spawns sync-helper process with [helperArgs] (see `SyncTarget.SelfShutdown`) and exits IntelliJ gracefully.
+ * Starts the sync-helper process with [helperArgs] (see `SyncTarget.SelfShutdown`) in a background task,
+ * then exits IntelliJ gracefully. On failure the IDE keeps running.
  */
 fun performSelfShutdownSync(
     project: Project?,
     notificationMessage: String,
     helperArgs: List<String>
 ) {
-    try {
-        showInfoNotification(notificationMessage, project)
-
-        // Get bundled sync-helper executable
-        val executable = BundledSyncHelper.getExecutable()
-
-        // Spawn sync-helper process
-        ProcessBuilder(executable.toString(), *helperArgs.toTypedArray())
-            .inheritIO()
-            .start()
-
-        // Wait briefly to ensure sync-helper started
-        Thread.sleep(100)
-
-        // Exit IntelliJ
-        ApplicationManager.getApplication().invokeLater {
-            ApplicationManager.getApplication().exit()
+    showInfoNotification(notificationMessage, project)
+    ProgressManager.getInstance().run(object : Task.Backgroundable(
+        project,
+        ProjectJugglerBundle.message("progress.sync.helper.starting"),
+        /* canBeCancelled = */ false
+    ) {
+        override fun run(indicator: ProgressIndicator) {
+            BundledSyncHelper.start(helperArgs)
+            Thread.sleep(100) // lets the helper start before the IDE exits, see sync-helper-spec gap 1
         }
-    } catch (t: Throwable) {
-        t.rethrowIfControlFlow()
-        LOG.warn("Failed to initiate self-shutdown sync", t)
-        showErrorNotification(
-            ProjectJugglerBundle.message("notification.error.sync.self.shutdown.failed", t.userMessage()),
-            project
-        )
-    }
+
+        override fun onSuccess() = ApplicationManager.getApplication().exit()
+
+        override fun onThrowable(error: Throwable) {
+            LOG.warn("Failed to initiate self-shutdown sync", error)
+            showErrorNotification(
+                ProjectJugglerBundle.message("notification.error.sync.self.shutdown.failed", error.userMessage()),
+                project
+            )
+        }
+    })
 }
 
 /**

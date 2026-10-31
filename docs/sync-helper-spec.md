@@ -66,10 +66,11 @@ Per-project behavior is exactly core-spec §8 with both booleans set. In particu
 
 ### 5.2 Extraction (`BundledSyncHelper.getExecutable()`)
 
-- First call per IDE process: create `Files.createTempDirectory("sync-helper-")`, extract `sync-helper/bin` and `sync-helper/lib` from the plugin's classloader into it. Jar resources are walked by enumerating all jar entries with the prefix; file-system resources (dev mode / `runIde`) are copied with `Files.walk`.
-- Executable is `bin/sync-helper.bat` on Windows, `bin/sync-helper` otherwise; its executable bit is set on Unix (failure only logs a warning).
-- Missing resource or executable throws `IllegalStateException`.
-- The resolved path is cached in a static field for the life of the IDE process and reused as long as the file still exists. The temp directory is never deleted.
+- Must not run on EDT (`@RequiresBackgroundThread`); `@Synchronized`, so parallel calls extract once.
+- Root: `PathManager.getSystemDir()/project-juggler/sync-helper/` of the running IDE (`<projRoot>/system/...` in an isolated instance). Target: `<root>/<fingerprint>`, the fingerprint being 16 hex chars of a SHA-256 over the names, sizes and CRCs of the bundled `sync-helper/bin` and `sync-helper/lib` files (file hashes in dev mode), so it changes with the helper's content even when the plugin version does not. Jar resources are walked by enumerating the jar entries with the prefix; file-system resources (dev mode) with `Files.walk`.
+- Executable is `bin/sync-helper.bat` on Windows, `bin/sync-helper` otherwise. If it exists in the target, it is reused (across IDE sessions too) without extraction.
+- Otherwise the files are extracted into `<root>/<fingerprint>.tmp-*`, the executable bit is set on Unix (failure only logs a warning), and the dir is moved to the target with `ATOMIC_MOVE`. Missing resource or executable, or any extraction failure, deletes the temp dir and throws `IllegalStateException`.
+- After an extraction, other entries of the root (old fingerprints, leftover temp dirs) and, once per JVM, legacy `java.io.tmpdir/sync-helper-*` dirs of earlier versions (with `bin/` and `lib/sync-helper.jar`, last modified over 1 hour ago) are deleted, best effort.
 
 ### 5.3 Decision to use the helper
 
@@ -83,11 +84,10 @@ The sync-type flag is appended from `SyncType`: `All -> --all`, `VmOptions -> --
 ### 5.4 Spawn and self-exit (`performSelfShutdownSync`)
 
 1. Show an info notification ("IntelliJ will close to sync ... and reopen automatically...").
-2. `BundledSyncHelper.getExecutable()`.
-3. `ProcessBuilder(exe, *args).inheritIO().start()`: the helper inherits the IDE's environment (including `IDEA_VM_OPTIONS` pointing at the isolated vmoptions file) and its stdio.
-4. `Thread.sleep(100)`.
-5. `invokeLater { Application.exit() }`.
-6. Any `Exception` shows an error notification "Failed to initiate self-shutdown sync: ..." and the IDE keeps running.
+2. In a non-cancellable `Task.Backgroundable` ("Starting sync helper..."): `BundledSyncHelper.start(args)`, which calls `getExecutable()` and runs `ProcessBuilder(exe, *args)` with stdout and stderr redirected to `<IDE log dir>/sync-helper.log` (overwritten per run; `<projRoot>/logs` in an isolated instance, next to `idea.log`) and stdin closed. The helper inherits the IDE's environment (including `IDEA_VM_OPTIONS` pointing at the isolated vmoptions file).
+3. `Thread.sleep(100)` in the task.
+4. On success, `Application.exit()` on EDT.
+5. Any failure is logged as a warning and shows an error notification "Failed to initiate self-shutdown sync: ..."; the IDE keeps running.
 
 The IDE's own exit removes `config/.lock`. The helper, started ~100 ms earlier, sees the lock (if the IDE has not finished exiting yet), writes `signals/stop-request.json`, which `ShutdownSignalService` may also act on, and then waits for the lock to disappear before syncing and relaunching.
 
@@ -96,7 +96,7 @@ The IDE's own exit removes `config/.lock`. The helper, started ~100 ms earlier, 
 - Successful run: exit 0 after all targets are synced (and the JVM's non-daemon threads finish).
 - Any uncaught exception (argument validation, `Project not found`, `SyncException` from a held lock or shutdown timeout, `IllegalStateException` for a missing base path, `IOException` during copying) terminates the JVM with exit code 1 and a stack trace on stderr. There is no error handling in `main`.
 - With `--all-projects`, a failure on one project stops the loop; later projects are not synced. The failing project's `signals/` dir and sync lock are still cleaned by `doWithLock`'s finally block; already-synced projects are left synced.
-- Nobody reads the exit code: the plugin does not keep the `Process` handle, and the IDE that would show a notification has exited.
+- Nobody reads the exit code: the plugin does not keep the `Process` handle, and the IDE that would show a notification has exited. Output, including the stack trace, is in the IDE's `sync-helper.log` (§5.4).
 
 ## 7. Environment and portability
 
@@ -109,12 +109,11 @@ The IDE's own exit removes `config/.lock`. The helper, started ~100 ms earlier, 
 1. **Restart race.** If the IDE finishes exiting before the helper's first `isProjectOpen` check (the plugin only waits 100 ms, and JVM startup of the helper is slower than that on most machines), `wasRunning` is false, the sync runs, and the IDE is *not* restarted despite the notification promising it. Conversely, if the IDE is still running, both the plugin's `Application.exit()` and the helper's stop request try to close it.
 2. `project.juggler.base.dir` is not propagated from the IDE to the helper. Under `runIde` the plugin uses `~/.project-juggler-test` while the helper syncs `~/.project-juggler`, so self-sync in the sandbox operates on the wrong tree (and will fail with `Project not found`).
 3. `--path <main project>` fails with `SyncException` from core (core-spec §8 step 0); the helper has no special handling and exits 1.
-4. Stdout/stderr are inherited from the IDE and disappear with it. Errors (lock held, shutdown timeout, missing base paths) are invisible to the user; the IDE simply does not come back.
+4. Output goes to `<IDE log dir>/sync-helper.log`, but nothing surfaces it; errors (lock held, shutdown timeout, missing base paths) are still invisible unless the user opens the file. The IDE simply does not come back.
 5. No `exitProcess`: the helper lingers up to 10 s after the last relaunch because of the non-daemon crash-watch thread. One sync-type-less invocation (`--ide X --path Y` with no type flag) is accepted and does a stop/restart with no copying.
 6. Unknown arguments are ignored, so a typo like `--plugin` silently produces an empty sync.
 7. `--all-projects` is not transactional and has unspecified order; the current project may be restarted before the others are synced, and a failure midway leaves the set half-synced with no report.
 8. The helper requires a system `java`. On a machine with only the IDE's JBR, extraction succeeds but the script fails at startup, again invisibly.
-9. Each IDE process extracts a fresh `sync-helper-*` temp directory that is never removed.
 10. The placeholder display name `"IDE"` is persisted only if the helper creates a new ideDir (no plugin ran for that executable); resolution goes through `IdeRegistry.getRepository` by executable path.
 11. `.github/workflows/release.yml` still references a `:cli` module; there is no release artifact for `sync-helper` outside the plugin zip.
-12. Untested: argument parsing, target selection, and the extraction logic in `BundledSyncHelper`.
+12. Untested: argument parsing and target selection.
