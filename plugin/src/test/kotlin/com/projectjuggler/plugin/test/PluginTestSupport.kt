@@ -6,7 +6,10 @@ import com.projectjuggler.config.ProjectMetadata
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.config.RecentProjectsIndex
 import com.projectjuggler.core.ProjectManager
+import org.w3c.dom.Document
+import org.w3c.dom.Element
 import java.nio.file.Path
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 
@@ -47,4 +50,19 @@ fun markIsolatedInstanceOpen(repository: IdeConfigRepository, projectPath: Proje
 fun writeGitHead(dir: Path, branch: String) {
     val gitDir = dir.resolve(".git").createDirectories()
     gitDir.resolve("HEAD").writeText("ref: refs/heads/$branch\n")
+}
+
+/**
+ * This plugin's `META-INF/plugin.xml`. The platform jars on the test classpath carry their own, so it is picked
+ * by plugin id.
+ */
+fun pluginXml(): Document = Thread.currentThread().contextClassLoader.getResources("META-INF/plugin.xml")
+    .asSequence()
+    .map { url -> url.openStream().use { DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(it) } }
+    .first { it.getElementsByTagName("id").item(0)?.textContent == "maxmedvedev.project-juggler" }
+
+/** All elements named [tagName] in this document. */
+fun Document.elements(tagName: String): List<Element> {
+    val nodes = getElementsByTagName(tagName)
+    return (0 until nodes.length).map { nodes.item(it) as Element }
 }

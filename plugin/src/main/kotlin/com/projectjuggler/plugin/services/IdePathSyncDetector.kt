@@ -117,6 +117,6 @@ internal object IdePathSyncDetector {
     // Don't use MainProjectService.isRunningInMainInstance() here because it compares
     // the current config dir with the stored baseConfigPath, which may itself be stale.
     // Instead, check if we're running as an isolated project instance.
-    private fun isMainInstance(repository: IdeConfigRepository, current: CurrentIdePaths): Boolean =
+    fun isMainInstance(repository: IdeConfigRepository, current: CurrentIdePaths): Boolean =
         !DirectoryManager.getInstance(repository).isIsolatedConfigDir(current.configDir)
 }

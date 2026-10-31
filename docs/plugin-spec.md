@@ -15,8 +15,8 @@ Conventions:
 - Plugin id `maxmedvedev.project-juggler`, name "Project Juggler", depends only on `com.intellij.modules.platform`. Version is set in `plugin/build.gradle.kts` (`0.0.6`); `sinceBuild` 251, built against `intellijIdea("2025.1.1")`, JVM toolchain 17.
 - Depends on `:core` and Koin. Tests: Kotest in `plugin/src/test`, see §13.
 - `processResources` depends on `:sync-helper:installDist` and copies the distribution into plugin resources under `sync-helper/` (`bin/`, `lib/`). This is what `BundledSyncHelper` extracts at runtime (§9).
-- `runIde` passes `-Dproject.juggler.base.dir=/Users/max/.project-juggler-test` (a machine-specific absolute path).
-- Registered extensions: one notification group `project-juggler.notifications` (balloon), four `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`), one `applicationListeners` entry (`ShutdownSignalAppListener` on topic `com.intellij.ide.AppLifecycleListener`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
+- `runIde` passes `-Dproject.juggler.base.dir=<repo>/plugin/build/project-juggler-sandbox` (absolute, next to `build/idea-sandbox` whose paths it stores, removed by `clean`); `-PprojectJuggler.baseDir=<dir>` passes that dir instead. `sync-helper` spawned from the sandbox still ignores the property (sync-helper-spec gap 2).
+- Registered extensions: one notification group `project-juggler.notifications` (balloon), four `postStartupActivity` entries (`ShutdownSignalServiceStartupActivity`, `PluginSyncOnUpdateActivity`, `StaleMainProjectCleanupActivity`, `IdePathsCheckActivity`), one `applicationConfigurable` (`settings.ProjectJugglerConfigurable`, id `com.projectjuggler.plugin.settings`, parent `tools`, §7a), one `applicationListeners` entry (`ShutdownSignalAppListener` on topic `com.intellij.ide.AppLifecycleListener`), three actions in the File menu after "Open...": Open with Project Juggler, Recent Juggled Projects (`Cmd/Ctrl+Shift+P`), Open a Project Copy.
 
 ## 2. Initialization and DI
 
@@ -57,7 +57,7 @@ Actions are thin; all run `update` on BGT. `actionPerformed` shows choosers/dial
 
 ### 4.3 Main-project prompt (`MainProjectPromptService`)
 
-Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" checkbox. Result mapping: Yes -> `SetAsMain`, No -> `OpenIsolated`, anything else -> `Cancelled`. When the checkbox is selected and the exit code is not Cancel, `dontAskAboutMainProject = true` is persisted before returning. Must be called on EDT; the dialog has no parent project.
+Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" checkbox. Result mapping: Yes -> `SetAsMain`, No -> `OpenIsolated`, anything else -> `Cancelled`. When the checkbox is selected and the exit code is not Cancel, `dontAskAboutMainProject = true` is persisted before returning. The settings page's "Ask to choose a main project" checkbox (§7a) turns it back off. Must be called on EDT; the dialog has no parent project.
 
 ### 4.4 Focus (`services/FocusExistingProject.kt`)
 
@@ -120,7 +120,7 @@ Final choice on a project item runs `launchOrFocusProject` (§4.2).
 |---|---|
 | Open Project | `launchOrFocusProject` on a pooled thread. |
 | Open with <IDE> | On a pooled thread, `launchOrFocusProject` against that installation's repository (`IdeInstallationService.getRepository`); no main-project prompt; the project is tracked and recorded in that IDE's `<ideDir>`, the current IDE's recents are untouched. Focuses that IDE's running instance of the project, else `ProjectLauncher.launch` with that IDE's executable (its own main project goes through `launchMain`). |
-| Set / Unset Main Project | Label and confirm text follow `item.isMainProject` (computed when the popup was built, no config read). OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then on a pooled thread `setMainProject(path)` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, success notification) or `clearMainProject()` with a success notification. |
+| Set / Unset Main Project | Label and confirm text follow `item.isMainProject` (computed when the popup was built, no config read). OK/Cancel confirm (`dialog.confirm.set.main.*` / `unset.main.*`) on EDT, then on a pooled thread `setMainProject(path)` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, success notification) or `clearMainProject()` with a success notification. The settings page (§7a) is the second entry point and calls the same two functions. |
 | Sync All Settings / VM Options / Configuration / Plugins | §6.1 for this project. Not shown for the main project. |
 | Remove Project | OK/Cancel warning dialog (`dialog.confirm.remove.project.*`, naming the project and `<projRoot>`) on EDT after the popup closes; Cancel does nothing. On OK, a non-cancellable background task (`progress.removing.project`) runs `removeRecentProject`: an unknown project is a no-op; it refuses with `notification.error.remove.project.running` while the isolated instance is open (`isIsolatedInstanceOpen`); otherwise `ProjectCleaner.cleanProject(metadata)` (removes the recent entry, then deletes `<projRoot>` recursively, core-spec §9); a failure shows `notification.error.remove.project.failed` and is logged as a warning (the recent entry is already gone). The popup is reshown from the task when it finishes. Not offered for the main project. |
 
@@ -171,7 +171,37 @@ The three base paths are the `IdePathKind` entries `CONFIG`, `PLUGINS`, `VM_OPTI
 
 `updatePaths(repo, notificationHandler, current)` overwrites config and plugins paths, overwrites the vmoptions path only if the current file exists, refreshes the vmoptions hash when it exists, and notifies `notification.success.paths.updated` or `notification.error.paths.update.failed` (plus a logged error) through the handler; `UpdatePathsAction` passes `IntelliJNotificationHandler(project)`.
 
-It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheckActivity` (`ProjectActivity`), on `Dispatchers.IO`, calls `IdePathsStartupCheck.mismatchesToReport(repo, CurrentIdePaths.detect())`, which returns the mismatches only on its first call per IDE session (an `AtomicBoolean`) and is empty in an isolated instance. When non-empty the activity shows a warning balloon `notification.paths.out.of.sync` with the kinds and an expiring "Update paths" action (`notification.action.update.paths`, via `showNotification(..., actions)` in `Utils.kt`) that runs `updatePaths(repo, IntelliJNotificationHandler(project), CurrentIdePaths.detect())` on a pooled thread. Stored paths are never changed without that click. Any `Throwable` is logged; `ControlFlowException` is rethrown. An IDE that stays on the welcome screen runs no project activity and gets no balloon; the popup item still covers it.
+It is checked from the popup item (§5.1) and at startup: `startup/IdePathsCheckActivity` (`ProjectActivity`), on `Dispatchers.IO`, calls `IdePathsStartupCheck.problemsToReport(repo, CurrentIdePaths.detect())`. It returns a map `IdePathKind -> IdePathProblem` in kind order, only on its first call per IDE session (an `AtomicBoolean`), and empty in an isolated instance (`IdePathSyncDetector.isMainInstance`). A kind whose stored value is non-null and does not exist is `MISSING`; otherwise one in `detectMismatches` is `OUT_OF_SYNC`. The activity then shows one warning balloon (via `showNotification(..., actions)` in `Utils.kt`):
+
+- any `MISSING`: `notification.paths.missing` with the missing kinds, actions "Use current IDE paths" (`notification.action.use.current.paths`) and "Open settings" (`notification.action.open.settings`);
+- else any `OUT_OF_SYNC`: `notification.paths.out.of.sync` with the kinds, actions "Update paths" (`notification.action.update.paths`) and "Open settings";
+- else nothing.
+
+Both actions expire the balloon. The update action runs `updatePaths(repo, IntelliJNotificationHandler(project), CurrentIdePaths.detect())` on a pooled thread; "Open settings" calls `ShowSettingsUtil.showSettingsDialog(project, ProjectJugglerConfigurable::class.java)`. Stored paths are never changed without a click. Any `Throwable` is logged; `ControlFlowException` is rethrown. An IDE that stays on the welcome screen runs no project activity and gets no balloon; the popup item still covers drift there.
+
+## 7a. Settings page (`settings/ProjectJugglerConfigurable`)
+
+Settings > Tools > Project Juggler, a `BoundSearchableConfigurable` (Kotlin UI DSL v2) for the current IDE only. The UI-free logic is in `services/JugglerSettings.kt` (`JugglerSettings`, `loadJugglerSettings`, `validateBasePath`, `validateMainProject`, `saveJugglerSettings`, `applyMainProjectChange`, `withCurrentIdePaths`).
+
+- IDE (read-only): display name, executable, `<ideDir>`.
+- Projects: main project (file-or-folder chooser, since file-based projects such as `MODULE.bazel` are valid; empty text `settings.main.project.none`; a "Clear" link empties it), "Recent projects to keep" spinner 1..50 (default 10; comment: also the popup size, see §5.1), "Ask to choose a main project" (the inverse of `dontAskAboutMainProject`, so it can be re-enabled).
+- Base settings: config dir, plugins dir and vmoptions file, each with a chooser and the running IDE's path as comment; "Use current IDE paths" fills the three fields from `CurrentIdePaths` (vmoptions only when that file exists), applied only on Apply; "Offer plugin sync on IDE update" (`syncPluginsOnIdeUpdate`, same text as the popup toggle).
+- In an isolated instance (`DirectoryManager.isIsolatedConfigDir(current configDir)`) the Projects and Base settings groups are disabled and `settings.isolated.comment` is shown on top.
+
+Apply validates first (`DialogPanel.validateAll`, a failure becomes a `ConfigurationException`), then pushes the UI into `JugglerSettings` and calls `saveJugglerSettings`:
+
+| Field input | Saved as | Validation error |
+|---|---|---|
+| blank | `null` (the main instance refills it from the current IDE at next start, §2) | none |
+| `~/x` or relative | absolute, normalized, `~` expanded (`PathUtils.resolveAbsolute`) | none |
+| not a valid path | not saved | `settings.error.path.invalid` |
+| missing path | not saved | `settings.error.path.missing` |
+| config/plugins not a dir, vmoptions not a file | not saved | `settings.error.path.not.directory` / `.not.file` |
+| under `<ideDir>/projects/` | not saved | `settings.error.path.isolated` |
+
+All fields except the main project go into one `repository.update`; `maxRecentProjects` is coerced to 1..50 (`recent.json` is trimmed at the next `recordOpen`, core-spec §7.1, and the popup shows at most that many at once); a changed vmoptions path refreshes `baseVmOptionsHash`. A save failure is logged as a warning and shown as `settings.error.save.failed`. The main project is never written by the save: it returns `MainProjectChange.Set(resolved path)` when the field differs from the stored value (`PathUtils.isSamePath`), `Clear` when the field is blank and one is stored, else null (no call, no notification). A missing main project is refused (`settings.error.main.project.missing`). The change runs on a pooled thread through `setMainProject` / `clearMainProject` (§5.5) with `IntelliJNotificationHandler(null)`, so the stale-entry cleanup and the `notification.success.set.main` / `unset.main` balloons are the popup's; a failure there is logged and shown as `settings.error.main.project.failed`.
+
+`reset()` (dialog Reset, reopen) reloads `config.json`, so a main project changed meanwhile from the popup is shown correctly.
 
 ## 8. Open a Project Copy (git worktree)
 
@@ -233,7 +263,9 @@ Because the build number is stored before the checks, only the first project ope
 | `ShutdownSignalService` start and polling | `Dispatchers.IO` coroutine, from app start |
 | `PluginSyncOnUpdateActivity` checks (`pluginSyncTargetsAfterUpdate`), `StaleMainProjectCleanupActivity` cleanup, `IdePathsCheckActivity` check | `Dispatchers.IO` |
 | `PluginSyncOnUpdateActivity` offered sync ("Sync plugins") | `Task.Backgroundable` |
-| `IdePathsCheckActivity` "Update paths" | pooled thread |
+| `IdePathsCheckActivity` "Update paths" / "Use current IDE paths" | pooled thread |
+| Settings page load (`createComponent`, `reset`), validation (path stats) and save of `config.json` (`apply`) | EDT (`Configurable` methods are EDT-bound) |
+| Settings page main-project change (`setMainProject` / `clearMainProject`) | pooled thread |
 
 ## 13. Tests
 
@@ -242,7 +274,7 @@ Kotest `StringSpec` + MockK specs in `plugin/src/test/kotlin/com/projectjuggler/
 Setup:
 
 - Helpers shared with core come from core's test fixtures (`core/src/testFixtures`): `KoinTestExtension` (every spec that reaches a `getInstance(...)` registers it, except `di/PluginKoinTest`, which starts and stops Koin itself) and `createTempDir`.
-- `plugin/test/`: `TestApplicationExtension` boots IntelliJ's headless test application in `beforeSpec` (`initTestApplication()`, `TestFrameworkType.JUnit5`); only specs that need a real `Application` (notifications, `PathManager`, `ApplicationNamesInfo`) register it. `expectLoggedError { ... }` runs a block that must log exactly one `LOG.error` and returns the logged `Throwable` (IntelliJ's logger turns logged errors into test failures); it needs `test-framework-core`, hence the extra `testFramework(TestFrameworkType.Platform)`. Every test that reaches a `LOG.error` path is wrapped in it. `RecordingNotificationHandler` records info/error messages; `PluginTestSupport.kt` has `testRepository`, `registerProject`, `markIsolatedInstanceOpen` (writes a `.lock` with the live PID) and `writeGitHead`.
+- `plugin/test/`: `TestApplicationExtension` boots IntelliJ's headless test application in `beforeSpec` (`initTestApplication()`, `TestFrameworkType.JUnit5`); only specs that need a real `Application` (notifications, `PathManager`, `ApplicationNamesInfo`) register it. `expectLoggedError { ... }` runs a block that must log exactly one `LOG.error` and returns the logged `Throwable` (IntelliJ's logger turns logged errors into test failures); it needs `test-framework-core`, hence the extra `testFramework(TestFrameworkType.Platform)`. Every test that reaches a `LOG.error` path is wrapped in it. `RecordingNotificationHandler` records info/error messages; `PluginTestSupport.kt` has `testRepository`, `registerProject`, `markIsolatedInstanceOpen` (writes a `.lock` with the live PID), `writeGitHead` and `pluginXml()`/`elements(tag)` (this plugin's `plugin.xml`).
 - The `test` task sets `project.juggler.base.dir` to `plugin/build/project-juggler-test`, so the real `IdeRegistry` never touches `~/.project-juggler`.
 - Kotest, MockK, koin-test and the core test fixtures pull `kotlinx-coroutines-core` 1.7.0, which shadows the IDE's patched coroutines and breaks the test application (`NoSuchMethodError ... DebugProbesImpl.install`). Each test dependency excludes that module (`withoutCoroutines()`); a `configurations.all` exclude would also remove the IDE's copy and break `compileKotlin`. `junit:junit` is a runtime-only test dependency because the IntelliJ test framework still references JUnit 4 classes. None of these end up in the plugin zip.
 
@@ -262,7 +294,7 @@ Covered, by spec:
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
 | `services/IsolatedInstanceTest` | `projectIdFromConfigPath`, `isCurrentProject` |
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests; age against `timeoutSeconds` and the 5-minute fallback |
-| `shutdown/ShutdownSignalRegistrationTest` | `plugin.xml` registers `ShutdownSignalAppListener` on the `AppLifecycleListener` topic |
+| `shutdown/ShutdownSignalRegistrationTest` | `plugin.xml` registers `ShutdownSignalAppListener` on the `AppLifecycleListener` topic (`pluginXml()` in `PluginTestSupport.kt`) |
 | `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args |
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, continuing past failures, cancellation before each project and from a project's sync, `describeFailures` |
 | `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
@@ -275,18 +307,19 @@ Covered, by spec:
 | `services/RecentProjectsImportTest` | `importableProjects`, `importProjects` |
 | `services/IdePathSyncDetectorTest` | `detectMismatches` (normalized and symlinked paths, isolated instance), `updatePaths`, `autoPopulateIfNeeded` (isolated instance, per-field fill, repair of isolated paths) |
 | `services/CurrentIdePathsTest` (test application) | `detect().vmOptionsFile`: platform file without, with a missing, and user file with an existing `jb.vmOptionsFile` |
-| `services/IdePathsStartupCheckTest` | `mismatchesToReport`: first call only, no mismatch, isolated instance |
+| `services/IdePathsStartupCheckTest` | `problemsToReport`: out of sync on the first call only, missing, both kinds, no problem, isolated instance |
+| `services/JugglerSettingsTest` | `loadJugglerSettings`, `saveJugglerSettings` (blank, `~`, normalization, checkboxes, limit coercion, vmoptions hash, returned main-project change), `validateBasePath` per error, `validateMainProject`, `withCurrentIdePaths`, `applyMainProjectChange` set and clear |
+| `settings/ProjectJugglerConfigurableTest` (test application) | the page builds on EDT, `reset()` reloads `config.json` (spinner value), `plugin.xml` registers it under Tools |
 | `services/PluginSyncTargetsAfterUpdateTest` | main-instance check, build bookkeeping, targets are the isolated projects only, no sync or notification of its own, failures |
 | `services/StaleMainProjectCleanupTest` | `cleanStaleMainProjectEntryIfMainInstance` in isolated and main instances |
 | `services/OpenProjectCopyTest` | `validateProjectCopyInput` per field and check, `suggestDestination`, `openProjectCopy` re-check failure, `createAndLaunchProjectCopy` success and worktree failure |
 | `services/CurrentIdeExecutableTest` | `currentIdeExecutable` per platform and script name |
 | `services/IdeInstallationServiceTest` (test application) | current installation keyed on the script-name launcher, adoption of a legacy home-keyed dir, repository in the sandbox IDE, auto-populated base paths, `VMOptionsCopy` files |
 
-Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `start()` and exit, `ShutdownSignalAppListener` itself, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, and the actions and startup activities themselves.
+Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `start()` and exit, `ShutdownSignalAppListener` itself, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `isOpenInCurrentIde` (`ProjectUtil.findProject`), `WindowFocuser` (core), the `OpenProjectCopyDialog` Swing behavior, the settings page's apply and validation through the dialog (the logic is covered by `JugglerSettingsTest`), and the actions and startup activities themselves.
 
 Gaps pinned by tests (the test name carries the number): 16 (`SyncPlannerTest`).
 
 ## Known gaps
 
-15. `runIde` hardcodes a user-specific base dir. The plugin has no settings page or startup health check for missing base paths.
 16. Sync all projects with no syncable target (only the main project tracked) still runs an in-process sync of zero projects and reports success for 0 projects.

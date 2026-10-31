@@ -33,13 +33,13 @@ The `.github/workflows/release.yml` references a `:cli` module that no longer ex
 
 - **core/** - Pure Kotlin business logic, no IntelliJ dependencies. Packages: `config/` (persistence and models), `core/` (ProjectManager, DirectoryManager, VMOptionsGenerator, ShutdownSignalManager, PortAllocator), `process/` (ProjectLauncher, IntelliJLauncher, ProcessLauncher, WindowFocuser), `locators/` (IntelliJLocator, ConfigLocator, PluginLocator), `di/` (Koin setup), `util/`.
 - **sync-helper/** - Standalone CLI (`SyncHelperMain.kt`) that runs `ProjectLauncher.syncProject()` out of process. Built with the `application` plugin; its `installDist` output is bundled into plugin resources under `sync-helper/` by the plugin's `processResources` task.
-- **plugin/** - IntelliJ plugin. `actions/` are thin entry points, `actions/recent/` is the Recent Projects popup (builder, renderer, sub-actions, `SyncType` sealed class), `services/` holds the logic as plain functions taking the repository, current IDE paths and a `NotificationHandler` (`planLaunch`/`launchProject`, `SyncPlanner`/`syncProjects`, `IsolatedInstance`, `IdePathSyncDetector`/`CurrentIdePaths`, `syncPluginsOnIdeUpdate`, `cleanStaleMainProjectEntryIfMainInstance`, `validateProjectCopyInput`/`openProjectCopy`, `SetMainProject`, etc.), `shutdown/` is the signal-polling service plus `StopRequestTracker`, `util/BundledSyncHelper` extracts and runs the bundled CLI.
+- **plugin/** - IntelliJ plugin. `actions/` are thin entry points, `actions/recent/` is the Recent Projects popup (builder, renderer, sub-actions, `SyncType` sealed class), `services/` holds the logic as plain functions taking the repository, current IDE paths and a `NotificationHandler` (`planLaunch`/`launchProject`, `SyncPlanner`/`syncProjects`, `IsolatedInstance`, `IdePathSyncDetector`/`CurrentIdePaths`, `syncPluginsOnIdeUpdate`, `cleanStaleMainProjectEntryIfMainInstance`, `validateProjectCopyInput`/`openProjectCopy`, `SetMainProject`, etc.), `shutdown/` is the signal-polling service plus `StopRequestTracker`, `startup/` holds the `postStartupActivity` classes, `settings/ProjectJugglerConfigurable` is the Settings > Tools > Project Juggler page (logic in `services/JugglerSettings.kt`), `util/BundledSyncHelper` extracts and runs the bundled CLI.
 
 ### Multi-IDE data model (v2)
 
 Everything is keyed by **IDE installation**, not globally. `IdeInstallation(executablePath, displayName)` derives a hash-based `directoryName`; `IdeRegistry` discovers installations and hands out one `IdeConfigRepository` per installation rooted at `~/.project-juggler/v2/<ide-dir>/`. Repositories are looked up by executable path (`directoryName` only names new dirs), so the same executable under another display name reuses its existing dir; the plugin keys the running IDE on `<home>/{MacOS|bin}/<ApplicationNamesInfo.scriptName>` and adopts a legacy home-keyed dir once. That directory holds `config.json` (`IdeConfig`: base VM options/config/plugins paths, main project, sync-on-update flag), `recent.json`, and `projects/<project-id>/` with `metadata.json` plus the isolated `config`/`system`/`logs`/`plugins` dirs. All JSON writes go through `FileLockUtils.withFileLock`.
 
-The base dir can be overridden with the `project.juggler.base.dir` system property (used by `runIde`).
+The base dir can be overridden with the `project.juggler.base.dir` system property (`runIde` sets it to `plugin/build/project-juggler-sandbox`, or to the Gradle property `projectJuggler.baseDir`).
 
 ### Dependency injection (Koin, scoped per IDE)
 
@@ -68,7 +68,7 @@ Locators are tested through `LocatorEnvironment` with fake IDE trees in temp dir
 Plugin tests (`plugin/src/test`, details in `docs/plugin-spec.md` §13) target the plain functions in `plugin/services`, `shutdown` and `actions/recent`, not the actions or Swing. Support lives in `plugin/.../test/`:
 - Specs that need a real `Application` (notifications, `PathManager`, `ApplicationNamesInfo`) register `TestApplicationExtension`; pure specs do not.
 - Wrap every call that reaches `LOG.error` in `expectLoggedError { ... }` (IntelliJ's logger fails the test otherwise). It needs `testFramework(TestFrameworkType.Platform)` next to `TestFrameworkType.JUnit5` in `plugin/build.gradle.kts`.
-- `RecordingNotificationHandler`, `registerProject`, `markIsolatedInstanceOpen`, `writeGitHead` in `PluginTestSupport.kt`; pass mocked `ProjectLauncher`s through the functions' default parameters rather than Koin.
+- `RecordingNotificationHandler`, `registerProject`, `markIsolatedInstanceOpen`, `writeGitHead`, `pluginXml()` in `PluginTestSupport.kt`; pass mocked `ProjectLauncher`s through the functions' default parameters rather than Koin.
 - The plugin `test` task sets `project.juggler.base.dir` to `plugin/build/project-juggler-test`.
 - Every plugin test dependency must exclude `org.jetbrains.kotlinx:kotlinx-coroutines-core` (`{ withoutCoroutines() }`): the test libraries pull 1.7.0, which shadows the IDE's patched coroutines and breaks `initTestApplication`. Exclude per dependency; a `configurations.all` exclude breaks `compileKotlin`.
 
@@ -78,7 +78,7 @@ Plugin tests (`plugin/src/test`, details in `docs/plugin-spec.md` §13) target t
 - **Actions must not contain business logic** - Keep action classes thin; implement logic in `plugin/services` or core (e.g. `IdeInstallationService`, `launchProject`, `setMainProject`)
 - **Always use planning mode** - Work on all tasks in planning mode first before implementing
 - When doing try-catch, always catch `Throwable` and log it. If the exception is `ControlFlowException`, rethrow it without handling. Use `Throwable.rethrowIfControlFlow()` and `Throwable.userMessage()` from `plugin/Utils.kt`.
-- No repository, lock or git I/O on the EDT; do it on a pooled thread after the dialog or popup choice.
+- No repository, lock or git I/O on the EDT; do it on a pooled thread after the dialog or popup choice. The one exception is the settings page: `Configurable` methods are EDT-bound, so it loads/saves `config.json` there, but anything heavier (the main-project change) goes to a pooled thread.
 - User-visible strings go in `messages/ProjectJugglerBundle.properties` via `ProjectJugglerBundle.message(...)`.
 
 ## MCP
