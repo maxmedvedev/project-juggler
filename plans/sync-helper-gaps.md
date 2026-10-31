@@ -223,6 +223,10 @@ Opus 5.5 at the current effort, 4 sessions, in this order (each one depends on t
    `ProjectLauncher.kt`, `IdeRegistry.kt`, `ShutdownSignalManager.kt`, `di/CoreModule.kt`, `ProjectLauncherSyncTest`
    (restart cases around lines 217–260 and 719), `IdeRegistryTest`. Tests: the core cases above. Done when
    `./gradlew :core:test` passes. ~20%.
+   **Done** in `relaunch a stopped ide after a failed sync and add the self-sync result store`. Notes for later
+   sessions: `SelfSyncResultStore.write`/`consume` take a `ProjectMetadata` (load it from the project id first);
+   the JSON settings now live in `ShutdownSignalManager.json` (internal companion val) and are shared by both;
+   `SelfSyncResultStore.RESULT_FILE_NAME` is public. The `CLAUDE.md` `release.yml` sentence is already gone.
 2. **sync-helper.** Implements "sync-helper" and its tests. Reads first: `SyncHelperMain.kt`,
    `sync-helper/build.gradle.kts`, `core/src/testFixtures` (`KoinTestExtension`, `createTempDir`), the
    `SelfSyncResultStore` from session 1. Done when `./gradlew :sync-helper:test :plugin:compileKotlin` passes (the

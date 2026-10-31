@@ -20,11 +20,6 @@ import kotlin.io.path.writeText
  */
 class ShutdownSignalManager internal constructor(private val configRepository: IdeConfigRepository) {
 
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-    }
-
     /**
      * Creates a stop request signal for the specified project.
      *
@@ -164,6 +159,12 @@ class ShutdownSignalManager internal constructor(private val configRepository: I
     companion object {
         const val SYNC_LOCK_FILE_NAME = "sync-in-progress.lock"
         const val STOP_REQUEST_FILE_NAME = "stop-request.json"
+
+        /** JSON settings for signal-like files written between processes (also [SelfSyncResultStore]). */
+        internal val json = Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
 
         fun getInstance(ideConfigRepository: IdeConfigRepository): ShutdownSignalManager =
             ideConfigRepository.getScope().get()

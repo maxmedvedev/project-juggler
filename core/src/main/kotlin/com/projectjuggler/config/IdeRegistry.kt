@@ -59,9 +59,15 @@ class IdeRegistry internal constructor(baseDir: Path = getDefaultBaseDir()) {
         val exact = IdeConfigRepository.create(installation, v2Dir)
         if (exact.getConfigFile().exists()) return exact
 
-        return registeredRepositories().firstOrNull { it.installation.executablePath == installation.executablePath }
-            ?: exact
+        return findRepository(installation.executablePath) ?: exact
     }
+
+    /**
+     * The registered dir whose stored installation has [executablePath], with that installation, or null.
+     * Never creates a dir.
+     */
+    fun findRepository(executablePath: String): IdeConfigRepository? =
+        registeredRepositories().firstOrNull { it.installation.executablePath == executablePath }
 
     /**
      * Moves a dir registered under a legacy executable path (e.g. the IDE home directory older plugin versions

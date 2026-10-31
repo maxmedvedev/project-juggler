@@ -101,6 +101,36 @@ class IdeRegistryTest : StringSpec({
         repository.baseDir.exists() shouldBe false
     }
 
+    "findRepository returns the registered dir whatever display name it was registered under" {
+        val baseDir = createTempDir("test-registry")
+        val registry = IdeRegistry(baseDir)
+        register(baseDir, first)
+        register(baseDir, second)
+
+        val repository = registry.findRepository(first.executablePath).shouldNotBeNull()
+
+        repository.baseDir shouldBe baseDir.resolve("v2").resolve(first.directoryName)
+        repository.installation shouldBe first
+    }
+
+    "findRepository returns null for an unknown executable and creates no dir" {
+        val baseDir = createTempDir("test-registry")
+        val registry = IdeRegistry(baseDir)
+        register(baseDir, first)
+
+        registry.findRepository("/ide/unknown").shouldBeNull()
+
+        Files.list(baseDir.resolve("v2")).use { it.count() } shouldBe 1L
+    }
+
+    "findRepository returns null without v2 dir and does not create it" {
+        val baseDir = createTempDir("test-registry")
+
+        IdeRegistry(baseDir).findRepository(first.executablePath).shouldBeNull()
+
+        baseDir.resolve("v2").exists() shouldBe false
+    }
+
     "adoptLegacyRepository moves the legacy dir and keeps its projects and recents" {
         val baseDir = createTempDir("test-registry")
         val registry = IdeRegistry(baseDir)

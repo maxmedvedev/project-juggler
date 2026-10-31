@@ -25,8 +25,6 @@ Run a single test class or test:
 
 Gradle is pinned to a JDK 17 home in `gradle.properties` (`org.gradle.java.home`) because Kotlin 2.1.0 cannot parse newer Java version strings. If the build fails with a JDK error on another machine, that path is the first thing to check. Plugin version lives in `plugin/build.gradle.kts` (`version = ...`); `sinceBuild` is 251 (2025.1+).
 
-The `.github/workflows/release.yml` references a `:cli` module that no longer exists; it is stale.
-
 ## Architecture
 
 **Three-module Gradle project** (`core` -> `sync-helper` and `plugin` both depend on core):

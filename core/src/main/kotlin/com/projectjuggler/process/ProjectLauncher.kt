@@ -104,37 +104,48 @@ class ProjectLauncher internal constructor(
             // Check if project is currently running
             val wasRunning = ProjectLockUtils.isProjectOpen(ideConfigRepository, project.path)
 
-            // If running and should stop, request shutdown and wait
+            // If running and should stop, request shutdown and wait. Stays false on a timeout: the IDE still runs.
+            var stopped = false
             if (wasRunning && options.stopIfRunning) {
                 requestShutdownAndWait(project, options, syncTypes, signalManager)
+                stopped = true
             }
 
-            // Perform sync operations
-            options.onProgress(SyncProgress.Syncing)
+            try {
+                // Perform sync operations
+                options.onProgress(SyncProgress.Syncing)
 
-            block()
-
-            // Auto-restart if requested and was running
-            if (wasRunning && options.stopIfRunning && options.autoRestart) {
-                options.onProgress(SyncProgress.Restarting)
-                try {
-                    // May run on the process watch thread after syncProject has returned
-                    launch(project.path) { failure ->
-                        val output = failure.describe()
-                        options.onProgress(SyncProgress.Error(
-                            "IntelliJ exited with code ${failure.exitCode} after restart of '${project.name}'" +
-                                if (output.isBlank()) "" else ": $output"
-                        ))
-                    }
-                } catch (e: Throwable) {
-                    // Report but don't fail the sync
-                    options.onProgress(SyncProgress.Error("Failed to restart IntelliJ: ${e.message}"))
+                block()
+            } finally {
+                // Relaunch the IDE we stopped whatever the sync outcome; a block() exception propagates afterwards
+                if (stopped && options.autoRestart) {
+                    restart(project, options)
                 }
             }
         } finally {
             // Cleanup signal files and release lock
             signalManager.cleanup(project)
             syncLock.close()
+        }
+    }
+
+    /**
+     * Relaunches [project] after a sync stopped it. Failures are reported through [SyncOptions.onProgress] as
+     * [SyncProgress.Error] and never thrown, so they do not hide the sync outcome.
+     */
+    private fun restart(project: ProjectMetadata, options: SyncOptions) {
+        options.onProgress(SyncProgress.Restarting)
+        try {
+            // May run on the process watch thread after syncProject has returned
+            launch(project.path) { failure ->
+                val output = failure.describe()
+                options.onProgress(SyncProgress.Error(
+                    "IntelliJ exited with code ${failure.exitCode} after restart of '${project.name}'" +
+                        if (output.isBlank()) "" else ": $output"
+                ))
+            }
+        } catch (e: Throwable) {
+            options.onProgress(SyncProgress.Error("Failed to restart IntelliJ: ${e.message}"))
         }
     }
 

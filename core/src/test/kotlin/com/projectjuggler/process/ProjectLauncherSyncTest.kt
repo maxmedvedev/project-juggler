@@ -516,6 +516,8 @@ class ProjectLauncherSyncTest : StringSpec({
 
         exception.message shouldContain "did not shut down"
         exception.message shouldContain "5 seconds"
+        // The IDE is still running, so it must not be launched a second time
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should verify correct project path is passed to launch after restart" {
@@ -743,6 +745,57 @@ class ProjectLauncherSyncTest : StringSpec({
         errors.size shouldBe 1
         errors.single().message shouldContain "code 3"
         errors.single().message shouldContain "boom"
+    }
+
+    "a stopped project is relaunched when its sync fails, and the failure propagates" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+        ideConfigRepository.update { it.copy(baseVmOptionsPath = null) }
+
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true andThen false
+        every {
+            ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any())
+        } returns ShutdownResult.Success
+
+        val progressEvents = mutableListOf<SyncProgress>()
+        val exception = shouldThrow<IllegalStateException> {
+            projectLauncher.syncProject(
+                project = project,
+                syncVmOptions = true,
+                syncConfig = false,
+                syncPlugins = false,
+                options = SyncOptions(stopIfRunning = true, autoRestart = true, onProgress = { progressEvents.add(it) })
+            )
+        }
+
+        exception.message shouldContain "Base VM options path not configured"
+        verify(exactly = 1) { mockProcessLauncher.launch(any(), any(), any(), any()) }
+        progressEvents.any { it is SyncProgress.Restarting } shouldBe true
+    }
+
+    "a failed sync of a stopped project is not relaunched without autoRestart" {
+        val projectPath = ProjectPath(projectDir.toString())
+        val project = projectManager.registerOrUpdate(projectPath)
+        directoryManager.ensureProjectDirectories(project)
+        ideConfigRepository.update { it.copy(baseVmOptionsPath = null) }
+
+        every { ProjectLockUtils.isProjectOpen(ideConfigRepository, projectPath) } returns true andThen false
+        every {
+            ShutdownWaiter.waitForShutdown(ideConfigRepository, projectPath, any(), any())
+        } returns ShutdownResult.Success
+
+        shouldThrow<IllegalStateException> {
+            projectLauncher.syncProject(
+                project = project,
+                syncVmOptions = true,
+                syncConfig = false,
+                syncPlugins = false,
+                options = SyncOptions(stopIfRunning = true, autoRestart = false)
+            )
+        }
+
+        verify(exactly = 0) { mockProcessLauncher.launch(any(), any(), any(), any()) }
     }
 
     "should refuse to sync the main project without stopping it" {
