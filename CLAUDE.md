@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 ./gradlew build                  # Build all modules
-./gradlew test                   # Run all tests (only core has tests)
+./gradlew test                   # Run all tests (core and plugin tests)
 ./gradlew :core:test             # Core tests only
+./gradlew :plugin:test           # Plugin tests only
 ./gradlew :plugin:compileKotlin  # Quick compile check for plugin
 ./gradlew :plugin:buildPlugin    # Build IntelliJ plugin zip
 ./gradlew :plugin:runIde         # Run sandbox IDE (uses ~/.project-juggler-test as base dir)
@@ -18,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Run a single test class or test:
 ```bash
 ./gradlew :core:test --tests "com.projectjuggler.core.ProjectManagerTest"
+./gradlew :plugin:test --tests "com.projectjuggler.plugin.services.SyncPlannerTest"
 ./gradlew :core:test --tests "com.projectjuggler.core.ProjectManagerTest.should expand tilde in path strings"
 ```
 
@@ -31,7 +33,7 @@ The `.github/workflows/release.yml` references a `:cli` module that no longer ex
 
 - **core/** - Pure Kotlin business logic, no IntelliJ dependencies. Packages: `config/` (persistence and models), `core/` (ProjectManager, DirectoryManager, VMOptionsGenerator, ShutdownSignalManager, PortAllocator), `process/` (ProjectLauncher, IntelliJLauncher, ProcessLauncher, WindowFocuser), `locators/` (IntelliJLocator, ConfigLocator, PluginLocator), `di/` (Koin setup), `util/`.
 - **sync-helper/** - Standalone CLI (`SyncHelperMain.kt`) that runs `ProjectLauncher.syncProject()` out of process. Built with the `application` plugin; its `installDist` output is bundled into plugin resources under `sync-helper/` by the plugin's `processResources` task.
-- **plugin/** - IntelliJ plugin. `actions/` are thin entry points, `actions/recent/` is the Recent Projects popup (builder, renderer, sub-actions, `SyncType` sealed class), `services/` holds the logic (IdeInstallationService, LaunchProject, SetMainProject, etc.), `shutdown/` is the signal-polling service, `util/BundledSyncHelper` extracts and runs the bundled CLI.
+- **plugin/** - IntelliJ plugin. `actions/` are thin entry points, `actions/recent/` is the Recent Projects popup (builder, renderer, sub-actions, `SyncType` sealed class), `services/` holds the logic as plain functions taking the repository, current IDE paths and a `NotificationHandler` (`planLaunch`/`launchProject`, `SyncPlanner`/`syncProjects`, `IsolatedInstance`, `IdePathSyncDetector`/`CurrentIdePaths`, `syncPluginsOnIdeUpdate`, `cleanStaleMainProjectEntryIfMainInstance`, `validateProjectCopy`/`createAndLaunchProjectCopy`, `SetMainProject`, etc.), `shutdown/` is the signal-polling service plus `StopRequestTracker`, `util/BundledSyncHelper` extracts and runs the bundled CLI.
 
 ### Multi-IDE data model (v2)
 
@@ -44,7 +46,7 @@ The base dir can be overridden with the `project.juggler.base.dir` system proper
 - `KoinInit.init(vararg modules)` starts Koin once; the plugin passes `pluginModule`, sync-helper passes nothing. `coreModule` holds true singletons (`IdeRegistry`, `ProcessLauncher`).
 - `ideScopedModule` declares everything else inside the `IDE_SCOPE` Koin scope. `IdeScopeManager` creates one scope per `IdeConfigRepository` and `declare`s the repository into it, so scoped services receive the right repository via `get()`.
 - Services expose `getInstance(ideConfigRepository)` companions that resolve through `ideConfigRepository.getScope().get()`. Constructors are `internal`; always go through `getInstance`. Default-argument constructors (e.g. `ProjectLauncher`) exist so tests can inject mocks.
-- In the plugin, `IdeInstallationService.currentIdeConfigRepository` is the repository for the running IDE (detected from `PathManager`), and auto-populates base paths on first use.
+- In the plugin, `IdeInstallationService.currentIdeConfigRepository` is the repository for the running IDE (detected from `PathManager`), and auto-populates base paths on first use via `IdePathSyncDetector.autoPopulateIfNeeded`.
 
 ### Project identity
 
@@ -52,16 +54,23 @@ The base dir can be overridden with the `project.juggler.base.dir` system proper
 
 ### Launch and sync flow
 
-- **Launch**: `ProjectLauncher.launch` checks `MainProjectService.isMainProject` (main project opens with base settings via `launchMain`); otherwise registers metadata, records in `RecentProjectsIndex`, and `IntelliJLauncher` starts the IDE with `idea.config.path`/`system`/`log`/`plugins` pointing at the isolated dirs and a per-project debug port (`PortAllocator`). The plugin wraps this in `launchOrFocusProject` (`actions/Launch.kt`), which may prompt to set a main project and focuses an existing window if already open.
+- **Launch**: `ProjectLauncher.launch` checks `MainProjectService.isMainProject` (main project opens with base settings via `launchMain`); otherwise registers metadata, records in `RecentProjectsIndex`, and `IntelliJLauncher` starts the IDE with `idea.config.path`/`system`/`log`/`plugins` pointing at the isolated dirs and a per-project debug port (`PortAllocator`). The plugin wraps this in `launchOrFocusProject` (`actions/Launch.kt`), which may prompt to set a main project and then runs the steps from `planLaunch` (open in current IDE, focus the existing window, or launch).
 - **Sync of another project**: `ProjectLauncher.syncProject` takes a project lock (`ProjectLockUtils`), and if the target IDE is running and `SyncOptions.stopIfRunning` is set, writes `stop-request.json` via `ShutdownSignalManager`, waits with `ShutdownWaiter`, syncs, then relaunches if `autoRestart`.
-- **Sync of the current IDE**: the plugin cannot sync itself while running, so `actions/Sync.kt` spawns the bundled `sync-helper` process (`--ide <path> --path <project>|--all-projects --all|--vmoptions|--config|--plugins`), which performs the above flow from outside.
-- **Shutdown side**: `ShutdownSignalService` (app-level, started by a `postStartupActivity`) detects it is an isolated instance by parsing `idea.config.path` for `projects/<id>/config`, polls `stop-request.json` once per second, and exits the IDE gracefully when one appears.
-- `PluginSyncOnUpdateActivity` re-syncs plugins on IDE build-number change when `syncPluginsOnIdeUpdate` is enabled.
+- **Sync of the current IDE**: the plugin cannot sync itself while running, so when `SyncPlanner` returns `SyncTarget.SelfShutdown`, `performSelfShutdownSync` (`actions/Sync.kt`) spawns the bundled `sync-helper` process (`--ide <path> --path <project>|--all-projects --all|--vmoptions|--config|--plugins`), which performs the above flow from outside.
+- **Shutdown side**: `ShutdownSignalService` (app-level, started by a `postStartupActivity`) detects it is an isolated instance via `IsolatedInstance.currentProjectId()` (parses `idea.config.path` for `projects/<id>/config`), polls `stop-request.json` once per second, and exits the IDE gracefully when one appears.
+- `PluginSyncOnUpdateActivity` calls `syncPluginsOnIdeUpdate`, which re-syncs plugins on IDE build-number change when `syncPluginsOnIdeUpdate` is enabled. `StaleMainProjectCleanupActivity` calls `cleanStaleMainProjectEntryIfMainInstance`.
 
 ## Testing
 
-Kotest `StringSpec` + MockK, only in `core/`. Register `KoinTestExtension()` in any spec that calls `getInstance(...)`; it starts Koin per spec and closes IDE scopes after each test. Build repositories directly with `IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))`; `TempDirExtension` is available for temp dirs.
+Kotest `StringSpec` + MockK in `core/` and `plugin/`. Shared helpers live in core's test fixtures (`core/src/testFixtures`): `KoinTestExtension` and `createTempDir`/`TempDirExtension`. Register `KoinTestExtension()` in any spec that calls `getInstance(...)`; it starts Koin per spec and closes IDE scopes after each test. Scopes are keyed by installation, so use one repository per test. Build repositories directly with `IdeConfigRepository(tempDir, IdeInstallation("/test/ide", "Test IDE"))` (plugin: `testRepository(dir)`).
 Locators are tested through `LocatorEnvironment` with fake IDE trees in temp dirs, not against the real machine.
+
+Plugin tests (`plugin/src/test`, details in `docs/plugin-spec.md` §13) target the plain functions in `plugin/services`, `shutdown` and `actions/recent`, not the actions or Swing. Support lives in `plugin/.../test/`:
+- Specs that need a real `Application` (notifications, `PathManager`, `ApplicationNamesInfo`) register `TestApplicationExtension`; pure specs do not.
+- Wrap every call that reaches `LOG.error` in `expectLoggedError { ... }` (IntelliJ's logger fails the test otherwise). It needs `testFramework(TestFrameworkType.Platform)` next to `TestFrameworkType.JUnit5` in `plugin/build.gradle.kts`.
+- `RecordingNotificationHandler`, `registerProject`, `markIsolatedInstanceOpen`, `writeGitHead` in `PluginTestSupport.kt`; pass mocked `ProjectLauncher`s through the functions' default parameters rather than Koin.
+- The plugin `test` task sets `project.juggler.base.dir` to `plugin/build/project-juggler-test`.
+- Every plugin test dependency must exclude `org.jetbrains.kotlinx:kotlinx-coroutines-core` (`{ withoutCoroutines() }`): the test libraries pull 1.7.0, which shadows the IDE's patched coroutines and breaks `initTestApplication`. Exclude per dependency; a `configurations.all` exclude breaks `compileKotlin`.
 
 ## Development Guidelines
 

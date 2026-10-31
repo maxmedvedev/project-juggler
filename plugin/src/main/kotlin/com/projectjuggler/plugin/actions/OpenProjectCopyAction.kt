@@ -3,22 +3,20 @@ package com.projectjuggler.plugin.actions
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.application
-import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.createAndLaunchProjectCopy
+import com.projectjuggler.plugin.services.validateProjectCopy
 import com.projectjuggler.plugin.showErrorNotification
 import com.projectjuggler.plugin.showInfoNotification
-import com.projectjuggler.util.GitWorktreeManager
-import kotlin.io.path.exists
-import kotlin.io.path.isDirectory
+import com.projectjuggler.plugin.util.IntelliJNotificationHandler
 
 internal class OpenProjectCopyAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -59,26 +57,14 @@ internal class OpenProjectCopyAction : AnAction() {
         KoinInit.init(pluginModule) // todo move to BGT
 
         // Validate paths before starting background operation
-        val projectManager = ProjectManager.getInstance(IdeInstallationService.currentIdeConfigRepository)
+        val repository = IdeInstallationService.currentIdeConfigRepository
+        val projectManager = ProjectManager.getInstance(repository)
 
         val sourcePath = projectManager.resolvePath(sourceFile.path)
         val destPath = projectManager.resolvePath(destFile.path)
 
-        // Validate source is a directory
-        if (!sourcePath.path.isDirectory()) {
-            showErrorNotification(ProjectJugglerBundle.message("notification.error.not.directory", sourceFile.path), project)
-            return
-        }
-
-        // Validate source is a git repository
-        if (!GitWorktreeManager.isGitRepository(sourcePath.path)) {
-            showErrorNotification(ProjectJugglerBundle.message("notification.error.not.git.repository", sourceFile.path), project)
-            return
-        }
-
-        // Validate destination doesn't exist
-        if (destPath.path.exists()) {
-            showErrorNotification(ProjectJugglerBundle.message("notification.error.destination.exists", destFile.path), project)
+        validateProjectCopy(sourcePath, destPath)?.let { error ->
+            showErrorNotification(error, project)
             return
         }
 
@@ -87,33 +73,7 @@ internal class OpenProjectCopyAction : AnAction() {
 
         // Perform worktree creation and launch in background thread
         application.executeOnPooledThread {
-            try {
-                // Create git worktree (no progress messages in plugin context)
-                GitWorktreeManager.createWorktree(
-                    source = sourcePath.path,
-                    destination = destPath.path,
-                    branchName = branchName,
-                    messageOutput = null
-                )
-
-                // Launch the worktree
-                val launcher = ProjectLauncher.getInstance(IdeInstallationService.currentIdeConfigRepository)
-                launcher.launch(destPath)
-
-                showInfoNotification(ProjectJugglerBundle.message(
-                        "notification.success.worktree.launched",
-                        destFile.name,
-                        branchName
-                    ), project)
-            } catch (ex: IllegalArgumentException) {
-                val message = ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error")
-                showErrorNotification(message, project)
-                logger<OpenProjectCopyAction>().error(message, ex)
-            } catch (ex: Exception) {
-                val message = ProjectJugglerBundle.message("notification.error.worktree.failed", ex.message ?: "Unknown error")
-                showErrorNotification(message, project)
-                logger<OpenProjectCopyAction>().error(message, ex)
-            }
+            createAndLaunchProjectCopy(repository, sourcePath, destPath, branchName, IntelliJNotificationHandler(project))
         }
     }
 }

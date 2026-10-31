@@ -77,7 +77,8 @@ class SyncPlannerTest : StringSpec({
         target shouldBe SyncTarget.SelfShutdown(listOf("--ide", ideExecutable, "--all-projects", "--all"))
     }
 
-    "forAllProjects with only the main project tracked syncs an empty list (sync-all with no syncable target still reports success for 0 projects; new gap)" {
+    "forAllProjects with only the main project tracked syncs an empty list (gap 16)" {
+        // plugin-spec gap 16: sync-all with no syncable target still reports success for 0 projects
         val repository = newRepository()
         val main = registerProject(repository, mainDir)
         MainProjectService.setMainProject(repository, main.path)

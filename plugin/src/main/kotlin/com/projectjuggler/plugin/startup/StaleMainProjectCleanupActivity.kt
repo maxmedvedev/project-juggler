@@ -5,11 +5,11 @@ import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
-import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.core.ProjectCleaner
 import com.projectjuggler.di.KoinInit
 import com.projectjuggler.plugin.di.pluginModule
 import com.projectjuggler.plugin.services.IdeInstallationService
+import com.projectjuggler.plugin.services.cleanStaleMainProjectEntryIfMainInstance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -25,11 +25,8 @@ internal class StaleMainProjectCleanupActivity : ProjectActivity {
 
             val repository = IdeInstallationService.currentIdeConfigRepository
 
-            // Only in the main IDE instance: an isolated instance has no business touching other entries
-            if (!MainProjectService.isRunningInMainInstance(repository, PathManager.getConfigDir())) return
-
             withContext(Dispatchers.IO) {
-                val removed = ProjectCleaner.getInstance(repository).cleanStaleMainProjectEntry()
+                val removed = cleanStaleMainProjectEntryIfMainInstance(repository, PathManager.getConfigDir())
                 if (removed != null) {
                     LOG.info("Removed stale isolated entry of main project '${removed.name}' (${removed.id.id})")
                 }
