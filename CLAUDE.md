@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew :plugin:test           # Plugin tests only
 ./gradlew :plugin:compileKotlin  # Quick compile check for plugin
 ./gradlew :plugin:buildPlugin    # Build IntelliJ plugin zip
-./gradlew :plugin:runIde         # Run sandbox IDE (uses ~/.project-juggler-test as base dir)
+./gradlew :plugin:runIde         # Run sandbox IDE (uses plugin/build/project-juggler-sandbox as base dir; override with -PprojectJuggler.baseDir=...)
 ./gradlew :plugin:verifyPlugin   # Plugin Verifier against recommended IDEs
 ./gradlew :core:koverHtmlReport  # Core coverage report (core/build/reports/kover/html)
 ```

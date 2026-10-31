@@ -243,7 +243,7 @@ Fable 5.1, default effort. Session 1 first.
    build change, `JugglerSettings.kt` (incl. main project and limit), `IdePathKind` additions, `JugglerSettingsTest`,
    the
    `CLAUDE.md` runIde line. Commit, e.g. `make the runide base dir portable and add the settings model`; marks this
-   entry `**Done** in <subject>`.
+   entry `**Done** in <subject>`. **Done** in `make the runide base dir portable and add the settings model`.
 2. **Configurable and startup check** (~24%). Reads: this plan, session 1's files, `IdePathsStartupCheck.kt`,
    `startup/IdePathsCheckActivity.kt`, `Utils.kt`, `plugin.xml`, the bundle, plugin-spec §1, §5.5, §7, §12, and the
    label decided in `plans/plugin-gap-13-sync-batch-consent.md` (or its commit if landed). Does: the

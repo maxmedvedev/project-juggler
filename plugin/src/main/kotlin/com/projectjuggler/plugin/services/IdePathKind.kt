@@ -7,10 +7,10 @@ import java.nio.file.Path
 /**
  * The three base paths stored per IDE installation, so they can be iterated instead of handled one by one.
  */
-internal enum class IdePathKind(private val key: String) {
-    CONFIG("ide.path.kind.config"),
-    PLUGINS("ide.path.kind.plugins"),
-    VM_OPTIONS("ide.path.kind.vmoptions");
+internal enum class IdePathKind(private val key: String, val expectsDirectory: Boolean) {
+    CONFIG("ide.path.kind.config", expectsDirectory = true),
+    PLUGINS("ide.path.kind.plugins", expectsDirectory = true),
+    VM_OPTIONS("ide.path.kind.vmoptions", expectsDirectory = false);
 
     /** The user-visible label, from the bundle. */
     val displayName: String
@@ -30,8 +30,8 @@ internal enum class IdePathKind(private val key: String) {
         VM_OPTIONS -> paths.vmOptionsFile
     }
 
-    /** [config] with the stored path of this kind replaced by [path]. */
-    fun withStored(config: IdeConfig, path: String): IdeConfig = when (this) {
+    /** [config] with the stored path of this kind replaced by [path] (null unsets it). */
+    fun withStored(config: IdeConfig, path: String?): IdeConfig = when (this) {
         CONFIG -> config.copy(baseConfigPath = path)
         PLUGINS -> config.copy(basePluginsPath = path)
         VM_OPTIONS -> config.copy(baseVmOptionsPath = path)

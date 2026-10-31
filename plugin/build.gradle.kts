@@ -76,10 +76,14 @@ kotlin {
     jvmToolchain(17)
 }
 
+// Sandbox base dir: next to build/idea-sandbox (whose paths it stores), reset by clean; -PprojectJuggler.baseDir overrides
+val runIdeBaseDir = providers.gradleProperty("projectJuggler.baseDir")
+    .orElse(layout.buildDirectory.dir("project-juggler-sandbox").map { it.asFile.absolutePath })
+
 tasks {
     runIde {
         jvmArgumentProviders += CommandLineArgumentProvider {
-            listOf("-Dproject.juggler.base.dir=/Users/max/.project-juggler-test")
+            listOf("-Dproject.juggler.base.dir=${runIdeBaseDir.get()}")
         }
     }
 }
