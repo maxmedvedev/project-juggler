@@ -73,7 +73,7 @@ Per-project behavior is exactly core-spec §8 with both booleans set. In particu
 
 ### 5.3 Decision to use the helper
 
-`isCurrentProject(repo, path)` is true iff the running IDE is isolated (its `idea.config.path` contains `.../projects/<id>/config`) and `<id>` equals the id of `ProjectManager.get(path)`. Callers:
+`isCurrentProject(repo, path)` is true iff the running IDE is isolated (its `idea.config.path` contains `.../projects/<id>/config` with either separator) and `<id>` equals the id of `ProjectManager.get(path)`. Callers:
 
 - `SyncSettingsSubAction` (Recent Projects popup, sync one project): if the target is the current project, spawn the helper with `--ide <currentIde.executablePath> --path <pathString>`; otherwise sync in-process.
 - `SyncAllProjectsAction`: if any target is the current project, spawn with `--ide <currentIde.executablePath> --all-projects`; otherwise in-process.

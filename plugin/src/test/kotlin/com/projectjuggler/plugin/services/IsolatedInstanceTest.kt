@@ -33,15 +33,45 @@ class IsolatedInstanceTest : StringSpec({
         IsolatedInstance.projectIdFromConfigPath("/home/u/.config/JetBrains/IntelliJIdea2025.1").shouldBeNull()
     }
 
-    "does not recognise Windows separators (gap 2)" {
-        // plugin-spec gap 2: the path is split on '/' only, so isolated detection fails on Windows
-        IsolatedInstance.projectIdFromConfigPath("C:\\b\\projects\\x\\config").shouldBeNull()
+    "projectIdFromConfigPath accepts Windows separators" {
+        IsolatedInstance.projectIdFromConfigPath("C:\\b\\projects\\x\\config") shouldBe ProjectId("x")
+    }
+
+    "accepts a trailing backslash" {
+        IsolatedInstance.projectIdFromConfigPath("C:\\b\\v2\\ide\\projects\\p-1a2b\\config\\") shouldBe ProjectId("p-1a2b")
+    }
+
+    "accepts a drive path with forward slashes" {
+        IsolatedInstance.projectIdFromConfigPath("C:/b/projects/x/config") shouldBe ProjectId("x")
+    }
+
+    "accepts mixed separators" {
+        IsolatedInstance.projectIdFromConfigPath("C:\\b/projects\\x/config") shouldBe ProjectId("x")
+    }
+
+    "accepts a UNC path" {
+        IsolatedInstance.projectIdFromConfigPath("\\\\srv\\share\\projects\\x\\config") shouldBe ProjectId("x")
+    }
+
+    "returns null for a Windows path to a directory other than config" {
+        IsolatedInstance.projectIdFromConfigPath("C:\\b\\projects\\x\\system").shouldBeNull()
     }
 
     "isCurrentProject is true for the registered project whose id matches" {
         val metadata = registerProject(repository, projectDir)
 
         IsolatedInstance.isCurrentProject(repository, metadata.path, currentProjectId = metadata.id) shouldBe true
+    }
+
+    "isCurrentProject is true for an id parsed from a Windows config path" {
+        val metadata = registerProject(repository, projectDir)
+        val configPath = "C:\\Users\\u\\.project-juggler\\v2\\ide\\projects\\${metadata.id.id}\\config"
+
+        IsolatedInstance.isCurrentProject(
+            repository,
+            metadata.path,
+            currentProjectId = IsolatedInstance.projectIdFromConfigPath(configPath),
+        ) shouldBe true
     }
 
     "isCurrentProject is false for a registered project with another id" {

@@ -139,7 +139,7 @@ Both entry points ask `SyncPlanner` (`services/SyncPlanner.kt`) for a `SyncTarge
 
 ### 6.3 `IsolatedInstance` (`services/IsolatedInstance.kt`)
 
-`projectIdFromConfigPath(configPath)` splits the path on `/` and returns `<id>` when it contains `projects/<id>/config`, null otherwise (gap 2). `currentProjectId()` applies it to the `idea.config.path` system property. `isCurrentProject(repo, path, currentProjectId = currentProjectId())` is true when the target project's id from metadata equals the current id; false when the property is absent or the target has no metadata. This is the test for "syncing this would stop me". `SyncPlanner` and `ShutdownSignalService` (§10) both use it.
+`projectIdFromConfigPath(configPath)` splits the path on both `/` and `\` (the value is written by `Path.toString()` on the launching OS) and returns `<id>` when it contains `projects/<id>/config`, null otherwise. `currentProjectId()` applies it to the `idea.config.path` system property. `isCurrentProject(repo, path, currentProjectId = currentProjectId())` is true when the target project's id from metadata equals the current id; false when the property is absent or the target has no metadata. This is the test for "syncing this would stop me". `SyncPlanner` and `ShutdownSignalService` (§10) both use it.
 
 ### 6.4 `performSyncWithProgress`
 
@@ -251,11 +251,10 @@ Covered, by spec:
 
 Not covered: `showMainProjectPrompt` and the other `Messages` dialogs, `RecentProjectPopup`/renderer Swing behavior, `performSelfShutdownSync` (process spawn and IDE exit), the `ShutdownSignalService` polling loop, `openProjectInCurrentIde` (`ProjectUtil.findProject`/`openOrImport`), `WindowFocuser` (core), and the actions and startup activities themselves.
 
-Gaps pinned by tests (the test name carries the number): 2 (`IsolatedInstanceTest`), 8 (`RecentProjectPopupBuilderTest`), 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
+Gaps pinned by tests (the test name carries the number): 8 (`RecentProjectPopupBuilderTest`), 9 (`IdePathSyncDetectorTest`), 11 (`BundledSyncHelperTest` cleans up after itself), 16 (`SyncPlannerTest`). Gap 10 is named in `IdeInstallationServiceTest`, but the sandbox IDE has its launcher, so the test runs the launcher branch and the home-directory fallback is not exercised.
 
 ## Known gaps
 
-2. `IsolatedInstance.projectIdFromConfigPath` (used by sync planning and `ShutdownSignalService`) splits the path on `/`; on Windows (`\`) isolated detection fails, so self-shutdown sync and stop signals never trigger there.
 3. Hardcoded user-visible strings: self-shutdown notifications ("IntelliJ will close to sync ... and reopen automatically...", "Failed to initiate self-shutdown sync: ..."), "Open with <IDE>" label, `"Unknown error"` fallbacks. `SyncType.displayName` values are also hardcoded and interpolated into bundle messages.
 4. `performSelfShutdownSync` catches `Exception`, not `Throwable` (as do `performSyncWithProgress` and `ShutdownSignalService`'s metadata load and polling). `launchProject` catches `Throwable` without rethrowing `ControlFlowException`.
 5. `OpenProjectCopyAction` uses a folder chooser for the destination, which can only select existing directories, while the validation requires the destination not to exist. The user must type a new path into the chooser for the flow to succeed. Validation and git checks run on EDT.

@@ -4,7 +4,6 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.ProjectId
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.ProjectManager
-import kotlin.io.path.Path
 
 /**
  * Detects whether this IDE runs as an isolated Project Juggler instance, from the `idea.config.path` property
@@ -13,9 +12,12 @@ import kotlin.io.path.Path
 internal object IsolatedInstance {
     const val CONFIG_PATH_PROPERTY = "idea.config.path"
 
-    /** `.../projects/<id>/config` -> id; null otherwise. Splits on '/' exactly like today (plugin-spec gap 2). */
+    /**
+     * `.../projects/<id>/config` -> id; null otherwise. Accepts both '/' and '\' because the value is written by
+     * `Path.toString()` on the launching OS, so on Windows it uses backslashes.
+     */
     fun projectIdFromConfigPath(configPath: String): ProjectId? {
-        val parts = Path(configPath).toString().split("/").filter { it.isNotEmpty() }
+        val parts = configPath.split('/', '\\').filter { it.isNotEmpty() }
         val projectsIndex = parts.indexOf("projects")
         if (projectsIndex < 0 || projectsIndex + 2 >= parts.size || parts[projectsIndex + 2] != "config") {
             return null
