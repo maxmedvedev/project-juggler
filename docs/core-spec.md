@@ -51,6 +51,7 @@ Invariant: the id is the on-disk directory name for the project's isolated state
     <ideDir>/
       config.json                           # IdeConfig
       recent.json                           # RecentProjectsIndex
+      sync-helper.json                      # SyncHelperInstallation, §3.4
       projects/
         <ProjectId>/
           metadata.json                     # ProjectMetadata
@@ -96,6 +97,14 @@ Loading a missing, empty, or corrupt file yields `IdeConfig.default(installation
 ```
 
 Newest first, truncated to `maxRecentProjects` on every `recordOpen`. An empty or corrupt file is treated as empty (corruption is logged to stderr). `recordOpen` and `remove` are read-modify-write under one lock; `getRecent` locks only for the read and skips entries whose metadata is missing or corrupt.
+
+### 3.4 `sync-helper.json` (`SyncHelperInstallation`)
+
+```json
+{ "javaHome": "<JBR of the IDE>", "installDir": "<extracted sync-helper distribution>" }
+```
+
+Written by the plugin at every IDE start for its own installation and read by the sync-helper to hand a command over to that IDE's helper (sync-helper-spec §4). `SyncHelperInstallationStore` (IDE-scoped) reads and writes it under the file lock; a missing, empty or corrupt file reads as null (corruption is logged to stderr). `SyncHelperInstallation.command(baseDir?, args, platform)` builds `<javaHome>/bin/java[.exe] -cp <installDir>/lib/* [-Dproject.juggler.base.dir=<baseDir>] com.projectjuggler.synchelper.SyncHelperMainKt <args>`, the only builder of that command line; `isUsable()` checks that the `java` binary and `lib/sync-helper.jar` exist.
 
 ## 4. Repository and registry
 
@@ -173,7 +182,7 @@ Returns `Success`, `ProcessNotFound`, `WindowNotFound`, `CommandFailed(msg)` or 
 
 ### 7.6 Launch or focus from outside the IDE (`process/LaunchOrFocus.kt`)
 
-The rule the plugin's popup (plugin-spec, `planLaunch`) uses once the project does not belong to the calling IDE:
+The rule both the plugin's popup (plugin-spec, `planLaunch`) and `sync-helper open` use once the project does not belong to the calling IDE:
 
 - `planOpen(repo, path)`: `LAUNCH` for the main project (a running main IDE opens or focuses it on launch, which a lock-based focus could not do); `FOCUS` when `isProjectOpen` (§7.4); `LAUNCH` otherwise. Creates no directories.
 - `focusRunningProject(repo, path, focus = WindowFocuser::focus)`: `readPidFromLock`, else `LockNotFound`; a dead PID gives `ProcessNotFound(pid)` without calling `focus`; otherwise `focus(pid)`'s result.

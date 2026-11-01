@@ -12,7 +12,7 @@ internal sealed interface SyncTarget {
     data class InProcess(val projects: List<ProjectMetadata>) : SyncTarget
 
     /**
-     * The current project is a target: `helperArgs` (`--ide <exe> --path <current project> <flag>`, the full
+     * The current project is a target: `helperArgs` (`sync --ide <exe> --path <current project> <flag>`, the full
      * sync-helper argument list) syncs it from outside. [others] are the remaining targets, to sync in process first.
      */
     data class SelfShutdown(
@@ -55,5 +55,5 @@ internal object SyncPlanner {
     }
 
     private fun helperArgs(repository: IdeConfigRepository, projectPath: ProjectPath, syncType: SyncType): List<String> =
-        listOf("--ide", repository.installation.executablePath, "--path", projectPath.pathString, syncType.cliFlag)
+        listOf("sync", "--ide", repository.installation.executablePath, "--path", projectPath.pathString, syncType.cliFlag)
 }

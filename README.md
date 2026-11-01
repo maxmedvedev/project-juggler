@@ -60,12 +60,27 @@ Settings | Tools | Project Juggler shows the detected IDE, lets you set or clear
 2. **Later opens** keep the isolated settings. The VM options file is regenerated when the base file changed since it was last written; otherwise only the path block is refreshed.
 3. **Sync** replaces the chosen parts from the base, stopping and restarting a running instance through a stop-request file that the isolated IDE polls.
 
+## Opening projects from other apps
+
+Launchers, scripts and terminals can open a juggled project the way the Recent Projects popup does: focus the window of
+its running IDE, or launch it. The plugin writes a launcher script at every IDE start:
+
+```bash
+~/.project-juggler/bin/sync-helper open --ide <ide-executable> --path <project-dir>
+```
+
+`--ide` is the IDE executable (e.g. `/Applications/IntelliJ IDEA.app/Contents/MacOS/idea`); that IDE must have run the
+plugin once. Exit code 0 means launched or focused, 1 a failure (message on stderr), 2 bad arguments. On Windows the
+script is `sync-helper.cmd`. With several IDEs, the script belongs to the one started last, but each command runs in
+the helper and JBR of the IDE given with `--ide`.
+
 ## Data storage
 
 Everything lives under `~/.project-juggler/` (override with `-Dproject.juggler.base.dir=<dir>`), keyed by IDE installation:
 
 ```
 ~/.project-juggler/
+  bin/sync-helper                # launcher for other apps (`sync-helper open ...`)
   launcher-logs/                 # output of launched IDEs that failed to start
   v2/<ide-dir>/
     config.json                  # base paths, main project, limits for this IDE installation

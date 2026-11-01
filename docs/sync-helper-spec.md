@@ -12,31 +12,39 @@ Conventions follow the core spec: `<base>`, `<ideDir>`, `<projRoot>`.
 A running IDE cannot sync its own isolated state: it would have to stop itself, copy files into the directories it is
 using, and start again. `sync-helper` is a minimal standalone JVM program that performs `ProjectLauncher.syncProject`
 for one project from outside the IDE process with `stopIfRunning = true, autoRestart = true`, and leaves a result file
-for the IDE to report. It exists only for this self-sync case; syncing a *different* project is done in-process by the
-plugin (`performSyncWithProgress`).
+for the IDE to report (`sync`). Syncing a *different* project is done in-process by the plugin
+(`performSyncWithProgress`).
+
+It also gives other apps (launchers, scripts, terminals) a way to open a project the way the plugin's Recent Projects
+popup does (`open`): focus the window of the project's running IDE, or launch the project. They run it through the
+launcher script the plugin publishes at `<base>/bin/sync-helper` (§5.6).
 
 ## 2. Module shape
 
-- Sources: `SyncHelperArgs.kt` (argument parsing, `USAGE`) and `SyncHelperMain.kt` (`main`, `run`), class
+- Sources: `SyncHelperArgs.kt` (argument parsing into `HelperCommand.Sync`/`Open`, `USAGE`), `HelperDispatcher.kt`
+  (§4 step 3) and `SyncHelperMain.kt` (`main`, `run`, `runSync`, `runOpen`), class
   `com.projectjuggler.synchelper.SyncHelperMainKt`.
 - Dependencies: `:core` and `koin-core`. No IntelliJ Platform dependency. JDK 17 toolchain.
 - Built with the Gradle `application` plugin, `applicationName = "sync-helper"`. `installDist` produces
   `build/install/sync-helper/{bin,lib}`. The start scripts in `bin/` are kept for manual runs; the plugin does not use
   them (§5.3).
 - Tests: `SyncHelperArgsTest` (pure parsing) and `SyncHelperRunTest` (`run` against a real registry under the test base
-  dir with a mocked `ProjectLauncher`). The `test` task sets `project.juggler.base.dir` to
-  `sync-helper/build/project-juggler-test`.
+  dir with a mocked `ProjectLauncher`, an injected focuser and a `HelperDispatcher` with a recording `startHelper`).
+  The `test` task sets `project.juggler.base.dir` to `sync-helper/build/project-juggler-test`.
 
 ## 3. Command line
 
 ```
-sync-helper --ide <ide-path> --path <project-path> (--all | --vmoptions | --config | --plugins)...
+sync-helper sync --ide <ide-path> --path <project-path> (--all | --vmoptions | --config | --plugins)...
+sync-helper open --ide <ide-path> --path <project-path>
 ```
+
+The first token is the command. Sync-type flags are `sync`-only:
 
 | Argument      | Takes value | Meaning                                                                         |
 |---------------|-------------|---------------------------------------------------------------------------------|
 | `--ide`       | yes         | `IdeInstallation.executablePath` of the IDE whose repository to use. Required.  |
-| `--path`      | yes         | A tracked project path. `~` is expanded and the path normalized. Required.      |
+| `--path`      | yes         | The project path. `~` is expanded and the path normalized. Required. `sync` needs a tracked project, `open` any existing path. |
 | `--all`       | no          | vmoptions + config + plugins.                                                   |
 | `--vmoptions` | no          | Regenerate `idea.vmoptions`.                                                    |
 | `--config`    | no          | Wipe and recopy `config/`.                                                      |
@@ -44,9 +52,10 @@ sync-helper --ide <ide-path> --path <project-path> (--all | --vmoptions | --conf
 
 Parsing rules (`parseArgs`, each violation is a `UsageException`):
 
-- At least one sync-type flag, `--ide` and `--path` are required. Sync-type flags are additive; `--all` implies the
+- A missing or unknown command (also flags without a command, the pre-command syntax) is rejected.
+- `--ide` and `--path` are required; `sync` also needs at least one sync-type flag. Sync-type flags are additive; `--all` implies the
   other three.
-- Unknown tokens (including the removed `--all-projects`) are rejected.
+- Unknown tokens (including the removed `--all-projects`, and sync-type flags for `open`) are rejected.
 - A value flag at the end, or followed by a token starting with `--`, is missing its value.
 - `--ide` or `--path` given twice is rejected.
 
@@ -54,19 +63,39 @@ Parsing rules (`parseArgs`, each violation is a `UsageException`):
 
 | Code | Meaning |
 |------|---------|
-| `0`  | Synced. |
-| `1`  | Anything after the arguments parsed failed: no ideDir for `--ide`, unknown project, or the sync itself. |
+| `0`  | Synced; or opened (launched, or the window focused). |
+| `1`  | Anything after the arguments parsed failed: no ideDir for `--ide`, unknown project or missing path, the sync, the launch or the focus. |
 | `2`  | Usage error; the message and `USAGE` are printed to stderr. |
 
 `main` is `KoinInit.init(); exitProcess(run(args))`, so the JVM always ends with the returned code.
 
 ## 4. Execution (`run`)
 
+Common steps, then `runSync` (§4.1) or `runOpen` (§4.2):
+
 1. Parse the arguments (§3). Print the base dir and the arguments as the first stdout line.
 2. `IdeRegistry.findRepository(idePath)` (core-spec §4): the registered `<ideDir>` whose stored installation has that
    executable path, whatever its display name. The helper never creates an ideDir; without one it fails with
    "No Project Juggler data for IDE <path>" (exit 1, no result file). `<base>` is `-Dproject.juggler.base.dir` if set in
-   *this* JVM (the plugin forwards its own value, §5.3), else `~/.project-juggler`.
+   *this* JVM (the plugin forwards its own value, §5.3, and writes it into the launcher, §5.6), else
+   `~/.project-juggler`.
+
+3. Dispatch (`HelperDispatcher`): the command runs in the helper the IDE recorded for itself
+   (`<ideDir>/sync-helper.json`, core-spec §3.4), so each IDE's data is handled by that IDE's own helper and JBR
+   whichever IDE published the launcher (§5.6). The helper runs `record.command(<base>, <all original args>)` with
+   inherited stdio and `PROJECT_JUGGLER_HELPER_DISPATCHED=1`, prints "Running the helper of <ide>: <installDir>",
+   and returns that process's exit code. It continues in this process instead when:
+   - `PROJECT_JUGGLER_HELPER_DISPATCHED` is set (a dispatched helper never dispatches again);
+   - there is no record (the IDE has not started with a plugin that writes one);
+   - the record's `installDir` is this helper's own (the dir above the `lib/` holding this helper's jar, compared
+     by real path; when this helper does not run from such a jar, any usable record is dispatched to);
+   - the record is not usable (its `java` or jar is gone): "Helper of <ide> at <dir> is missing, running here" on
+     stderr.
+
+   The plugin always passes its own `--ide`, whose record is its own helper, so its syncs run in-process.
+
+### 4.1 `sync`
+
 3. `ProjectManager.resolvePath(raw)` and `get(path)`; a missing `metadata.json` fails with "Project not found: <raw>"
    (exit 1, no result file).
 4. `ProjectLauncher.syncProject(project, …, SyncOptions(stopIfRunning = true, autoRestart = true, shutdownTimeout = 60,
@@ -84,6 +113,20 @@ Parsing rules (`parseArgs`, each violation is a `UsageException`):
 
 The main project is never isolated, so the plugin never sends it; if it is passed, core's `SyncException` ends up in the
 result file and the exit code is 1.
+
+### 4.2 `open`
+
+3. A path that does not exist fails with "Path does not exist: <raw>" (exit 1). Otherwise `ProjectManager.resolvePath`.
+   The project need not be tracked yet.
+4. `planOpen(repo, path)` (core-spec §7.6):
+   - `FOCUS`: `focusRunningProject` (PID from the lock, then `WindowFocuser.focus`). `Success` is exit 0; any other
+     result prints "Cannot focus <name>: <reason>" and is exit 1.
+   - `LAUNCH`: `ProjectLauncher.launch(path)` (core-spec §7.1/§7.2): registers and records an isolated project and
+     starts its IDE; the main project goes to `launchMain`, so a running main IDE opens or focuses it. Exit 0.
+5. A `Throwable` from step 4 prints its stack trace and "Failed to open <name>: <message>", exit 1.
+
+`open` writes no result file and returns right after the IDE process started: a crash of the launched IDE is not
+reported (same as gap 1).
 
 ## 5. Plugin contract (`BundledSyncHelper`, `Sync.kt`)
 
@@ -129,7 +172,7 @@ The helper runs on the IDE's own JVM, bypassing the start scripts:
 
 `IsolatedInstance.isCurrentProject(repo, path)` is true iff the running IDE is isolated (its `idea.config.path`
 contains `.../projects/<id>/config` with either separator) and `<id>` equals the id of `ProjectManager.get(path)`.
-The helper arguments are always `--ide <currentIde.executablePath> --path <project> <flag>`, the flag from `SyncType`
+The helper arguments are always `sync --ide <currentIde.executablePath> --path <project> <flag>`, the flag from `SyncType`
 (`All -> --all`, `VmOptions -> --vmoptions`, `Config -> --config`, `Plugins -> --plugins`).
 
 - `SyncSettingsSubAction` (sync one project): `SyncPlanner.forProject` gives `SelfShutdown` for the current project,
@@ -151,6 +194,20 @@ The helper arguments are always `--ide <currentIde.executablePath> --path <proje
    stopped it, and the relaunched IDE reports at startup instead.
 4. A failure to start the helper is logged as a warning and shows "Failed to initiate self-shutdown sync: ..."; the IDE
    keeps running.
+
+### 5.6 Launcher for other apps (`BundledSyncHelper.publishLauncher`, `PublishSyncHelperActivity`)
+
+- Once per IDE session, the first `postStartupActivity` run writes `<base>/bin/sync-helper` (`sync-helper.cmd` on
+  Windows) on an IO thread. It extracts the helper first (§5.2) if needed. A failure is logged as an error.
+- The script runs the §5.3 command line with an explicit `-Dproject.juggler.base.dir=<base>` and its own arguments
+  appended: `#!/bin/sh` + `exec '<arg>'... "$@"` (single-quoted, mode 755), or `@echo off` + `"<arg>"... %*` on
+  Windows. It uses the publishing IDE's JBR and extraction, so no system `java` is needed.
+- It is written to a temp file in `<base>/bin` and moved into place with `ATOMIC_MOVE`; an existing launcher with the
+  same content is left untouched. The last IDE to start wins, but its helper is only the front: before the script,
+  the IDE records its own helper in `<ideDir>/sync-helper.json` (core-spec §3.4), and the front hands each command
+  over to the helper of the `--ide` IDE (§4 step 3).
+
+External usage: `~/.project-juggler/bin/sync-helper open --ide <executable> --path <project>`.
 
 ## 6. Result reporting
 
@@ -189,3 +246,8 @@ The helper arguments are always `--ide <currentIde.executablePath> --path <proje
 2. The `bin/` start scripts are bundled and extracted but unused by the plugin.
 3. A result file nobody consumes stays in `<projRoot>` if the user never opens that project isolated again; a later
    self-sync overwrites it.
+4. The launcher (§5.6) points at the JBR and extraction of the IDE that wrote it. It breaks when that IDE is
+   uninstalled, or when a plugin update in that IDE re-extracts the helper without a restart (the old extraction is
+   deleted), until an IDE starts again. A stale record of another IDE only costs the dispatch (§4 step 3).
+5. The front parses the arguments before dispatching, so a newer target helper's commands or flags that the front
+   does not know are rejected as usage errors.

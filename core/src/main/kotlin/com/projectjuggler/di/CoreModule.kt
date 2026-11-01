@@ -40,6 +40,7 @@ val ideScopedModule = module {
         scoped { BaseVMOptionsTracker(get()) }
         scoped { ShutdownSignalManager(get()) }
         scoped { SelfSyncResultStore(get()) }
+        scoped { SyncHelperInstallationStore(get()) }
         scoped { RecentProjectsIndex(get()) }
         scoped { IntelliJLauncher(get(), get()) }
         scoped { ProjectLauncher(get()) }

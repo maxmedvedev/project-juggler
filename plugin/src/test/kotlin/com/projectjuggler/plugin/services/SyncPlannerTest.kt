@@ -34,7 +34,7 @@ class SyncPlannerTest : StringSpec({
         val target = SyncPlanner.forProject(repository, metadata.path, SyncType.VmOptions, currentProjectId = metadata.id)
 
         target shouldBe SyncTarget.SelfShutdown(
-            listOf("--ide", ideExecutable, "--path", metadata.path.pathString, "--vmoptions")
+            listOf("sync", "--ide", ideExecutable, "--path", metadata.path.pathString, "--vmoptions")
         )
     }
 
@@ -77,7 +77,7 @@ class SyncPlannerTest : StringSpec({
         val target = SyncPlanner.forAllProjects(repository, SyncType.All, currentProjectId = a.id)
 
         target shouldBe SyncTarget.SelfShutdown(
-            helperArgs = listOf("--ide", ideExecutable, "--path", a.path.pathString, "--all"),
+            helperArgs = listOf("sync", "--ide", ideExecutable, "--path", a.path.pathString, "--all"),
             others = listOf(b)
         )
     }
@@ -89,7 +89,7 @@ class SyncPlannerTest : StringSpec({
         val target = SyncPlanner.forAllProjects(repository, SyncType.Plugins, currentProjectId = a.id)
 
         target shouldBe SyncTarget.SelfShutdown(
-            listOf("--ide", ideExecutable, "--path", a.path.pathString, "--plugins")
+            listOf("sync", "--ide", ideExecutable, "--path", a.path.pathString, "--plugins")
         )
     }
 

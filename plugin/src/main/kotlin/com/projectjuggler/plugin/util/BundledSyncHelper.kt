@@ -3,17 +3,19 @@ package com.projectjuggler.plugin.util
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
+import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.core.SyncHelperInstallation
+import com.projectjuggler.core.SyncHelperInstallationStore
 import com.projectjuggler.platform.Platform
 import com.projectjuggler.plugin.rethrowIfControlFlow
-import java.io.File
 import java.io.IOException
 import java.net.URI
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
 import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
@@ -28,6 +30,8 @@ import kotlin.io.path.invariantSeparatorsPathString
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /**
  * Manages extraction and execution of the bundled sync-helper distribution.
@@ -40,6 +44,7 @@ import kotlin.io.path.listDirectoryEntries
 object BundledSyncHelper {
     const val LOG_FILE_NAME = "sync-helper.log"
     const val MAIN_CLASS = SyncHelperInstallation.MAIN_CLASS
+    const val LAUNCHER_NAME = "sync-helper"
 
     private const val RESOURCE_ROOT = "sync-helper"
     private const val MARKER = SyncHelperInstallation.MARKER
@@ -108,6 +113,71 @@ object BundledSyncHelper {
         log.info("Started sync-helper: ${command.joinToString(" ")}; output in $logFile")
         return process
     }
+
+    /**
+     * Records this IDE's helper in [repository] ([SyncHelperInstallationStore]) and writes the launcher script that
+     * other apps run the helper through (`sync-helper open ...`, see `docs/sync-helper-spec.md`):
+     * `<base dir>/bin/sync-helper`, `sync-helper.cmd` on Windows. The script runs [command] on this IDE's JVM against
+     * this IDE's extraction; the last IDE to start wins, and its helper hands over to the helper recorded for the
+     * `--ide` given. Extracts the helper if needed. Must not be called on EDT.
+     *
+     * @return the launcher script
+     */
+    @RequiresBackgroundThread
+    fun publishLauncher(repository: IdeConfigRepository): Path =
+        publishLauncher(repository, getInstallDir(), Path(System.getProperty("java.home")), IdeRegistry.getDefaultBaseDir())
+
+    internal fun publishLauncher(
+        repository: IdeConfigRepository,
+        installDir: Path,
+        javaHome: Path,
+        baseDir: Path,
+        platform: Platform = Platform.current(),
+    ): Path {
+        SyncHelperInstallationStore.getInstance(repository)
+            .write(SyncHelperInstallation(javaHome.toString(), installDir.toString()))
+        return writeLauncherScript(baseDir.resolve("bin"), installDir, javaHome, baseDir.toString(), platform)
+    }
+
+    /**
+     * Writes the launcher for [installDir] and [javaHome] into [binDir] through a temp file and an atomic move;
+     * leaves an existing launcher with the same content untouched.
+     */
+    internal fun writeLauncherScript(
+        binDir: Path,
+        installDir: Path,
+        javaHome: Path,
+        baseDir: String,
+        platform: Platform = Platform.current(),
+    ): Path {
+        val launcher = binDir.resolve(if (platform == Platform.WINDOWS) "$LAUNCHER_NAME.cmd" else LAUNCHER_NAME)
+        val script = launcherScript(command(installDir, javaHome, baseDir, args = emptyList(), platform), platform)
+        if (launcher.isRegularFile() && launcher.readText() == script) return launcher
+
+        Files.createDirectories(binDir)
+        val tmp = Files.createTempFile(binDir, "$LAUNCHER_NAME.", ".tmp")
+        try {
+            tmp.writeText(script)
+            if (platform != Platform.WINDOWS) {
+                Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rwxr-xr-x"))
+            }
+            Files.move(tmp, launcher, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: Throwable) {
+            deleteQuietly(tmp)
+            throw e
+        }
+        log.info("sync-helper launcher written to: $launcher")
+        return launcher
+    }
+
+    /** A script that runs [command] with the script's own arguments appended. */
+    internal fun launcherScript(command: List<String>, platform: Platform): String =
+        if (platform == Platform.WINDOWS) {
+            "@echo off\r\n${command.joinToString(" ") { "\"$it\"" }} %*\r\n"
+        } else {
+            val quoted = command.joinToString(" ") { "'${it.replace("'", "'\\''")}'" }
+            "#!/bin/sh\n# Written by the Project Juggler plugin at IDE start\nexec $quoted \"\$@\"\n"
+        }
 
     internal fun defaultRoot(): Path =
         PathManager.getSystemDir().resolve("project-juggler").resolve("sync-helper")

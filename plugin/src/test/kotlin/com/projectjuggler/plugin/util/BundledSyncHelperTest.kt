@@ -1,7 +1,10 @@
 package com.projectjuggler.plugin.util
 
 import com.projectjuggler.core.SyncHelperInstallation
+import com.projectjuggler.core.SyncHelperInstallationStore
+import com.projectjuggler.di.KoinTestExtension
 import com.projectjuggler.platform.Platform
+import com.projectjuggler.plugin.test.testRepository
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -26,6 +29,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.deleteRecursively
 import kotlin.io.path.exists
 import kotlin.io.path.getLastModifiedTime
+import kotlin.io.path.isExecutable
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
@@ -34,6 +38,7 @@ import kotlin.io.path.setLastModifiedTime
 
 @OptIn(ExperimentalPathApi::class)
 class BundledSyncHelperTest : StringSpec({
+    extensions(KoinTestExtension())
 
     val tempDir = createTempDir("bundled-helper")
 
@@ -177,9 +182,83 @@ class BundledSyncHelperTest : StringSpec({
         logFile.readText() shouldContain "--bogus"
     }
 
+    "the Unix launcher quotes the command and appends its arguments" {
+        val script = BundledSyncHelper.launcherScript(listOf("/my jbr/bin/java", "-cp", "/it's/lib/*"), Platform.LINUX)
+
+        script shouldBe "#!/bin/sh\n# Written by the Project Juggler plugin at IDE start\n" +
+            "exec '/my jbr/bin/java' '-cp' '/it'\\''s/lib/*' \"\$@\"\n"
+    }
+
+    "the Windows launcher quotes the command and appends its arguments" {
+        val script = BundledSyncHelper.launcherScript(listOf("C:\\My JBR\\bin\\java.exe", "-cp"), Platform.WINDOWS)
+
+        script shouldBe "@echo off\r\n\"C:\\My JBR\\bin\\java.exe\" \"-cp\" %*\r\n"
+    }
+
+    "writeLauncherScript writes an executable script for the install dir and base dir" {
+        val binDir = newRoot().resolve("bin")
+
+        val launcher = BundledSyncHelper.writeLauncherScript(
+            binDir, Path("/helper"), Path("/jbr"), baseDir = "/base", platform = Platform.LINUX
+        )
+
+        launcher shouldBe binDir.resolve(BundledSyncHelper.LAUNCHER_NAME)
+        launcher.isExecutable() shouldBe true
+        launcher.readText() shouldBe BundledSyncHelper.launcherScript(
+            BundledSyncHelper.command(Path("/helper"), Path("/jbr"), "/base", emptyList(), Platform.LINUX),
+            Platform.LINUX,
+        )
+        binDir.listDirectoryEntries().map { it.name } shouldContainExactly listOf(BundledSyncHelper.LAUNCHER_NAME)
+    }
+
+    "writeLauncherScript leaves an unchanged launcher alone and replaces a changed one" {
+        val binDir = newRoot().resolve("bin")
+        fun publish(installDir: String) = BundledSyncHelper.writeLauncherScript(
+            binDir, Path(installDir), Path("/jbr"), baseDir = "/base", platform = Platform.LINUX
+        )
+        val launcher = publish("/helper")
+        val old = FileTime.from(Instant.now().minus(1, ChronoUnit.DAYS))
+        launcher.setLastModifiedTime(old)
+
+        publish("/helper")
+        launcher.getLastModifiedTime() shouldBe old
+
+        publish("/other-helper")
+        launcher.readText() shouldContain "/other-helper"
+    }
+
+    "the published launcher runs the helper".config(enabled = Platform.current() != Platform.WINDOWS) {
+        val launcher = BundledSyncHelper.writeLauncherScript(
+            binDir = newRoot().resolve("bin"),
+            installDir = BundledSyncHelper.getInstallDir(newRoot(), null),
+            javaHome = Path(System.getProperty("java.home")),
+            baseDir = tempDir.resolve("base").toString(),
+        )
+
+        val process = ProcessBuilder(launcher.toString(), "--bogus").redirectErrorStream(true).start()
+
+        process.waitFor(60, TimeUnit.SECONDS) shouldBe true
+        // Exit code 2 (usage error) proves the main class ran and got the launcher's arguments
+        process.exitValue() shouldBe 2
+        process.inputStream.bufferedReader().readText() shouldContain "Unknown command: --bogus"
+    }
+
     "jarPath decodes a jar URL with a space in the plugin dir" {
         val jar = tempDir.resolve("Application Support").resolve("plugin.jar")
 
         BundledSyncHelper.jarPath(URL("jar:${jar.toUri()}!/sync-helper/lib")) shouldBe jar
+    }
+
+    "publishLauncher records this IDE's helper in the repository and writes the launcher under the base dir" {
+        val baseDir = newRoot()
+        val repository = testRepository(baseDir.resolve("v2").resolve("ide"))
+
+        val launcher = BundledSyncHelper.publishLauncher(
+            repository, Path("/helper"), Path("/jbr"), baseDir, Platform.LINUX
+        )
+
+        SyncHelperInstallationStore.getInstance(repository).read() shouldBe SyncHelperInstallation("/jbr", "/helper")
+        launcher shouldBe baseDir.resolve("bin").resolve(BundledSyncHelper.LAUNCHER_NAME)
+        launcher.readText() shouldContain "-Dproject.juggler.base.dir=$baseDir"
     }
 })

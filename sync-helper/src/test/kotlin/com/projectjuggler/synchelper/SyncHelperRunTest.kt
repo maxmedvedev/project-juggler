@@ -5,14 +5,20 @@ import com.projectjuggler.config.IdeConfigRepository
 import com.projectjuggler.config.IdeInstallation
 import com.projectjuggler.config.IdeRegistry
 import com.projectjuggler.config.ProjectMetadata
+import com.projectjuggler.config.ProjectPath
+import com.projectjuggler.core.DirectoryManager
 import com.projectjuggler.core.ProjectManager
 import com.projectjuggler.core.SelfSyncResultStore
+import com.projectjuggler.core.SyncHelperInstallation
+import com.projectjuggler.core.SyncHelperInstallationStore
 import com.projectjuggler.core.SyncOptions
 import com.projectjuggler.core.SyncProgress
 import com.projectjuggler.core.SyncTypeNames
 import com.projectjuggler.di.KoinTestExtension
+import com.projectjuggler.platform.Platform
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.process.SyncException
+import com.projectjuggler.process.WindowFocuser.FocusResult
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -28,9 +34,11 @@ import io.mockk.verify
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.createFile
 import kotlin.io.path.deleteRecursively
 import kotlin.io.path.exists
 import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.writeText
 
 @OptIn(ExperimentalPathApi::class)
 class SyncHelperRunTest : StringSpec({
@@ -62,11 +70,49 @@ class SyncHelperRunTest : StringSpec({
         every { syncProject(any(), any(), any(), any(), any()) } just runs
     }
 
-    fun runHelper(vararg args: String, launcher: ProjectLauncher = syncingLauncher()): Int =
-        run(args.toList().toTypedArray(), IdeRegistry.getInstance(), launcherFor = { launcher })
+    fun runHelper(
+        vararg args: String,
+        launcher: ProjectLauncher = syncingLauncher(),
+        focus: (Int) -> FocusResult = { error("focus must not be called") },
+        dispatcher: HelperDispatcher = HelperDispatcher(ownInstallDir = null, alreadyDispatched = false) { _, _ ->
+            error("no helper must be started")
+        },
+    ): Int = run(
+        args.toList().toTypedArray(), IdeRegistry.getInstance(), launcherFor = { launcher }, focus = focus,
+        dispatcher = dispatcher,
+    )
+
+    /** A fake JBR and helper distribution recorded as [repository]'s helper, with the files `isUsable` checks. */
+    fun recordHelper(repository: IdeConfigRepository, name: String, usable: Boolean = true): SyncHelperInstallation {
+        val root = Files.createDirectories(projectsDir.resolve("helpers").resolve(name))
+        val javaHome = root.resolve("jbr")
+        val installDir = root.resolve("helper")
+        if (usable) {
+            Files.createDirectories(javaHome.resolve("bin")).resolve(if (Platform.current() == Platform.WINDOWS) "java.exe" else "java").createFile()
+            Files.createDirectories(installDir.resolve("lib")).resolve("sync-helper.jar").createFile()
+        }
+        return SyncHelperInstallation(javaHome.toString(), installDir.toString())
+            .also(SyncHelperInstallationStore.getInstance(repository)::write)
+    }
+
+    class StartedHelper(val command: List<String>, val environment: Map<String, String>)
+
+    fun launchingLauncher(): ProjectLauncher = mockk {
+        every { launch(any(), any()) } just runs
+    }
+
+    fun openArgs(path: String) = arrayOf("open", "--ide", installation.executablePath, "--path", path)
+
+    /** Marks [project]'s isolated IDE as running in this test JVM. */
+    fun markRunning(repository: IdeConfigRepository, project: ProjectMetadata): Int {
+        val pid = ProcessHandle.current().pid().toInt()
+        val configDir = DirectoryManager.getInstance(repository).getProjectRoot(project.path).resolve("config")
+        Files.createDirectories(configDir).resolve(".lock").writeText(pid.toString())
+        return pid
+    }
 
     fun args(project: ProjectMetadata, vararg types: String) =
-        arrayOf("--ide", installation.executablePath, "--path", project.path.pathString, *types)
+        arrayOf("sync", "--ide", installation.executablePath, "--path", project.path.pathString, *types)
 
     fun consumeResult(repository: IdeConfigRepository, project: ProjectMetadata) =
         SelfSyncResultStore.getInstance(repository).consume(project)
@@ -149,7 +195,7 @@ class SyncHelperRunTest : StringSpec({
     "an unknown IDE returns 1 and creates no dir" {
         val launcher = syncingLauncher()
 
-        runHelper("--ide", "/unknown/ide", "--path", projectsDir.toString(), "--all", launcher = launcher) shouldBe
+        runHelper("sync", "--ide", "/unknown/ide", "--path", projectsDir.toString(), "--all", launcher = launcher) shouldBe
             EXIT_FAILURE
 
         verify(exactly = 0) { launcher.syncProject(any(), any(), any(), any(), any()) }
@@ -161,9 +207,137 @@ class SyncHelperRunTest : StringSpec({
         val launcher = syncingLauncher()
         val untracked: Path = Files.createDirectories(projectsDir.resolve("untracked"))
 
-        runHelper("--ide", installation.executablePath, "--path", untracked.toString(), "--all", launcher = launcher) shouldBe
+        runHelper("sync", "--ide", installation.executablePath, "--path", untracked.toString(), "--all", launcher = launcher) shouldBe
             EXIT_FAILURE
 
         verify(exactly = 0) { launcher.syncProject(any(), any(), any(), any(), any()) }
+    }
+
+    "open launches a project that is not running, also a new one" {
+        registerIde()
+        val dir = Files.createDirectories(projectsDir.resolve("new-project"))
+        val launcher = launchingLauncher()
+
+        runHelper(*openArgs(dir.toString()), launcher = launcher) shouldBe EXIT_OK
+
+        verify { launcher.launch(ProjectPath(dir.toString()), any()) }
+    }
+
+    "open focuses the window of a running project" {
+        val repository = registerIde()
+        val project = registerProject(repository, "running")
+        val pid = markRunning(repository, project)
+        val launcher = launchingLauncher()
+        val focused = mutableListOf<Int>()
+
+        runHelper(*openArgs(project.path.pathString), launcher = launcher, focus = {
+            focused += it
+            FocusResult.Success
+        }) shouldBe EXIT_OK
+
+        focused shouldBe listOf(pid)
+        verify(exactly = 0) { launcher.launch(any(), any()) }
+    }
+
+    "open returns 1 when focusing fails" {
+        val repository = registerIde()
+        val project = registerProject(repository, "unfocusable")
+        markRunning(repository, project)
+
+        runHelper(*openArgs(project.path.pathString), launcher = launchingLauncher(), focus = {
+            FocusResult.WindowNotFound(it)
+        }) shouldBe EXIT_FAILURE
+    }
+
+    "open returns 1 when launching throws" {
+        registerIde()
+        val dir = Files.createDirectories(projectsDir.resolve("broken"))
+        val launcher = mockk<ProjectLauncher> {
+            every { launch(any(), any()) } throws IllegalStateException("no executable")
+        }
+
+        runHelper(*openArgs(dir.toString()), launcher = launcher) shouldBe EXIT_FAILURE
+    }
+
+    "open of an unknown IDE returns 1 and creates no dir" {
+        val launcher = launchingLauncher()
+
+        runHelper("open", "--ide", "/unknown/ide", "--path", projectsDir.toString(), launcher = launcher) shouldBe
+            EXIT_FAILURE
+
+        verify(exactly = 0) { launcher.launch(any(), any()) }
+        if (v2Dir.exists()) v2Dir.listDirectoryEntries().shouldBeEmpty()
+    }
+
+    "open of a missing path returns 1 without launching" {
+        registerIde()
+        val launcher = launchingLauncher()
+
+        runHelper(*openArgs(projectsDir.resolve("missing").toString()), launcher = launcher) shouldBe EXIT_FAILURE
+
+        verify(exactly = 0) { launcher.launch(any(), any()) }
+    }
+
+    "a command for an IDE with another recorded helper runs in that helper and returns its exit code" {
+        val repository = registerIde()
+        val target = recordHelper(repository, "other")
+        val launcher = launchingLauncher()
+        val started = mutableListOf<StartedHelper>()
+        val dispatcher = HelperDispatcher(ownInstallDir = projectsDir.resolve("own"), alreadyDispatched = false) { command, env ->
+            started += StartedHelper(command, env)
+            7
+        }
+        val args = openArgs(projectsDir.toString())
+
+        runHelper(*args, launcher = launcher, dispatcher = dispatcher) shouldBe 7
+
+        started.single().command shouldBe target.command(IdeRegistry.getDefaultBaseDir().toString(), args.toList())
+        started.single().environment shouldBe mapOf(DISPATCHED_ENV to "1")
+        verify(exactly = 0) { launcher.launch(any(), any()) }
+    }
+
+    "a command whose recorded helper is this one runs here" {
+        val repository = registerIde()
+        val own = recordHelper(repository, "own")
+        val launcher = launchingLauncher()
+        val dispatcher = HelperDispatcher(ownInstallDir = Path.of(own.installDir), alreadyDispatched = false) { _, _ ->
+            error("no helper must be started")
+        }
+
+        runHelper(*openArgs(projectsDir.toString()), launcher = launcher, dispatcher = dispatcher) shouldBe EXIT_OK
+
+        verify { launcher.launch(any(), any()) }
+    }
+
+    "a command for an IDE without a recorded helper runs here" {
+        registerIde()
+        val launcher = launchingLauncher()
+
+        runHelper(*openArgs(projectsDir.toString()), launcher = launcher) shouldBe EXIT_OK
+
+        verify { launcher.launch(any(), any()) }
+    }
+
+    "a recorded helper whose files are gone is skipped" {
+        val repository = registerIde()
+        recordHelper(repository, "removed", usable = false)
+        val launcher = launchingLauncher()
+
+        runHelper(*openArgs(projectsDir.toString()), launcher = launcher) shouldBe EXIT_OK
+
+        verify { launcher.launch(any(), any()) }
+    }
+
+    "a dispatched helper never dispatches again" {
+        val repository = registerIde()
+        recordHelper(repository, "loop")
+        val launcher = launchingLauncher()
+        val dispatcher = HelperDispatcher(ownInstallDir = null, alreadyDispatched = true) { _, _ ->
+            error("no helper must be started")
+        }
+
+        runHelper(*openArgs(projectsDir.toString()), launcher = launcher, dispatcher = dispatcher) shouldBe EXIT_OK
+
+        verify { launcher.launch(any(), any()) }
     }
 })
