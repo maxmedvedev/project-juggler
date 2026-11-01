@@ -10,6 +10,7 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldMatch
+import java.net.URL
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Instant
@@ -174,5 +175,11 @@ class BundledSyncHelperTest : StringSpec({
         // Exit code 2 (usage error) proves the main class ran and parsed the arguments
         process.exitValue() shouldBe 2
         logFile.readText() shouldContain "--bogus"
+    }
+
+    "jarPath decodes a jar URL with a space in the plugin dir" {
+        val jar = tempDir.resolve("Application Support").resolve("plugin.jar")
+
+        BundledSyncHelper.jarPath(URL("jar:${jar.toUri()}!/sync-helper/lib")) shouldBe jar
     }
 })

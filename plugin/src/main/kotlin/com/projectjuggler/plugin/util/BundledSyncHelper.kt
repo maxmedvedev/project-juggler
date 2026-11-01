@@ -9,6 +9,7 @@ import com.projectjuggler.platform.Platform
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import java.io.File
 import java.io.IOException
+import java.net.URI
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
@@ -235,7 +236,7 @@ object BundledSyncHelper {
                     ?: throw IllegalStateException("Resource not found: $resourcePath")
                 log.debug("Reading resource: $resourcePath from $resourceUrl")
                 if (resourceUrl.protocol == "jar") {
-                    jarEntries(JarFile(jarPath(resourceUrl)).also(openJars::add), resourcePath, dir)
+                    jarEntries(JarFile(jarPath(resourceUrl).toFile()).also(openJars::add), resourcePath, dir)
                 } else {
                     fileEntries(Path.of(resourceUrl.toURI()), dir)
                 }
@@ -246,8 +247,12 @@ object BundledSyncHelper {
         }
     }
 
-    private fun jarPath(resourceUrl: URL): String =
-        resourceUrl.toString().substringAfter("jar:file:").substringBefore("!")
+    /**
+     * The jar file of a `jar:file:<jar>!/<entry>` [resourceUrl], percent-decoded: the URL encodes a space in the
+     * plugin dir (`Application Support` on macOS) as `%20`.
+     */
+    internal fun jarPath(resourceUrl: URL): Path =
+        Path.of(URI(resourceUrl.toString().removePrefix("jar:").substringBefore("!/")))
 
     private fun jarEntries(jarFile: JarFile, resourcePath: String, dir: String): List<BundledEntry> =
         jarFile.entries().asSequence()

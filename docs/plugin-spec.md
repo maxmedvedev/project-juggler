@@ -306,7 +306,7 @@ Covered, by spec:
 | `di/PluginKoinTest` | `IdeInstallationService.getInstance()` starts Koin, returns one instance, loads `pluginModule` into a Koin started without it |
 | `services/PlatformRecentProjectsTest` | recent paths and icon fallbacks for another `RecentProjectsManager`, paths from `RecentProjectsManagerBase` |
 | `actions/recent/CompactPathTest` | `compactPath` |
-| `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, jar marker, `command` delegating to core's `SyncHelperInstallation.command` (whose Unix/Windows cases are in core's `SyncHelperInstallationTest`), `start` output in the log file |
+| `util/BundledSyncHelperTest` | fingerprint dir under the root, reuse without re-extraction, re-extraction after deletion, stale fingerprint and temp-dir cleanup, existing extraction left as is, legacy temp-dir cleanup by layout and age, nothing created in the system temp dir, parallel calls, fingerprint format, jar marker, `command` delegating to core's `SyncHelperInstallation.command` (whose Unix/Windows cases are in core's `SyncHelperInstallationTest`), `start` output in the log file, `jarPath` percent-decoding |
 | `util/IntelliJNotificationHandlerTest` (test application) | notification group, type and content |
 | `services/IsolatedInstanceTest` | `projectIdFromConfigPath`, `isCurrentProject` |
 | `shutdown/StopRequestTrackerTest` | fresh, repeated, stale and unparseable stop requests; age against `timeoutSeconds` and the 5-minute fallback |
