@@ -53,7 +53,7 @@ Actions are thin; all run `update` on BGT. `actionPerformed` shows choosers/dial
    - `SetAsMain`: `setMainProject` (persist, `ProjectCleaner.cleanStaleMainProjectEntry()`, `notification.success.set.main`) and open the project in the current IDE (`openProjectInCurrentIde`, focuses it if already open).
    - `OpenIsolated`: continue to step 2.
    - `Cancelled`: nothing.
-2. Otherwise queue a non-cancellable `Task.Backgroundable` titled `progress.opening.project` that runs the step returned by `planLaunch(repo, path, PathManager.getConfigDir())` (`services/LaunchProject.kt`). `planLaunch` picks one step. If the project belongs to the current IDE (`belongsToCurrentIde`: the main project in the main instance, or an isolated project whose `<projRoot>/config` is `PathManager.getConfigDir()`), open it here (`OPEN_IN_CURRENT_IDE`): focus its frame if already open (`ProjectUtil.findProject`), else `ProjectUtil.openOrImport` in a new frame (on a pooled thread). Else the main project is always launched (`LAUNCH`, `launchMain`; a running main IDE opens or focuses it). Else focus when `ProjectLockUtils.isProjectOpen(repo, path)` (`FOCUS`, `focusExistingProject`, §4.4), launch otherwise (`LAUNCH`, `launchProject`, §4.5).
+2. Otherwise queue a non-cancellable `Task.Backgroundable` titled `progress.opening.project` that runs the step returned by `planLaunch(repo, path, PathManager.getConfigDir())` (`services/LaunchProject.kt`). `planLaunch` picks one step. If the project belongs to the current IDE (`belongsToCurrentIde`: the main project in the main instance, or an isolated project whose `<projRoot>/config` is `PathManager.getConfigDir()`), open it here (`OPEN_IN_CURRENT_IDE`): focus its frame if already open (`ProjectUtil.findProject`), else `ProjectUtil.openOrImport` in a new frame (on a pooled thread). Else the step of core's `planOpen` (core-spec §7.6): the main project is always launched (`LAUNCH`, `launchMain`; a running main IDE opens or focuses it); else focus when `ProjectLockUtils.isProjectOpen(repo, path)` (`FOCUS`, `focusExistingProject`, §4.4), launch otherwise (`LAUNCH`, `launchProject`, §4.5).
 
 ### 4.3 Main-project prompt (`MainProjectPromptService`)
 
@@ -61,7 +61,7 @@ Yes/No/Cancel dialog (`dialog.main.project.prompt.*`) with a "Don't ask again" c
 
 ### 4.4 Focus (`services/FocusExistingProject.kt`)
 
-`readPidFromLock` -> null means `notification.error.focus.no.pid`. `isProcessRunning(pid)` false means `notification.error.focus.process.not.found`. Then `WindowFocuser.focus(pid)`; each non-`Success` result maps to one error message (`focus.process.not.found`, `focus.window.not.found`, `focus.failed`, `focus.tool.missing`). Any other `Throwable` -> `focus.exception` (logged as a warning). `ControlFlowException` is rethrown. Success is silent.
+Calls core's `focusRunningProject` (core-spec §7.6) and maps each non-`Success` result to one error message: `LockNotFound` (no PID in the lock) -> `focus.no.pid`, `ProcessNotFound` (also a dead lock PID) -> `focus.process.not.found`, `WindowNotFound` -> `focus.window.not.found`, `CommandFailed` -> `focus.failed`, `ToolNotInstalled` -> `focus.tool.missing`. Any other `Throwable` -> `focus.exception` (logged as a warning). `ControlFlowException` is rethrown. Success is silent.
 
 ### 4.5 Launch (`services/LaunchProject.kt`)
 
@@ -314,7 +314,7 @@ Covered, by spec:
 | `services/SyncPlannerTest` | `forProject`, `forAllProjects` targets and helper args; with the current project, `--path <current>` and `others` without it; the main project excluded |
 | `services/SelfSyncReportTest` (test application) | every `reportSelfSyncResult` case (success, all types, restart error, failure, helper exit code, nothing at startup or exit 0, unknown project) and that the result is consumed |
 | `services/SyncProjectsTest` | sync calls, options, progress texts and fractions, continuing past failures, cancellation before each project and from a project's sync, `describeFailures` |
-| `services/LaunchPlanTest` | `planLaunch` step per target and current IDE, another installation's repository, no directories created |
+| `services/LaunchPlanTest` | `planLaunch` current-IDE step and mapping of core's `planOpen` (whose cases are in core's `LaunchOrFocusTest`), another installation's repository, no directories created |
 | `services/OpenWithIdeTest` | `openWithInstallations` exclusions, base-settings filter and order; `shouldPromptForMainProject` per target repository |
 | `services/CurrentIdeProjectTest` | `belongsToCurrentIde` for isolated, unregistered and main projects; `isProjectRunning` platform vs lock |
 | `services/LaunchProjectTest` | launch, crash and start-failure notifications, control-flow exceptions propagate |

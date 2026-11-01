@@ -7,8 +7,8 @@ import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
-import com.projectjuggler.process.WindowFocuser
-import com.projectjuggler.util.ProjectLockUtils
+import com.projectjuggler.process.WindowFocuser.FocusResult
+import com.projectjuggler.process.focusRunningProject
 
 private val LOG = fileLogger()
 
@@ -18,50 +18,20 @@ fun focusExistingProject(
     notificationHandler: NotificationHandler
 ) {
     try {
-        // Read PID from lock file
-        val pid = ProjectLockUtils.readPidFromLock(ideConfigRepository, projectPath)
-        if (pid == null) {
-            notificationHandler.showErrorNotification(
-                ProjectJugglerBundle.message("notification.error.focus.no.pid", projectPath.name),
-            )
-            return
+        val error = when (val result = focusRunningProject(ideConfigRepository, projectPath)) {
+            is FocusResult.Success -> null
+            is FocusResult.LockNotFound ->
+                ProjectJugglerBundle.message("notification.error.focus.no.pid", projectPath.name)
+            is FocusResult.ProcessNotFound ->
+                ProjectJugglerBundle.message("notification.error.focus.process.not.found", projectPath.name, result.pid)
+            is FocusResult.WindowNotFound ->
+                ProjectJugglerBundle.message("notification.error.focus.window.not.found", projectPath.name)
+            is FocusResult.CommandFailed ->
+                ProjectJugglerBundle.message("notification.error.focus.failed", projectPath.name, result.error)
+            is FocusResult.ToolNotInstalled ->
+                ProjectJugglerBundle.message("notification.error.focus.tool.missing", result.toolName)
         }
-
-        // Verify process is still running
-        if (!ProjectLockUtils.isProcessRunning(pid)) {
-            notificationHandler.showErrorNotification(
-                ProjectJugglerBundle.message("notification.error.focus.process.not.found", projectPath.name, pid),
-            )
-            return
-        }
-
-        // Attempt to focus window
-        when (val result = WindowFocuser.focus(pid)) {
-            is WindowFocuser.FocusResult.Success -> {}
-            is WindowFocuser.FocusResult.ProcessNotFound -> {
-                notificationHandler.showErrorNotification(
-                    ProjectJugglerBundle.message("notification.error.focus.process.not.found", projectPath.name, result.pid),
-                )
-            }
-
-            is WindowFocuser.FocusResult.WindowNotFound -> {
-                notificationHandler.showErrorNotification(
-                    ProjectJugglerBundle.message("notification.error.focus.window.not.found", projectPath.name),
-                )
-            }
-
-            is WindowFocuser.FocusResult.CommandFailed -> {
-                notificationHandler.showErrorNotification(
-                    ProjectJugglerBundle.message("notification.error.focus.failed", projectPath.name, result.error),
-                )
-            }
-
-            is WindowFocuser.FocusResult.ToolNotInstalled -> {
-                notificationHandler.showErrorNotification(
-                    ProjectJugglerBundle.message("notification.error.focus.tool.missing", result.toolName),
-                )
-            }
-        }
+        error?.let(notificationHandler::showErrorNotification)
     } catch (t: Throwable) {
         t.rethrowIfControlFlow()
         LOG.warn("Failed to focus project ${projectPath.name}", t)

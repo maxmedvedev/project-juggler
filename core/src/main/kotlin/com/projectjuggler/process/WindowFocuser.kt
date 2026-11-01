@@ -37,6 +37,11 @@ object WindowFocuser {
          * Required tool is not installed (Linux only).
          */
         data class ToolNotInstalled(val toolName: String) : FocusResult
+
+        /**
+         * The project has no lock file holding a PID; only returned by [focusRunningProject].
+         */
+        object LockNotFound : FocusResult
     }
 
     /**

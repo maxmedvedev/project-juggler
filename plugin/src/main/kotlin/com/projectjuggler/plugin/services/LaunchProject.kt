@@ -2,15 +2,15 @@ package com.projectjuggler.plugin.services
 
 import com.intellij.openapi.diagnostic.fileLogger
 import com.projectjuggler.config.IdeConfigRepository
-import com.projectjuggler.config.MainProjectService
 import com.projectjuggler.config.ProjectPath
 import com.projectjuggler.core.NotificationHandler
 import com.projectjuggler.plugin.ProjectJugglerBundle
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import com.projectjuggler.plugin.userMessage
+import com.projectjuggler.process.OpenStep
 import com.projectjuggler.process.ProjectLauncher
 import com.projectjuggler.process.describe
-import com.projectjuggler.util.ProjectLockUtils
+import com.projectjuggler.process.planOpen
 import java.nio.file.Path
 
 private val LOG = fileLogger()
@@ -18,13 +18,9 @@ private val LOG = fileLogger()
 internal enum class LaunchStep { OPEN_IN_CURRENT_IDE, FOCUS, LAUNCH }
 
 /**
- * The single step `launchOrFocusProject` performs for [projectPath].
- *
- * - [LaunchStep.OPEN_IN_CURRENT_IDE] when the project belongs to the current IDE ([belongsToCurrentIde]): the main
- *   project in the main instance, or the project this isolated IDE was started for.
- * - [LaunchStep.LAUNCH] for the main project otherwise: a running main IDE opens or focuses it, which a lock-based
- *   focus could not do.
- * - [LaunchStep.FOCUS] when the project's IDE is running, [LaunchStep.LAUNCH] when it is not.
+ * The single step `launchOrFocusProject` performs for [projectPath]: [LaunchStep.OPEN_IN_CURRENT_IDE] when the
+ * project belongs to the current IDE ([belongsToCurrentIde]), the main project in the main instance or the project
+ * this isolated IDE was started for; otherwise the step [planOpen] picks.
  *
  * Planning creates no directories.
  */
@@ -32,12 +28,12 @@ internal fun planLaunch(
     repository: IdeConfigRepository,
     projectPath: ProjectPath,
     currentConfigDir: Path,
-): LaunchStep = when {
-    belongsToCurrentIde(repository, projectPath, currentConfigDir) -> LaunchStep.OPEN_IN_CURRENT_IDE
-    MainProjectService.isMainProject(repository, projectPath) -> LaunchStep.LAUNCH
-    ProjectLockUtils.isProjectOpen(repository, projectPath) -> LaunchStep.FOCUS
-    else -> LaunchStep.LAUNCH
-}
+): LaunchStep =
+    if (belongsToCurrentIde(repository, projectPath, currentConfigDir)) LaunchStep.OPEN_IN_CURRENT_IDE
+    else when (planOpen(repository, projectPath)) {
+        OpenStep.FOCUS -> LaunchStep.FOCUS
+        OpenStep.LAUNCH -> LaunchStep.LAUNCH
+    }
 
 internal fun launchProject(
     projectPath: ProjectPath,

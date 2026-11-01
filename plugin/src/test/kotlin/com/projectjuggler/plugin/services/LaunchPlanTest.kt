@@ -34,18 +34,8 @@ class LaunchPlanTest : StringSpec({
     fun setBaseConfigPath(repository: IdeConfigRepository, path: Path) =
         repository.update { it.copy(baseConfigPath = path.toString()) }
 
-    "an unregistered project is launched" {
-        val repository = newRepository()
-
-        planLaunch(repository, ProjectPath(projectDir.toString()), elsewhere) shouldBe LaunchStep.LAUNCH
-    }
-
-    "a registered project without a lock is launched" {
-        val repository = newRepository()
-        val metadata = registerProject(repository, projectDir)
-
-        planLaunch(repository, metadata.path, elsewhere) shouldBe LaunchStep.LAUNCH
-    }
+    // The rule outside the current IDE is core's planOpen (LaunchOrFocusTest); these cover the current-IDE step and
+    // the mapping of planOpen's steps.
 
     "a running project is focused" {
         val repository = newRepository()

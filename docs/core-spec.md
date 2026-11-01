@@ -169,7 +169,14 @@ Base paths: `baseConfigPath` / `basePluginsPath` from config, else auto-detected
 
 ### 7.5 Window focusing (`WindowFocuser.focus(pid)`)
 
-Returns `Success`, `ProcessNotFound`, `WindowNotFound`, `CommandFailed(msg)` or `ToolNotInstalled(name)`. macOS uses `osascript` on System Events; Linux uses `wmctrl` then `xdotool`; Windows runs a temporary PowerShell script using `EnumWindows`/`SetForegroundWindow`. Not unit tested, by decision: it only shells out to these platform tools.
+Returns `Success`, `ProcessNotFound`, `WindowNotFound`, `CommandFailed(msg)` or `ToolNotInstalled(name)`; the sixth `FocusResult`, `LockNotFound`, comes only from `focusRunningProject` (§7.6). macOS uses `osascript` on System Events; Linux uses `wmctrl` then `xdotool`; Windows runs a temporary PowerShell script using `EnumWindows`/`SetForegroundWindow`. Not unit tested, by decision: it only shells out to these platform tools.
+
+### 7.6 Launch or focus from outside the IDE (`process/LaunchOrFocus.kt`)
+
+The rule the plugin's popup (plugin-spec, `planLaunch`) uses once the project does not belong to the calling IDE:
+
+- `planOpen(repo, path)`: `LAUNCH` for the main project (a running main IDE opens or focuses it on launch, which a lock-based focus could not do); `FOCUS` when `isProjectOpen` (§7.4); `LAUNCH` otherwise. Creates no directories.
+- `focusRunningProject(repo, path, focus = WindowFocuser::focus)`: `readPidFromLock`, else `LockNotFound`; a dead PID gives `ProcessNotFound(pid)` without calling `focus`; otherwise `focus(pid)`'s result.
 
 ## 8. Sync protocol
 
