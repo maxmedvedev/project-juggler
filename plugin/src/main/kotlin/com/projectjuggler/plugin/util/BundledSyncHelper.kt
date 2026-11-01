@@ -4,6 +4,7 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import com.projectjuggler.config.IdeRegistry
+import com.projectjuggler.core.SyncHelperInstallation
 import com.projectjuggler.platform.Platform
 import com.projectjuggler.plugin.rethrowIfControlFlow
 import java.io.File
@@ -37,10 +38,10 @@ import kotlin.io.path.listDirectoryEntries
 @OptIn(ExperimentalPathApi::class)
 object BundledSyncHelper {
     const val LOG_FILE_NAME = "sync-helper.log"
-    const val MAIN_CLASS = "com.projectjuggler.synchelper.SyncHelperMainKt"
+    const val MAIN_CLASS = SyncHelperInstallation.MAIN_CLASS
 
     private const val RESOURCE_ROOT = "sync-helper"
-    private const val MARKER = "lib/sync-helper.jar"
+    private const val MARKER = SyncHelperInstallation.MARKER
     private val BUNDLED_DIRS = listOf("bin", "lib")
     private val LEGACY_MIN_AGE: Duration = Duration.ofHours(1)
 
@@ -118,10 +119,9 @@ object BundledSyncHelper {
     }
 
     /**
-     * The command line that runs the helper's [MAIN_CLASS] from [installDir] on the JVM in [javaHome]:
-     * `<javaHome>/bin/java[.exe] -cp <cp> [-Dproject.juggler.base.dir=<baseDir>] <main class> <args>`, where `<cp>`
-     * is the `*` wildcard in `<installDir>/lib`. `java` expands the wildcard itself, so no shell is needed. Using the IDE's JVM avoids depending on a system `java`,
-     * and setting no `JAVA_HOME` keeps the JBR out of the relaunched IDE's environment.
+     * The command line that runs the helper from [installDir] on the JVM in [javaHome]
+     * ([SyncHelperInstallation.command]). Using the IDE's JVM avoids depending on a system `java`, and setting no
+     * `JAVA_HOME` keeps the JBR out of the relaunched IDE's environment.
      */
     internal fun command(
         installDir: Path,
@@ -129,17 +129,7 @@ object BundledSyncHelper {
         baseDir: String?,
         args: List<String>,
         platform: Platform = Platform.current(),
-    ): List<String> {
-        val java = javaHome.resolve("bin").resolve(if (platform == Platform.WINDOWS) "java.exe" else "java")
-        return buildList {
-            add(java.toString())
-            add("-cp")
-            add("${installDir.resolve("lib")}${File.separator}*")
-            if (baseDir != null) add("-D${IdeRegistry.PROJECT_JUGGLER_BASE_DIR}=$baseDir")
-            add(MAIN_CLASS)
-            addAll(args)
-        }
-    }
+    ): List<String> = SyncHelperInstallation(javaHome.toString(), installDir.toString()).command(baseDir, args, platform)
 
     private fun isComplete(dir: Path): Boolean = dir.resolve(MARKER).isRegularFile()
 

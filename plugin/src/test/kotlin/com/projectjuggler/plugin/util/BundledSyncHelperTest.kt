@@ -1,5 +1,6 @@
 package com.projectjuggler.plugin.util
 
+import com.projectjuggler.core.SyncHelperInstallation
 import com.projectjuggler.platform.Platform
 import com.projectjuggler.test.createTempDir
 import io.kotest.core.spec.style.StringSpec
@@ -9,7 +10,6 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldMatch
-import java.io.File
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Instant
@@ -159,38 +159,9 @@ class BundledSyncHelperTest : StringSpec({
         BundledSyncHelper.fingerprint() shouldBe fingerprint
     }
 
-    "command runs the main class on the given JVM on Unix" {
-        val installDir = Path("/helper")
-
-        val command = BundledSyncHelper.command(
-            installDir, Path("/jbr"), baseDir = null, args = listOf("--ide", "/ide"), platform = Platform.MACOS
-        )
-
-        command shouldContainExactly listOf(
-            Path("/jbr/bin/java").toString(),
-            "-cp",
-            "${installDir.resolve("lib")}${File.separator}*",
-            BundledSyncHelper.MAIN_CLASS,
-            "--ide",
-            "/ide"
-        )
-    }
-
-    "command uses java.exe on Windows and passes the base dir on" {
-        val installDir = Path("/helper")
-
-        val command = BundledSyncHelper.command(
-            installDir, Path("/jbr"), baseDir = "/sandbox", args = listOf("--all"), platform = Platform.WINDOWS
-        )
-
-        command shouldContainExactly listOf(
-            Path("/jbr/bin/java.exe").toString(),
-            "-cp",
-            "${installDir.resolve("lib")}${File.separator}*",
-            "-Dproject.juggler.base.dir=/sandbox",
-            BundledSyncHelper.MAIN_CLASS,
-            "--all"
-        )
+    "command is the core installation's command line" {
+        BundledSyncHelper.command(Path("/helper"), Path("/jbr"), "/base", listOf("--all"), Platform.LINUX) shouldBe
+            SyncHelperInstallation("/jbr", "/helper").command("/base", listOf("--all"), Platform.LINUX)
     }
 
     "start runs the helper on the IDE's JVM and writes its output to the log file" {
