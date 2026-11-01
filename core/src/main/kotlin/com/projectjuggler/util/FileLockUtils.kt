@@ -4,6 +4,9 @@ import java.io.RandomAccessFile
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * Utility for file locking operations.
@@ -11,7 +14,15 @@ import java.nio.file.Path
  */
 object FileLockUtils {
     /**
-     * Executes the given block while holding an exclusive lock on the specified file.
+     * One lock per file for the threads of this JVM: an OS file lock belongs to the whole JVM, so a second thread's
+     * `FileChannel.lock()` on the same file throws `OverlappingFileLockException` instead of waiting.
+     */
+    private val jvmLocks = ConcurrentHashMap<Path, ReentrantLock>()
+
+    /**
+     * Executes the given block while holding an exclusive lock on the specified file: first this JVM's lock for the
+     * file, so threads wait for each other, then the OS lock, so processes do. Not reentrant: a nested call for the
+     * same file on the same thread throws `OverlappingFileLockException`.
      * Creates the file and parent directories if they don't exist.
      *
      * @param file The file to lock
@@ -29,9 +40,12 @@ object FileLockUtils {
             // already present, possibly just created by another process
         }
 
-        return RandomAccessFile(file.toFile(), "rw").use { raf ->
-            raf.channel.lock().use {
-                block()
+        val jvmLock = jvmLocks.computeIfAbsent(file.toAbsolutePath().normalize()) { ReentrantLock() }
+        return jvmLock.withLock {
+            RandomAccessFile(file.toFile(), "rw").use { raf ->
+                raf.channel.lock().use {
+                    block()
+                }
             }
         }
     }

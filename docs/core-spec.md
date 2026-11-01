@@ -62,7 +62,7 @@ Invariant: the id is the on-disk directory name for the project's isolated state
             sync-in-progress.lock           # permanent, §8
 ```
 
-All JSON is pretty-printed with `encodeDefaults = false`. `config.json`, `metadata.json` and `recent.json` are read and written under an exclusive OS file lock (`FileLockUtils.withFileLock`, blocking `FileChannel.lock()`, creates parent dirs and the file if missing, tolerating a concurrent creation). When both are needed, `config.json` is read before the `recent.json` lock is taken; locks are never nested.
+All JSON is pretty-printed with `encodeDefaults = false`. `config.json`, `metadata.json` and `recent.json` are read and written under an exclusive OS file lock (`FileLockUtils.withFileLock`: a per-file in-JVM `ReentrantLock` keyed by the normalized absolute path, then a blocking `FileChannel.lock()`; threads of one JVM queue on the first, processes on the second, since an OS lock taken by a second thread of the same JVM throws `OverlappingFileLockException`. Creates parent dirs and the file if missing, tolerating a concurrent creation). When both are needed, `config.json` is read before the `recent.json` lock is taken; locks are never nested.
 
 ### 3.1 `config.json` (`IdeConfig`)
 
@@ -270,3 +270,4 @@ Behavior above that is likely unintended, kept here so the spec stays honest. No
 16. `ShutdownSignalManager.acquireSyncLock` returns null on any exception, so an I/O error (permissions, read-only disk) is reported as "Sync already in progress".
 17. `ensureDebugPort` reads all metadata, picks a port and writes without a cross-process lock; two concurrent launches from different processes can allocate the same port.
 18. The `IllegalStateException` messages for a missing base vmoptions, config or plugins path (§8 step 4) tell the user to run `project-juggler config --base-... <path>`, a CLI that no longer exists; the plugin shows them verbatim in its sync failure notifications.
+19. `IdeConfigRepository.load()` (and `loadProjectMetadata`) treat any failure while reading, including an I/O or lock error, as a corrupt file: it is logged as "Ignoring corrupt ..." and the defaults (or null) are returned, so a caller that saves what it loaded can overwrite valid settings.
