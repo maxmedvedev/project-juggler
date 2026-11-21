@@ -6,6 +6,7 @@ import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.bindIntValue
@@ -117,6 +118,13 @@ internal class ProjectJugglerConfigurable internal constructor(
                 row {
                     checkBox(message("settings.sync.plugins.on.update"))
                         .bindSelected({ state.syncPluginsOnIdeUpdate }, { state.syncPluginsOnIdeUpdate = it })
+                }
+                if (SystemInfo.isMac) {
+                    row {
+                        checkBox(message("settings.dock.icon.label"))
+                            .bindSelected({ state.showProjectNameOnDockIcon }, { state.showProjectNameOnDockIcon = it })
+                            .comment(message("settings.dock.icon.label.comment"))
+                    }
                 }
             }.enabled(!isolated)
         }.also { dialogPanel = it }

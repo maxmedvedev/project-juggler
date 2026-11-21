@@ -16,6 +16,8 @@
                 instance closes and reopens by itself, including the one you are working in.</li>
             <li>Mark one project as the main project; it opens in the main IDE with the base settings.</li>
             <li>"Open a Project Copy" creates a git worktree on a new branch and opens it isolated.</li>
+            <li>On macOS, each instance shows its project's name on its Dock icon, and the main IDE shows the main
+                project's name.</li>
             <li>Offers a plugin sync after an IDE update, warns when the stored base paths drift, and imports
                 recent projects from the IDE.</li>
             <li>Settings | Tools | Project Juggler holds the main project, base paths and limits.</li>
@@ -43,6 +45,8 @@
 
     <applicationListeners>
         <listener class="com.projectjuggler.plugin.shutdown.ShutdownSignalAppListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+        <listener class="com.projectjuggler.plugin.startup.DockIconLabelAppListener"
                   topic="com.intellij.ide.AppLifecycleListener"/>
     </applicationListeners>
 

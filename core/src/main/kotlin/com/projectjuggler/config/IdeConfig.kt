@@ -17,6 +17,8 @@ data class IdeConfig(
     val mainProjectPath: String? = null,
     val dontAskAboutMainProject: Boolean = false,
     val syncPluginsOnIdeUpdate: Boolean = false,
+    /** macOS: isolated instances draw their project name on their Dock icon. */
+    val showProjectNameOnDockIcon: Boolean = true,
     val lastKnownBuildNumber: String? = null,
 ) {
     companion object {

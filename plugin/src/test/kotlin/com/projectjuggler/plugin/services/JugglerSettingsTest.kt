@@ -45,6 +45,7 @@ class JugglerSettingsTest : StringSpec({
                 baseConfigPath = "/c",
                 dontAskAboutMainProject = true,
                 syncPluginsOnIdeUpdate = true,
+                showProjectNameOnDockIcon = false,
                 mainProjectPath = "/p",
                 maxRecentProjects = 7,
             )
@@ -53,6 +54,7 @@ class JugglerSettingsTest : StringSpec({
         loadJugglerSettings(repository) shouldBe JugglerSettings(
             baseConfigPath = "/c",
             syncPluginsOnIdeUpdate = true,
+            showProjectNameOnDockIcon = false,
             askForMainProject = false,
             mainProjectPath = "/p",
             maxRecentProjects = 7,

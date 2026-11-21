@@ -21,6 +21,7 @@ internal data class JugglerSettings(
     var basePluginsPath: String = "",
     var baseVmOptionsPath: String = "",
     var syncPluginsOnIdeUpdate: Boolean = false,
+    var showProjectNameOnDockIcon: Boolean = true,
     var askForMainProject: Boolean = true,
     var mainProjectPath: String = "",
     var maxRecentProjects: Int = 10,
@@ -55,6 +56,7 @@ internal fun loadJugglerSettings(repository: IdeConfigRepository): JugglerSettin
     val config = repository.load()
     return JugglerSettings(
         syncPluginsOnIdeUpdate = config.syncPluginsOnIdeUpdate,
+        showProjectNameOnDockIcon = config.showProjectNameOnDockIcon,
         askForMainProject = !config.dontAskAboutMainProject,
         mainProjectPath = config.mainProjectPath.orEmpty(),
         maxRecentProjects = config.maxRecentProjects,
@@ -105,6 +107,7 @@ internal fun saveJugglerSettings(repository: IdeConfigRepository, settings: Jugg
         storedMainProject = config.mainProjectPath
         paths.entries.fold(config) { updated, (kind, path) -> kind.withStored(updated, path) }.copy(
             syncPluginsOnIdeUpdate = settings.syncPluginsOnIdeUpdate,
+            showProjectNameOnDockIcon = settings.showProjectNameOnDockIcon,
             dontAskAboutMainProject = !settings.askForMainProject,
             maxRecentProjects = settings.maxRecentProjects.coerceIn(JugglerSettings.MAX_RECENT_RANGE),
         )
